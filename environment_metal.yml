@@ -1,0 +1,37 @@
+name: jaxvacua_metal
+channels:
+  - conda-forge
+dependencies:
+  # JAXVacua dependencies
+  - python
+  - numpy
+  - normaliz
+  - scipy
+  - sympy
+  - cvxopt
+  - python-flint
+  - pplpy
+  - joblib
+  - tqdm
+  - qpsolvers
+  - requests
+  - osqp
+  - pip
+  - pip:
+    - jaxlib
+    - jax-metal
+    - flax
+    - optax
+    - cvxpy
+    - ortools
+    - triangulumancer
+    - pypalp
+    - cygv
+    - h5py
+    - gurobipy
+    - cytools
+  # Common useful tools
+  - jupyterlab
+  - matplotlib
+  - plotly
+  - seaborn

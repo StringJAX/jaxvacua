@@ -151,6 +151,9 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+src/
+
+
 # Pyre type checker
 .pyre/
 
@@ -172,6 +175,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
 
 # Cursor  
 #  Cursor is an AI-powered code editor.`.cursorignore` specifies files/directories to 

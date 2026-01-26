@@ -1,0 +1,1 @@
+[Theta_0**3 - 3*Theta_0*x_0*(3*Theta_0 - 2)*(3*Theta_0 - 1), Theta_1**4 - 4*Theta_1*x_1*(4*Theta_1 - 3)*(4*Theta_1 - 2)*(4*Theta_1 - 1)]
