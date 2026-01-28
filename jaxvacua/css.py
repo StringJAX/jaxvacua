@@ -43,13 +43,29 @@ from .css_coniLCS import css_coniLCS
 from .css_coniLCSbulk import css_coniLCSbulk
 
 class css(css_LCS,css_coniLCS,css_coniLCSbulk):
-    
-    
-    def __init__(self, h12=None,model_ID = None,model_type = "KS",moduli_space_limit = "LCS",
-                 maximum_degree = 0,mirror_cy = None,model_data = None,instanton_data = None,
-                 use_cytools = False,basis_transformation = None,ncf=None,conifold_curve=None,
-                 grading_vector = None, period_input = None, prepotential_input = None,
-                 gauge_choice = 1.+0.*1j, prange = 500, use_gvs = False,save_file=False, **kwargs):
+
+
+    def __init__(self, 
+                 h12: Optional[int] = None,
+                 model_ID: Optional[Union[int, str]] = None, 
+                 model_type: str = "KS",
+                 moduli_space_limit: str = "LCS",
+                 maximum_degree: int = 0,
+                 mirror_cy: Optional["cytools.CalabiYau"] = None,
+                 model_data: Optional[dict] = None,
+                 instanton_data: Optional[dict] = None,
+                 use_cytools: bool = False,
+                 basis_transformation: Optional[ArrayLike] = None,
+                 ncf: Optional[int] = None,
+                 conifold_curve: Optional[ArrayLike] = None,
+                 grading_vector: Optional[ArrayLike] = None, 
+                 period_input: Optional[Callable] = None, 
+                 prepotential_input: Optional[Callable] = None,
+                 gauge_choice: complex = 1.+0.*1j, 
+                 prange: int = 500, 
+                 use_gvs: bool = False,
+                 save_file: bool = False, 
+                 **kwargs) -> None:
         r"""
         **Description:**
         This class defines class for the complex structure sector in Type IIB orientifold compactifications. 
@@ -85,15 +101,29 @@ class css(css_LCS,css_coniLCS,css_coniLCSbulk):
         
         """
         
+        
         # -----------------------------------------------------------------------------------
         # Initialise model
-        
-        
 
-        self.periods = periods(h12=h12,model_ID = model_ID,model_type =model_type,moduli_space_limit = moduli_space_limit,
-                    maximum_degree = maximum_degree,mirror_cy = mirror_cy,model_data = model_data,instanton_data = instanton_data,
-                    use_cytools = use_cytools,basis_transformation = basis_transformation,conifold_curve=conifold_curve,ncf=ncf,grading_vector = grading_vector, 
-                    period_input = period_input, prepotential_input = prepotential_input,prange = prange, use_gvs = use_gvs,save_file=save_file, **kwargs)
+        self.periods = periods(h12=h12,
+                               model_ID = model_ID,
+                               model_type = model_type,
+                               moduli_space_limit = moduli_space_limit,
+                               maximum_degree = maximum_degree,
+                               mirror_cy = mirror_cy,
+                               model_data = model_data,
+                               instanton_data = instanton_data,
+                               use_cytools = use_cytools,
+                               basis_transformation = basis_transformation,
+                               conifold_curve=conifold_curve,
+                               ncf=ncf,
+                               grading_vector = grading_vector, 
+                               period_input = period_input, 
+                               prepotential_input = prepotential_input,
+                               prange = prange, 
+                               use_gvs = use_gvs,
+                               save_file=save_file, 
+                               **kwargs)
 
         if moduli_space_limit == "LCS":
 
