@@ -207,13 +207,12 @@ def extract_euler(F,H):
     
     """
     
-    # extracts Euler number from prepotential
+    # Extracts Euler number from prepotential
     tt = list(var('t_%d' % i) for i in (range(H)))
     
     euler = F.subs([(tt[i],0) for i in range(H)])
 
     euler = float(expand(euler * 2 * (2*sympy.pi*sympy.I)**3 ))
-    #zeta = Function('zeta')(3)
     
     if euler == 0.:
         return float(0)
