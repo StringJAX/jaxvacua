@@ -35,15 +35,36 @@ from .util import *
 from .css import css
 
 class flux_sector(css):
+    r"""
+    **Description:**
+    A class representing the flux sector in a 4D EFT obtained from Type IIB
+    compactification on orientifolds of CY threefolds with 3-form flux backgrounds.
+    """
     
     def __init__(
-        self, h12: int = None, model_ID: int = None, model_type: str = "KS",
-        moduli_space_limit: str = "LCS", maximum_degree: int = 0,
-        mirror_cy = None, model_data: dict = None, instanton_data: list = None,
-        use_cytools: bool = False, basis_transformation = None,ncf = None,conifold_curve=None,
-        grading_vector = None, period_input = None,Q = None,prepotential_input = None,
-        gauge_choice: complex = 1.+0.*1j, prange = 500, use_gvs = False,save_file=False,**kwargs
-        ):
+        self,
+        h12: Optional[int] = None,
+        model_ID: Optional[int] = None,
+        model_type: str = "KS",
+        moduli_space_limit: str = "LCS",
+        maximum_degree: int = 0,
+        mirror_cy: Optional[Any] = None,
+        model_data: Optional[dict] = None,
+        instanton_data: Optional[list] = None,
+        use_cytools: bool = False,
+        basis_transformation: Optional[ArrayLike] = None,
+        ncf: Optional[int] = None,
+        conifold_curve: Optional[Any] = None,
+        grading_vector: Optional[ArrayLike] = None,
+        period_input: Optional[Callable] = None,
+        prepotential_input: Optional[Callable] = None,
+        Q: Optional[int] = None,
+        gauge_choice: complex = 1.0 + 0.0j,
+        prange: int = 500,
+        use_gvs: bool = False,
+        save_file: bool = False,
+        **kwargs: Any,
+    ) -> None:
         r"""
 
         **Description:**
@@ -74,14 +95,30 @@ class flux_sector(css):
 
 
         """
-        
-        
 
         # Initialise flux sector as subclass of complex structure sector!
-        super(flux_sector, self).__init__(h12=h12,model_ID = model_ID,model_type = model_type,moduli_space_limit = moduli_space_limit,
-                 maximum_degree = maximum_degree,mirror_cy = mirror_cy,model_data = model_data,instanton_data = instanton_data,
-                 use_cytools = use_cytools,basis_transformation = basis_transformation,ncf=ncf ,conifold_curve=conifold_curve, grading_vector = grading_vector, period_input = period_input, 
-                 prepotential_input = prepotential_input, gauge_choice = gauge_choice,prange = prange, use_gvs = use_gvs,save_file=save_file, **kwargs)
+        super(flux_sector, self).__init__(
+            h12=h12,
+            model_ID=model_ID,
+            model_type=model_type,
+            moduli_space_limit=moduli_space_limit,
+            maximum_degree=maximum_degree,
+            mirror_cy=mirror_cy,
+            model_data=model_data,
+            instanton_data=instanton_data,
+            use_cytools=use_cytools,
+            basis_transformation=basis_transformation,
+            ncf=ncf,
+            conifold_curve=conifold_curve,
+            grading_vector=grading_vector,
+            period_input=period_input,
+            prepotential_input=prepotential_input,
+            gauge_choice=gauge_choice,
+            prange=prange,
+            use_gvs=use_gvs,
+            save_file=save_file,
+            **kwargs
+        )
         
         if Q is None:
             self.D3_tadpole = self.periods.Q
@@ -104,8 +141,11 @@ class flux_sector(css):
             return f"Flux sector with h12={self.h12} complex structure moduli in the {self.periods.moduli_space_limit} limit."
             
     def map_to_FD_tau(
-        self, tau: complex, fluxes: ArrayLike,
-        return_SL2Z_matrix: bool = False, verbose: bool = False
+        self, 
+        tau: complex, 
+        fluxes: ArrayLike,
+        return_SL2Z_matrix: bool = False, 
+        verbose: bool = False
         ):
         r"""
         
