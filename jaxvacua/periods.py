@@ -44,10 +44,28 @@ from .periods_coniLCSbulk import periods_coniLCSbulk
 
 class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
     
-    def __init__(self, h12=None, model_ID = None,model_type = "KS",moduli_space_limit = "LCS",
-                 maximum_degree = 0, mirror_cy = None,model_data = None,instanton_data = None,
-                 use_cytools = False,basis_transformation = None,grading_vector = None, ncf=None,conifold_curve=None, 
-                 period_input = None, prepotential_input = None, prange = 500, use_gvs = False,save_file=False, **kwargs):
+    def __init__(
+        self,
+        h12: int | None = None,
+        model_ID: int | None = None,
+        model_type: str = "KS",
+        moduli_space_limit: str = "LCS",
+        maximum_degree: int = 0,
+        mirror_cy: object | None = None,
+        model_data: dict | None = None,
+        instanton_data: list | None = None,
+        use_cytools: bool = False,
+        basis_transformation: ArrayLike | None = None,
+        grading_vector: ArrayLike | None = None,
+        ncf: int | None = None,
+        conifold_curve: object | None = None,
+        period_input: Callable | None = None,
+        prepotential_input: Callable | None = None,
+        prange: int = 500,
+        use_gvs: bool = False,
+        save_file: bool = False,
+        **kwargs
+    ) -> None:
         r"""
 
         **Description:**
