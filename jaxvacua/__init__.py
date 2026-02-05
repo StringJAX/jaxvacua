@@ -42,7 +42,7 @@ from .css_coniLCS import *
 from .css_coniLCSbulk import *
 from .css import *
 from .flux_sector import *
-from .flux_sector_private import *
+from .flux_eft import *
 from .sampling import *
 from .basics import *
 from .matrix_cut import *
