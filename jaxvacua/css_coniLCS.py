@@ -43,18 +43,26 @@ from .periods_LCS import periods_LCS # Needed for docstring ref?
 from .periods import periods
 
 class css_coniLCS:
-    
+    r"""
+    **Description:**
+    This class constructs the complex structure moduli sector of Type IIB orientifold compactifications at conifold-Large Complex Structure (coni-LCS) points in moduli space.
+    """
     
     def __init__(self, prange = 500, use_gvs = False, **kwargs):
         r"""
         **Description:**
-        Defines class for the coni-LCS limits in Type IIB orientifold compactifications.
+        Initializes the coni-LCS class for Type IIB orientifold compactifications.
         
         Args:
-            use_gvs (bool, optional): If set :var:`True`, GVs are being used and the corresponding polylogarithms evaluated. Otherwise, switch to GWs.
-            prange (int, optional): Number of terms to be used when computing polylogarithms.
+            prange (int, optional): Number of terms for polylogarithm computation. Defaults to 500.
+            use_gvs (bool, optional): If ``True``, uses Gopakumar-Vafa invariants; 
+            otherwise uses Gromov-Witten invariants. Defaults to ``False``.
+            **kwargs: Additional keyword arguments passed to parent classes.
         
+        Raises:
+            ValueError: If validation of the 4th derivative of the polynomial prepotential fails.
         """
+        #self.periods = periods_LCS(**kwargs)
         
         self.use_gvs = use_gvs
         self.prange = prange
@@ -73,12 +81,6 @@ class css_coniLCS:
 
             if jnp.max(jnp.abs(val))>1e-10 or jnp.max(jnp.abs(cval))>1e-10:
                 raise ValueError("Test on 4th derivative of polynomial prepotential for csm failed! Please check input!")
-
-        
-
-    ###################################################################################################################################
-    ################################### PREPOTENTIAL, KÄHLER POTENTIAL ETC. FOR LCS LIMIT #############################################
-    ###################################################################################################################################
   
     @partial(jit, static_argnums = (0,2,))
     def F_coniLCS_poly(self, moduli: ArrayLike, conj: bool = False) -> complex:
@@ -187,13 +189,6 @@ class css_coniLCS:
 
         moduli = jnp.append(0.+1j*0.,zbulk)
 
-        """
-        if not conj:
-            return -jnp.sum(self.periods.GV_inv_lim*(self.periods.GV_charges_lim[:,0]**n)*jax_polylog_vmap(jnp.exp(2.*Pi*1j*jnp.einsum("ki,i",self.periods.GV_charges_lim,moduli)),3-n,self.prange))/(2.*Pi*1j)**(3-n)
-        else:
-            return -jnp.sum(self.periods.GV_inv_lim*(self.periods.GV_charges_lim[:,0]**n)*jax_polylog_vmap(jnp.exp(-2.*Pi*1j*jnp.einsum("ki,i",self.periods.GV_charges_lim,moduli)),3-n,self.prange))/(-2.*Pi*1j)**(3-n)
-        """
-
         coeff = 2.*Pi*1j
 
         if conj:
@@ -223,33 +218,91 @@ class css_coniLCS:
 
     @partial(jit, static_argnums = (0,3,))
     def dF_coniLCS_poly(self, zcf: ArrayLike, zbulk: ArrayLike, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
         
+        Args:
+            zcf (ArrayLike): Conifold modulus value.
+            zbulk (ArrayLike): Bulk complex structure moduli values.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+            
+        Returns:
+            complex: Value of the derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+            
+        """
         return jax.grad(self.F_coniLCS_poly_split,holomorphic=True,argnums=0)(zcf,zbulk,conj=conj)
 
     @partial(jit, static_argnums = (0,3,))
     def ddF_coniLCS_poly(self, zcf: ArrayLike, zbulk: ArrayLike, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the second derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
         
+        Args:
+            zcf (ArrayLike): Conifold modulus value.
+            zbulk (ArrayLike): Bulk complex structure moduli values.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+            
+        Returns:
+            complex: Value of the second derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+        """
         return jax.grad(self.dF_coniLCS_poly,holomorphic=True,argnums=0)(zcf,zbulk,conj=conj)
 
     @partial(jit, static_argnums = (0,3,))
     def dddF_coniLCS_poly(self, zcf: ArrayLike, zbulk: ArrayLike, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the third derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
         
+        Args:
+            zcf (ArrayLike): Conifold modulus value.
+            zbulk (ArrayLike): Bulk complex structure moduli values.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+            
+        Returns:
+            complex: Value of the third derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+        """
         return jax.grad(self.ddF_coniLCS_poly,holomorphic=True,argnums=0)(zcf,zbulk,conj=conj)
 
     @partial(jit, static_argnums = (0,3,))
     def ddddF_coniLCS_poly(self, zcf: ArrayLike, zbulk: ArrayLike, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the fourth derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+        
+        Args:
+            zcf (ArrayLike): Conifold modulus value.
+            zbulk (ArrayLike): Bulk complex structure moduli values.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+            
+        Returns:
+            complex: Value of the fourth derivative of the conifold-LCS prepotential :math:`F_{\mathrm{LCS}}` with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+        """
         
         return jax.grad(self.dddF_coniLCS_poly,holomorphic=True,argnums=0)(zcf,zbulk,conj=conj)
             
     
     @partial(jit, static_argnums = (0,2,))
     def F_coni(self, zcf: ArrayLike, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the conifold prepotential :math:`F_{\mathrm{coni}}` in terms of the conifold modulus :math:`z_{\mathrm{cf}}`.
         
-        """
-        if conj:
-            return self.periods.ncf*(zcf)**2/(-4*jnp.pi*1j)*jnp.log(2*jnp.pi*1j*zcf)
-        else:
-            return self.periods.ncf*(zcf)**2/(4*jnp.pi*1j)*jnp.log(-2*jnp.pi*1j*zcf)
+        .. admonition:: Details
+            :class: dropdown
+            
+            Near the conifold point, the prepotential can be approximated by
+            .. math::
+                F_{\mathrm{coni}}(z_{\mathrm{cf}})=\dfrac{1}{2}\, \widetilde{n}_{\mathrm{cf}}\, \left ( \dfrac{z_{\mathrm{cf}}^2}{2\pi \mathrm{i}}\, \log \left ( -\dfrac{2\pi \mathrm{i} z_{\mathrm{cf}}}{\widetilde{n}_{\mathrm{cf}}} \right ) \right )\, ,
+            where :math:`\widetilde{n}_{\mathrm{cf}}` is the number of conifold points in the complex structure moduli space. 
+            
+        Args:
+            zcf (ArrayLike): Conifold modulus value.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+        
+        Returns:
+            complex: Value of the conifold prepotential :math:`F_{\mathrm{coni}}`.
         """
         coeff = 2.*Pi*1j
 
@@ -261,22 +314,47 @@ class css_coniLCS:
         
     @partial(jit, static_argnums = (0,2,3,))
     def F_coniLCS_exp(self, zbulk: ArrayLike, conj: bool = False, n: int = 0) -> complex:
+        r"""
+        **Description:**
+        Computes the exponential corrections to the coni-LCS prepotential :math:`F_{\mathrm{coniLCS}}` in terms of the complex structure moduli :math:`z^i`.
         
+        .. admonition:: Details
+            :class: dropdown
+            
+            The exponential corrections to the coni-LCS prepotential :math:`F_{\mathrm{coniLCS}}` can be expressed as a series expansion in terms of the polylogarithm functions :math:`\text{Li}_n(x)` as
+            .. math::
+                F_{\mathrm{coniLCS,exp}}^{(n)}(z_{\mathrm{cf}},z_{\mathrm{bulk}})=\dfrac{1}{(2\pi \mathrm{i})^n}\, \sum_{q\in\mathcal{M}(\widetilde{X})}\, N_q\, \text{Li}_n\left (\text{e}^{2\pi \mathrm{i} q_i z^i}\right )\, ,
+            where :math:`N_q` are the genus-0 Gromov-Witten (GW) invariants and :math:`n` indicates the order of the derivative with respect to the conifold modulus :math:`z_{\mathrm{cf}}`.
+            
+        Args:
+            zbulk (ArrayLike): Bulk complex structure moduli values.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+            n (int, optional): Order of derivative with respect to conifold modulus :math:`z_{\mathrm{cf}}`. Defaults to ``0``.
+            
+        Returns:
+            complex: Value of the exponential corrections to the coni-LCS prepotential :math:`F_{\mathrm{coniLCS}}`.
+        """
 
+        # Numerical prefactor
         zeta_denom = (2*jnp.pi*1j)
 
+        # Adjust for conjugation
         if conj:
             zeta_denom = -zeta_denom
 
+        # Adjust for derivative order
         if n!=3:
             zeta_denom = zeta_denom**(3-n)
         else:
             zeta_denom = 1.
 
+        # Coefficient in front of zeta functions / Bernoulli numbers
         coeff_cf = self.periods.ncf/zeta_denom
 
+        # Conifold modulus set to zero
         zcf = 0.+1j*0.
         
+        # Compute value depending on derivative order
         if n==0:
             val = self.F_coniLCS_poly_split(zcf,zbulk,conj=conj)-coeff_cf*jax.scipy.special.zeta(3,q=1)
         elif n==1:
@@ -288,9 +366,11 @@ class css_coniLCS:
         elif n>=4:
             val = coeff_cf*jax.scipy.special.bernoulli(n-2)[-1]/(n-2)
 
+        # Adjust for factorial in denominator
         if n>1:
             val = val/jax.scipy.special.gamma(n+1)
 
+        # Return value
         return val
 
 
@@ -298,90 +378,67 @@ class css_coniLCS:
     @partial(jit, static_argnums = (0,2,))
     def F_coniLCS(self, moduli: ArrayLike, conj: bool = False) -> complex:
         r"""
-        
         **Description:**
-        Calculates the value of the coni-LCS prepotential in terms of the complex structure moduli :math:`z^{i}`.
+        Calculates the full conifold-LCS prepotential :math:`F_{\mathrm{coniLCS}}` in terms of the complex structure moduli :math:`z^i`.
         
         
         .. admonition:: Details
             :class: dropdown
         
-            At LCS, we can write the prepotential as
+            At the conifold-LCS (coni-LCS) limit, the prepotential can be decomposed as
         
             .. math::
-                F_{\text{LCS}}(z^1,\ldots , z^{h^{1,2}})=F_{\text{poly}}(z^1,\ldots , z^{h^{1,2}}) + F_{\text{inst}}(z^1,\ldots , z^{h^{1,2}})
+                F_{\mathrm{coni-LCS}}(z_{\mathrm{cf}}, z^a) = F_{\mathrm{coni}}(z_{\mathrm{cf}}) + \sum_{n=0}^{n_{\mathrm{max}}} F_{\mathrm{LCS}}^{(n)}(z_{\mathrm{cf}}, z^a) z_{\mathrm{cf}}^n
         
-            see e.g. Eq. (2.13) in `1312.0014 <https://arxiv.org/pdf/1312.0014.pdf>`_ for an equivalent formula. Here, the polynomial piece is given by
-        
-            .. math::
-                F_{\text{poly}}(z^1,\ldots , z^{h^{1,2}})=\dfrac{1}{6}\kappa_{ijk}\, z^i z^j z^k+\dfrac{1}{2} a_{ij}z^i z^j+b_i\, z^i+\dfrac{\text{i}}{2}\tilde{\xi}\, ,
-        
-            Here, :math:`\widetilde{\kappa}_{ijk}` are the triple intersection numbers of
-            the mirror dual Calabi-Yau threefold :math:`\widetilde{X}`.
-            Further, we defined
-
-            .. math::
-                a_{ij} = \dfrac{1}{2}\begin{cases}
-                                        \widetilde{\kappa}_{iij} & i\geq j\\[0.3em]
-                                        \widetilde{\kappa}_{ijj} & i<j
-                                    \end{cases} \, , \quad 
-                b_i = \dfrac{1}{24} \int_{\tilde{D}^i}\, c_2(\widetilde{X})\, , \quad  
-                \tilde{\xi}=\frac{\zeta(3)\, \chi(\widetilde{X})}{(2\pi)^3}\, .
-
-            The instanton contributions read
-
-            .. math::
-                F_{\mathrm{inst}}(z) = -\frac{1}{(2\pi\mathrm{i})^3}\, \sum_{q\in\mathcal{M}(\widetilde{X})}\, 
-                n_q^{0}\, \text{Li}_3\left (\text{e}^{2\pi \text{i} q_i z^i}\right )\; , \quad 
-                \text{Li}_3\left (x\right )=\sum_{m=1}^{\infty}\, \dfrac{x^{m}}{m^{3}}\, .
-        
-            in terms of genus-0 Gopakumar-Vafa (GV) invariants :math:`n_q^0` and the 3rd polylogarithm :math:`\text{Li}_3(x)`. 
-            Alternatively, the instanton contributions can be expressed as
+            where :math:`z_{\mathrm{cf}}` is the conifold modulus and :math:`z^a` are the bulk complex structure moduli.
             
-            .. math::
-                F_{\text{inst}}(z^1,\ldots , z^{h^{1,2}})=\sum_{q\in\mathcal{M}(\widetilde{X})}\, N_q\, \text{e}^{2\pi \text{i} q_i z^i}
+            The conifold part :math:`F_{\mathrm{coni}}` encodes the singular behavior near the conifold point:
         
-            in terms of genus-0 Gromov-Witten (GW) invariants :math:`N_q`. 
-            Both pieces are computed in separate functions, see :func:`F_coniLCS_poly` and :func:`F_inst` for details.
-
-            TODO: CHANGE REFERENCES TO FUNCTIONS FROM OTHER CLASSES!!!
-
-            TODO: change docstring!!
+            .. math::
+                F_{\mathrm{coni}}(z_{\mathrm{cf}}) = \dfrac{1}{2}\, \widetilde{n}_{\mathrm{cf}}\, \left ( \dfrac{z_{\mathrm{cf}}^2}{2\pi \mathrm{i}}\, \log \left ( -\dfrac{2\pi \mathrm{i} z_{\mathrm{cf}}}{\widetilde{n}_{\mathrm{cf}}} \right ) \right )
+        
+            The corrections :math:`F_{\mathrm{LCS}}^{(n)}` involve polynomials and polylogarithms and are summed over powers of :math:`z_{\mathrm{cf}}`.
 
         
         Args:
-            moduli (ArrayLike): Complex structure moduli values.
+            moduli (ArrayLike): Complex structure moduli values, where the first component is the conifold modulus :math:`z_{\mathrm{cf}}` and the remaining components are bulk moduli :math:`z^a`.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
         
         Returns:
-            complex: Value of the LCS prepotential :math:`F_{\text{LCS}}`.
+            complex: Value of the coni-LCS prepotential :math:`F_{\mathrm{coni-LCS}}`.
             
-        See also: :func:`F_coniLCS_poly`
-    
-        See also: :func:`F_inst`
-    
-        See also: :func:`periods_LCS.F_coniLCS_per`
+        See also: :func:`F_coni`
+        
+        See also: :func:`F_coniLCS_exp`
+        
+        See also: :func:`F_coniLCS_inst`
 
         """
 
+        # Split moduli into conifold and bulk part
         zbulk = moduli[1:]
         zcf = moduli[0]
         
+        # Start with conifold part
         val = self.F_coni(zcf,conj=conj)
         
-
+        # Expansion in the conifold modulus
         for n_exp in range(self.periods.nmax+1):
+            
+            # Compute polynomial and instanton part
             tmp = self.F_coniLCS_exp(zbulk,conj=conj,n=n_exp)
         
+            # Add instanton part only if maximum degree >0
             if self.periods.maximum_degree>0:
                 tmp = tmp + self.F_coniLCS_inst(zbulk,conj=conj,n=n_exp)
 
+            # Add to total value
             if n_exp>0:
                 val = val + tmp*zcf**(n_exp)
             else:
                 val = val + tmp
 
-
+        # Return value
         return val
 
     # DONE
