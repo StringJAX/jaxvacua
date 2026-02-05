@@ -127,6 +127,11 @@ class periods_LCS:
                 ### Check for input files...
                 if not os.path.isdir(files_dir):
                     raise ValueError(f"Could not find files directory {files_dir}")
+                
+        if "time_out" in kwargs.keys():
+            time_out = kwargs["time_out"]
+        else:
+            time_out = 30
 
         # DONE
         # -----------------------------------------------------------------------------------
@@ -140,7 +145,8 @@ class periods_LCS:
 
         self.prange = prange
         self.use_gvs = use_gvs
-
+        self.model_type = model_type
+        
         file_KS = None
         
         ## Defining class based on model_type
@@ -183,7 +189,11 @@ class periods_LCS:
             if model_data is None:
                 if use_cytools:
 
-                    model_data = cytools_model_data_init(mirror_cy,basis_transformation=basis_transformation,model_ID=self.model_ID,save_file=save_file)
+                    model_data = cytools_model_data_init(mirror_cy,
+                                                         basis_transformation=basis_transformation,
+                                                         model_ID=self.model_ID,
+                                                         save_file=save_file,
+                                                         time_out=time_out)
                     
                 else:
                     model_data = load_zipped_pickle(file_KS+"model_data.p")
@@ -207,7 +217,7 @@ class periods_LCS:
                 if self.model_type=="KS":
                     if use_cytools:
                         
-                        instanton_data = cytools_instanton_data_init(mirror_cy,self.max_deg, grading_vector = grading_vector,model_ID=self.model_ID,save_file=save_file,basis_transformation=basis_transformation)
+                        instanton_data = cytools_instanton_data_init(mirror_cy,self.max_deg, grading_vector = grading_vector,model_ID=self.model_ID,save_file=save_file,basis_transformation=basis_transformation,time_out=time_out)
                             
                     else:
                         file = file_KS+"instanton_data.p"
