@@ -89,86 +89,97 @@ def remove_zeros(a,axis=1):
     flag = np.all(a == 0.,axis=axis)==False
     return a[flag], flag
 
-def cytools_model_data_init(input_data,basis_transformation=None,model_ID=None,save_file=False,time_out=10,remove_axis=None):
-    """
+def cytools_model_data_init(
+                            input_data: "cytools.polytope.Polytope | cytools.triangulation.Triangulation | cytools.calabiyau.CalabiYau",
+                            basis_transformation: np.ndarray | None = None,
+                            model_ID: int | None = None,
+                            save_file: bool = False,
+                            time_out: int = 10,
+                            remove_axis: int | None = None
+                        ) -> dict:
+    r"""
     **Description**
-    Initializes model data from a CYTools input (Polytope, Triangulation, or CalabiYau). 
+    Initializes model data from a CYTools input (Polytope, Triangulation, or CalabiYau).
+    Computes geometric data including intersection numbers, Chern classes, and Kähler cone information.
+    Optionally applies basis transformations and removes specified axes. Saves data to file if requested.
     
     Args:
-        input_data (cytools.polytope.Polytope, cytools.triangulation.Triangulation, or cytools.calabiyau.CalabiYau): Input data to initialize the model.
-        basis_transformation (np.ndarray, optional): Basis transformation matrix. Default is None.
-        model_ID (int, optional): Model ID for saving the data. Default is None.
+        input_data (cytools.polytope.Polytope | cytools.triangulation.Triangulation | cytools.calabiyau.CalabiYau): 
+            Input Calabi-Yau geometry (polytope, triangulation, or CY object).
+        basis_transformation (np.ndarray | None, optional): Basis transformation matrix for coordinates. Default is None.
+        model_ID (int | None, optional): Model identifier for saving the data. Default is None.
         save_file (bool, optional): Whether to save the model data to a file. Default is False.
-        time_out (int, optional): Time limit for certain computations in seconds. Default is 100.
-        remove_axis (list, optional): List of axes to remove from the data. Default is None.
+        time_out (int, optional): Time limit for cone computations in seconds. Default is 10.
+        remove_axis (int | None, optional): Starting axis index for removing trailing dimensions. Default is None.
         
     Returns:
-        dict: A dictionary containing the model data.
-        
+        dict: Dictionary containing geometric and topological data of the mirror CY manifold.
+    
     """
     
+    # Convert input to CalabiYau object if necessary
     if type(input_data) == cytools.polytope.Polytope:
-
         mirror_cy = input_data.triangulate().get_cy()
-
     elif type(input_data) == cytools.triangulation.Triangulation:
-
         mirror_cy = input_data.get_cy()
-
     elif type(input_data) == cytools.calabiyau.CalabiYau:
-
         mirror_cy = input_data
-
     else:
         raise ValueError("Cannot interpret input type for CYTools interface.")
 
-    model_data={}
-    h12 = mirror_cy.h11()
-    points=mirror_cy.polytope().points()
-    int_nums=mirror_cy.intersection_numbers(in_basis=True,format="dense")
-    sec_chern=mirror_cy.second_chern_class(in_basis=True)
+    # Initialize model data dictionary
+    model_data: dict = {}
+    
+    # Extract basic geometric data from mirror CY
+    h12: int = mirror_cy.h11()
+    points = mirror_cy.polytope().points()
+    int_nums = mirror_cy.intersection_numbers(in_basis=True, format="dense")
+    sec_chern = mirror_cy.second_chern_class(in_basis=True)
 
-    if h12<100:
+    # Compute Kähler cone and related data (skip for high h11)
+    if h12 < 100:
+        # Define timed computation of Kähler cone from Mori cone
         @exit_after(time_out)
         def compute_K_cup(cy):
             m_cap = cy.mori_cone_cap(in_basis=True)
             m_cap_ext_rays = m_cap.extremal_rays()
-            return Cone(rays = m_cap_ext_rays).dual()
+            return Cone(rays=m_cap_ext_rays).dual()
 
+        # Compute Kähler cone with fallback to toric cone
         try:
             KC = compute_K_cup(mirror_cy)
         except:
             warnings.warn("Computation for K_cup took too long. Working with toric Kähler cone instead. Increase value of `time_out` if necessary.")
             KC = mirror_cy.toric_kahler_cone()
 
-
+        # Define timed cone property computations
         @exit_after(time_out)
         def compute_extremal_rays(cone):
-            
             return cone.extremal_rays()
 
         @exit_after(time_out)
         def compute_extremal_hyperplanes(cone):
-            
             return cone.extremal_hyperplanes()
 
         @exit_after(time_out)
         def compute_rays(cone):
-
             return cone.rays()
 
+        # Compute cone rays with warning on timeout
         try:
             rays_KC = compute_rays(KC)
         except:
             warnings.warn("Computation for rays took too long. Increase value of `time_out` if necessary.")
             rays_KC = []
 
+        # Compute extremal generators with warning on timeout
         try:
             generators_KC = compute_extremal_rays(KC)
         except:
             warnings.warn("Computation for extremal rays took too long. Increase value of `time_out` if necessary.")
             generators_KC = []
 
+        # Compute extremal hyperplanes with fallback to all hyperplanes
         try:
             hyperplanes = compute_extremal_hyperplanes(KC)
         except:
@@ -176,56 +187,64 @@ def cytools_model_data_init(input_data,basis_transformation=None,model_ID=None,s
             hyperplanes = KC.hyperplanes()
 
     else:
-
+        # For large h11, use only toric cone without expensive computations
         KC = mirror_cy.toric_kahler_cone()
         rays_KC = []
         generators_KC = []
         hyperplanes = KC.hyperplanes()
 
-        print("TODO: DONE GET CONE!")
-            
-    points_for_model=KC.tip_of_stretched_cone(c=1)
+    # Compute reference point on stretched Kähler cone
+    points_for_model = KC.tip_of_stretched_cone(c=1)
 
+    # Apply basis transformation if provided
     if basis_transformation is not None:
         L = basis_transformation
-        Linv=np.linalg.inv(L)
+        Linv = np.linalg.inv(L)
 
-        int_nums = np.einsum('ai,ibc->abc', L, np.einsum('bj,ijc->ibc', L,np.einsum('ck,ijk->ijc', L, int_nums)))
-        sec_chern = np.matmul(L,sec_chern)
+        # Transform intersection numbers by basis change
+        int_nums = np.einsum('ai,ibc->abc', L, np.einsum('bj,ijc->ibc', L, np.einsum('ck,ijk->ijc', L, int_nums)))
+        # Transform second Chern class by basis change
+        sec_chern = np.matmul(L, sec_chern)
 
-        
-        if len(generators_KC)>0:
-            generators_KC = np.matmul(generators_KC,Linv)
+        # Transform cone generators and rays to new basis
+        if len(generators_KC) > 0:
+            generators_KC = np.matmul(generators_KC, Linv)
 
-        if len(rays_KC)>0:
-            rays_KC = np.matmul(rays_KC,Linv)
+        if len(rays_KC) > 0:
+            rays_KC = np.matmul(rays_KC, Linv)
 
-        points_for_model = np.matmul(points_for_model,Linv)
-        hyperplanes = np.matmul(hyperplanes,L.T)
+        # Transform stretched cone point and hyperplanes
+        points_for_model = np.matmul(points_for_model, Linv)
+        hyperplanes = np.matmul(hyperplanes, L.T)
 
+    # Remove trailing axes if specified
     if remove_axis is not None:
-
-        int_nums = int_nums[remove_axis:,remove_axis:,remove_axis:,]
+        # Remove axes from intersection numbers and Chern class
+        int_nums = int_nums[remove_axis:, remove_axis:, remove_axis:]
         sec_chern = sec_chern[remove_axis:]
         points_for_model = points_for_model[remove_axis:]
 
-        hyperplanes = hyperplanes[:,remove_axis:]
-        hyperplanes,_ = remove_zeros(hyperplanes)
+        # Remove axes from hyperplanes and eliminate zero rows
+        hyperplanes = hyperplanes[:, remove_axis:]
+        hyperplanes, _ = remove_zeros(hyperplanes)
 
-        if len(generators_KC)>0:
-            generators_KC = generators_KC[:,remove_axis:]
-            generators_KC,_ = remove_zeros(generators_KC)
+        # Remove axes from cone generators with zero-row elimination
+        if len(generators_KC) > 0:
+            generators_KC = generators_KC[:, remove_axis:]
+            generators_KC, _ = remove_zeros(generators_KC)
 
-        if len(rays_KC)>0:
-            rays_KC = rays_KC[:,remove_axis:]
-            rays_KC,_ = remove_zeros(rays_KC)
+        # Remove axes from cone rays with zero-row elimination
+        if len(rays_KC) > 0:
+            rays_KC = rays_KC[:, remove_axis:]
+            rays_KC, _ = remove_zeros(rays_KC)
 
+    # Compute or extract intersection numbers in COO format
     if (basis_transformation is not None) or (remove_axis is not None):
         int_nums_coo = compute_intersection_numbers_coo(int_nums)
     else:
-        int_nums_coo=mirror_cy.intersection_numbers(in_basis=True,format="coo")
+        int_nums_coo = mirror_cy.intersection_numbers(in_basis=True, format="coo")
 
-
+    # Populate model data dictionary with all computed data
     model_data["polytope points"] = points
     model_data["mirror heights"] = mirror_cy.triangulation().heights()
     model_data["intersection numbers"] = int_nums
@@ -239,9 +258,9 @@ def cytools_model_data_init(input_data,basis_transformation=None,model_ID=None,s
     model_data["generators KC"] = np.array(generators_KC)
     model_data["rays KC"] = np.array(rays_KC)
 
+    # Save to file if requested
     if save_file:
-
-        save_model_data(model_data,"model_data.p",model_ID,mirror_cy.h11())
+        save_model_data(model_data, "model_data.p", model_ID, mirror_cy.h11())
 
     return model_data
 
