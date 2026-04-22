@@ -1,1 +1,0 @@
-Obtained from Model 1 at h12=4, studied in https://arxiv.org/abs/1312.0014 as an effective model at h12=3. Hence no direct polytope data!
