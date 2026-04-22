@@ -1526,8 +1526,6 @@ class CYDatabase:
         h12 = kwargs["h12"]
         kwargs["h11"] = h12
         kwargs["h12"] = h11
-        # Flip Euler characteristic for input
-        kwargs["chi"] = -kwargs["chi"]
         
         # ---- Optionally fetch conifold data --------------------------------
         # NOTE: `h11` was swapped with h12 above (line 1524-1525) for API
