@@ -76,8 +76,18 @@ html_theme_options = {
 }
 
 # ADD LOGO HERE!!!
-html_logo = "_static/jaxvacua.svg"
-html_favicon = "_static/jaxvacua.ico"
+#html_logo = "_static/jaxvacua.svg"
+#html_favicon = "_static/jaxvacua.ico"
+#html_logo = "_static/jaxvacua_new.svg"
+#html_favicon = "_static/jaxvacua_new.ico"
+#html_logo = "_static/jaxvacua_release.svg"
+#html_favicon = "_static/jaxvacua_release.ico"
+#html_logo = "_static/jaxvacua_release_v22.svg"
+#html_favicon = "_static/jaxvacua_release_v2.ico"
+html_logo = "_static/jaxvacua_release_v2.png"
+html_favicon = "_static/jaxvacua_release_v2.png"
+#html_logo = "_static/jaxvacua_release_v2_Kopie.svg"
+#html_favicon = "_static/jaxvacua_release_v2_Kopie.ico"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
@@ -85,7 +95,8 @@ html_favicon = "_static/jaxvacua.ico"
 html_static_path = ["_static"]
 
 # -- Options myst -------------------------------------------------
-nb_execution_mode = "force"
+#nb_execution_mode = "force"
+nb_execution_mode = "off"
 myst_enable_extensions = ["dollarmath"]
 myst_dmath_double_inline = True
 nb_execution_allow_errors = False

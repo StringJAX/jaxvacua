@@ -76,6 +76,7 @@ $$ (eq:PeriodsInt)
 
 Here, $(X^{I},F_{J})$ are the so-called *periods* of $\Omega_{3}$ which are usually arranged in the *period vector* $\Pi=(X^{I},F_{J})$.
 The periods {eq}`eq:PeriodsInt` can be computed from solving Picard-Fuchs equations [hep-th/9308122](https://arxiv.org/abs/hep-th/9308122), [hep-th/9406055](https://arxiv.org/abs/hep-th/9406055) or using asymptotic Hodge theory [2105.02232](https://arxiv.org/abs/2105.02232).
+For the concrete computational procedure used in JAXVacua see {doc}`periods`.
 A parametrisation of the complex structure moduli space $\mathcal{M}_{\text{cs}}(X_{3})$ is conveniently obtained by choosing half of the periods, say $X^{I}$, as projective coordinates.
 Specifically, we set
 
@@ -107,18 +108,18 @@ $$ (eq:PeriodVecGen)
 
 
 
-### Implementation in `jaxvacua.complex_structure_sector`
+### Implementation in `jaxvacua.css`
 
 
 ```{eval-rst}
-.. currentmodule:: jaxvacua.complex_structure_sector.complex_structure_sector
+.. currentmodule:: jaxvacua.css
 
 .. autosummary::
 
-    prepot
-    kahler_potential
-    kahler_metric
-    
+    css.prepot
+    css.kahler_potential
+    css.kahler_metric
+
 ```
 
 
@@ -212,16 +213,16 @@ The above shift symmetry is therefore related to the gauge symmetry ${B}_{2} \ri
 The breaking to discrete shifts is induced by non-perturbative effects, namely WS instantons on $2$-cycles as explained in [Wen, Witten: 1985](https://inspirehep.net/literature/17562).
 
 
-### Implementation in `jaxvacua.complex_structure_sector_LCS`
+### Implementation in `jaxvacua.css`
 
 ```{eval-rst}
-.. currentmodule:: jaxvacua.complex_structure_sector_LCS.complex_structure_sector_LCS
+.. currentmodule:: jaxvacua.css
 
 .. autosummary::
 
-    F_LCS_poly
-    F_inst
-    F_LCS
+    css.F_LCS_poly
+    css.F_inst
+    css.F_LCS
 
 ```
 
@@ -229,22 +230,48 @@ The breaking to discrete shifts is induced by non-perturbative effects, namely W
 
 ## No-scale flux scalar potential
 
+The three-form fluxes $F_3$ and $H_3$ generate a superpotential for the complex structure
+moduli $z^i$ and the axio-dilaton $\tau$.
+The **Gukov-Vafa-Witten (GVW) superpotential** is
 
-**USE notation and intro from most recent paper!!!**
+$$
+W_{\rm flux} = \int_{X_3} G_3 \wedge \Omega_3 = \int_{X_3} (F_3 - \tau H_3) \wedge \Omega_3\;,
+$$ (eq:GVWsugra)
+
+with $G_3 = F_3 - \tau H_3$ the complexified three-form flux.
+In terms of the period vector and integer flux quanta $f = (f^I)$, $h = (h_J)$, this reads
+$W_{\rm flux} = (f - \tau h)\cdot\Sigma\cdot\Pi$.
+
+Due to the no-scale identity $K^{\alpha\bar\beta}\partial_\alpha K\partial_{\bar\beta}K = 3$
+satisfied by the classical Kähler potential $K_K = -2\log\mathcal{V}$,
+the Kähler moduli F-terms cancel the $-3|W|^2$ term in {eq}`eq:Vtot`.
+The **no-scale flux potential** therefore takes the positive semi-definite form
+
+$$
+V_{\rm flux} = e^K K^{a\bar{b}} D_a W_{\rm flux}\, D_{\bar{b}}\overline{W}_{\rm flux} \geq 0\;,
+$$ (eq:VfluxCS)
+
+summing over complex structure and axio-dilaton indices $a, \bar b$ only.
+This potential is minimized (to zero) at the ISD locus $D_a W_{\rm flux} = 0$,
+which fixes $z^i$ and $\tau$ while leaving the Kähler moduli as flat directions.
+
+For a detailed discussion of fluxes, tadpole cancellation, and the ISD condition
+see {doc}`flux_compactifications`.
+For Kähler moduli stabilization see {doc}`moduli_stabilisation`.
 
 
-### Implementation in `jaxvacua.flux_sector`
+### Implementation in `jaxvacua.flux_eft`
 
 ```{eval-rst}
-.. currentmodule:: jaxvacua.flux_sector.flux_sector
+.. currentmodule:: jaxvacua.flux_eft
 
 .. autosummary::
 
-    map_to_FD_tau
-    superpotential
-    DW
-    fterms
-    
+    FluxEFT.map_to_FD_tau
+    FluxEFT.superpotential
+    FluxEFT.DW
+    FluxEFT.scalar_potential
+
 ```
 
 

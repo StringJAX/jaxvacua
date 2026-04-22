@@ -1,5 +1,5 @@
 jaxvacua.periods
-===============
+=================
 
 .. currentmodule:: jaxvacua.periods
 
@@ -11,7 +11,7 @@ Period class
 .. autosummary::
     :toctree: _autosummary
     :template: custom-class-template.rst
-    
+
     periods
 
 Prepotential
@@ -23,7 +23,7 @@ Prepotential
     periods.prepot_per
     periods.prepot_grad_per
     periods.prepot_grad_grad_per
-    
+
 
 
 Period vector and derivatives
@@ -46,7 +46,7 @@ Mirror dual volume and Kähler potential
 
 .. autosummary::
     :toctree: _autosummary
-    
+
     periods.A_per
     periods.kahler_potential_per
     periods.grad_kahler_potential_per
@@ -60,8 +60,6 @@ Gauge kinetic matrix
     :toctree: _autosummary
 
     periods.gauge_kinetic_matrix
-    periods.gauge_kinetic_matrix_grad_cperiods
-    periods.gauge_kinetic_matrix_grad_periods
     periods.gauge_kinetic_matrix_periods
     periods.gauge_kinetic_matrix_prepotential
 
@@ -71,9 +69,5 @@ ISD matrix
 
 .. autosummary::
     :toctree: _autosummary
-    
-    periods.ISD_matrix
-    periods.ISD_matrix_grad_cperiods
-    periods.ISD_matrix_grad_periods
-    
 
+    periods.ISD_matrix
