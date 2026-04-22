@@ -32,14 +32,14 @@ class TestCase(chex.TestCase):
         self._key, *key = jax.random.split(self._key, num=num+1)
         return key[0] if num == 1 else key
 
-    def assertAllEqual(self, x, y):
+    def assertAllEqual(self, x, y, msg=None):
         x, y = map(np.asarray, (x, y))
-        self.assertTrue(np.alltrue(x == y))
+        self.assertTrue(np.all(x == y), msg=msg)
 
-    def assertAllClose(self, x, y, rtol=1e-5, atol=1e-8):
+    def assertAllClose(self, x, y, rtol=1e-5, atol=1e-8, msg=None):
         x, y = map(np.asarray, (x, y))
-        self.assertTrue(jnp.allclose(x, y, rtol=rtol, atol=atol))
+        self.assertTrue(jnp.allclose(x, y, rtol=rtol, atol=atol), msg=msg)
 
-    def assertAllTrue(self, t):
-        self.assertTrue(jnp.alltrue(t))
+    def assertAllTrue(self, t, msg=None):
+        self.assertTrue(jnp.all(t), msg=msg)
     

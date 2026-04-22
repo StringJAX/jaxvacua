@@ -14,306 +14,913 @@
 
 import sys, os, warnings
 import jax
-#from jaxlib.xla_extension import ArrayImpl
 from functools import partial
-from scipy.optimize import root
 from util import *
 
 sys.path.append("./../")
 import jaxvacua
 
+
+# ==============================================================================
+# TestPeriodSector
+# ==============================================================================
+
 class TestPeriodSector(TestCase):
-    
-    
+    r"""**Description:**
+
+    Unit-test suite for :class:`jaxvacua.periods`.
+
+    Tests cover the symplectic structure, period vector, prepotential, Kähler
+    geometry and gauge kinetic matrix in the large complex structure (LCS)
+    limit of a Calabi-Yau threefold compactification.
+
+    Attributes:
+        model (jaxvacua.periods): Period model with :math:`h^{1,2}=2`,
+            model ID 1, KS type at LCS, truncated at degree 5.
+        z (jax.Array): Random generic test point in period coordinate space,
+            shape ``(h12+1,)``, with :math:`X^0 = 1` fixed.
+        cz (jax.Array): Complex conjugate of ``z``.
+        z0 (jax.Array): Large complex structure point :math:`X^0=1`,
+            :math:`X^i=0`, shape ``(h12+1,)``.
+        cz0 (jax.Array): Complex conjugate of ``z0``.
+
+    .. note::
+        Period coordinates :math:`X^I` are used throughout, with :math:`X^0=1`
+        fixed by the projective gauge.  The free moduli are
+        :math:`z^i = X^i / X^0`,  :math:`i = 1, \ldots, h^{1,2}`.
+    """
+
+    # --------------------------------------------------------------------------
+    # Class setup
+    # --------------------------------------------------------------------------
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        
+
         h12 = 2
 
-        cls.model = jaxvacua.periods(h12=h12,model_ID=1,model_type="KS",maximum_degree=5)
-        cls.z = jnp.array(np.random.uniform(-1,1,h12+1)+1j*np.random.uniform(0,10,h12+1))
-        cls.z = cls.z.at[0].set(1.+0.*1j)
+        cls.model = jaxvacua.periods(h12=h12, model_ID=1, model_type="KS", maximum_degree=5)
+        # periods takes X^I coordinates: X^0=1 fixed, then free z^i
+        cls.z = jnp.array(np.random.uniform(-1, 1, h12 + 1) + 1j * np.random.uniform(0, 10, h12 + 1))
+        cls.z = cls.z.at[0].set(1. + 0. * 1j)   # fix X^0 = 1
         cls.cz = jnp.conj(cls.z)
-        
-        
-        cls.z0 = jnp.zeros(h12+1)
-        cls.z0 = cls.z0.at[0].set(1.+0.*1j)
+        # LCS point (all z^i = 0, X^0 = 1)
+        cls.z0 = jnp.zeros(h12 + 1, dtype=complex)
+        cls.z0 = cls.z0.at[0].set(1. + 0. * 1j)
         cls.cz0 = jnp.conj(cls.z0)
-        
-        
-    print("TODO: Choose one specific value for which we know the answer (e.g. for one of the minima which relates fluxes by gauge_kin fct!")
-    print("Test model attributes?")
+
+
+    # ==========================================================================
+    # Symplectic structure
+    # ==========================================================================
+
+    def test_sigma_structure(self):
+        r"""**Description:**
+
+        Verify that the symplectic pairing matrix
+
+        .. math::
+            \Sigma = \begin{pmatrix} 0 & \mathbf{1} \\ -\mathbf{1} & 0 \end{pmatrix}
+
+        returned by :func:`sigma` satisfies all required algebraic identities,
+        including the explicit block decomposition, antisymmetry, and the
+        defining relation :math:`\Sigma^2 = -\mathbf{1}_{2n}`.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            These properties are used throughout: symplecticity of the ISD
+            matrix and the isotropy of the period vector.
+        """
+
+        n = self.model.h12 + 1                          # half-dimension
+
+        # ---- shape ----
+        sig = self.model.sigma
+        # sigma must be a square (2n x 2n) matrix
+        chex.assert_shape(sig, (2 * n, 2 * n))
+
+        # ---- antisymmetry: sigma^T = -sigma ----
+        self.assertAllClose(
+            sig.T, -sig, rtol=1e-12, atol=1e-12,
+            msg="sigma must be antisymmetric: sigma^T = -sigma")
+
+        # ---- sigma^2 = -I_{2n} ----
+        sig2 = jnp.matmul(sig, sig)
+        self.assertAllClose(
+            sig2, -jnp.eye(2 * n, dtype=sig.dtype), rtol=1e-12, atol=1e-12,
+            msg="sigma must satisfy sigma^2 = -I (symplectic unit)")
+
+        # ---- explicit block structure: [[0, I], [-I, 0]] ----
+        # Upper-left block must be zero
+        self.assertAllClose(
+            sig[:n, :n], jnp.zeros((n, n), dtype=sig.dtype),
+            rtol=1e-12, atol=1e-12,
+            msg="Upper-left block of sigma must be zero")
+        # Upper-right block must be +I
+        self.assertAllClose(
+            sig[:n, n:], jnp.eye(n, dtype=sig.dtype),
+            rtol=1e-12, atol=1e-12,
+            msg="Upper-right block of sigma must be +identity")
+        # Lower-left block must be -I
+        self.assertAllClose(
+            sig[n:, :n], -jnp.eye(n, dtype=sig.dtype),
+            rtol=1e-12, atol=1e-12,
+            msg="Lower-left block of sigma must be -identity")
+        # Lower-right block must be zero
+        self.assertAllClose(
+            sig[n:, n:], jnp.zeros((n, n), dtype=sig.dtype),
+            rtol=1e-12, atol=1e-12,
+            msg="Lower-right block of sigma must be zero")
+
+
+    # ==========================================================================
+    # ISD matrix
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_ISD(self):
-        """
-        Test ISD condition.
-        """
-        
-        # ISD matrix symmetric and symplectiv
-        # M = M.T
-        # M.T@sigma@M=sigma
-        
-        # Inverse for ISD:
-        # jnp.linalg.inv(M) = sigma.T@M@sigma
+        r"""**Description:**
 
-        M = self.variant(self.model.ISD_matrix)(self.z,self.cz)
-        
+        Test the ISD matrix :math:`\mathcal{M}` returned by
+        :func:`ISD_matrix`.
+
+        The ISD matrix is the matrix representation of the Hodge-:math:`\star`
+        operator on :math:`H^3(X, \mathbb{Z})`.  Expressed in terms of
+        the real and imaginary parts :math:`\mathcal{R}` and :math:`\mathcal{I}`
+        of the gauge kinetic matrix :math:`\mathcal{N}= \mathcal{R} +
+        \mathrm{i}\mathcal{I}`, it reads
+
+        .. math::
+            \mathcal{M} = \begin{pmatrix}
+                -\mathcal{I}^{-1} & \mathcal{I}^{-1}\mathcal{R} \\
+                \mathcal{R}\mathcal{I}^{-1} &
+                -\mathcal{I} - \mathcal{R}\mathcal{I}^{-1}\mathcal{R}
+            \end{pmatrix}.
+
+        The ISD matrix satisfies
+
+        .. math::
+            \mathcal{M} = \mathcal{M}^T \,,\quad
+            \mathcal{M}^T\Sigma\mathcal{M} = \Sigma \,,\quad
+            \mathcal{M}^{-1} = \Sigma^T\mathcal{M}\Sigma \,.
+
+        Derivatives :math:`\partial_{X^I}\mathcal{M}` and
+        :math:`\partial_{\bar{X}^I}\mathcal{M}` are also checked for shape
+        and conjugation consistency.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The imaginary part :math:`\mathcal{M}\in\mathbb{R}` vanishes
+            exactly due to the block structure of :math:`\mathcal{N}`.
+        """
+
+        # ---- evaluate ISD matrix ----
+        M = self.variant(self.model.ISD_matrix)(self.z, self.cz)
+
+        # must be complex type internally (imaginary part vanishes)
         chex.assert_type(M, complex)
-        chex.assert_shape(M, (2*(self.model.h12+1),2*(self.model.h12+1)))
-        # Imaginary part vanishes
-        self.assertAllClose(M.imag,0., rtol=1e-11, atol=1e-11)
-        
-        
-        self.assertAllClose(M , M.T, rtol=1e-11, atol=1e-11)
-        self.assertAllClose(jnp.matmul(M.T,jnp.matmul(self.model.sigma(),M)), self.model.sigma(), rtol=1e-11, atol=1e-11)
-        self.assertAllClose(jnp.linalg.inv(M), jnp.matmul(self.model.sigma().T,jnp.matmul(M,self.model.sigma())), rtol=1e-11, atol=1e-11)
+        chex.assert_shape(M, (2 * (self.model.h12 + 1), 2 * (self.model.h12 + 1)))
+        # imaginary part vanishes: M is effectively real
+        self.assertAllClose(M.imag, 0., rtol=1e-11, atol=1e-11,
+                            msg="ISD matrix must be real")
 
-        dM = self.variant(self.model.dM)(self.z,self.cz)
-        dM_c = self.variant(self.model.dM_c)(self.z,self.cz)
+        # ---- symmetry: M = M^T ----
+        self.assertAllClose(M, M.T, rtol=1e-11, atol=1e-11,
+                            msg="ISD matrix must be symmetric")
+
+        # ---- symplecticity: M^T @ sigma @ M = sigma ----
+        sig = self.model.sigma
+        self.assertAllClose(
+            jnp.matmul(M.T, jnp.matmul(sig, M)), sig,
+            rtol=1e-11, atol=1e-11,
+            msg="ISD matrix must be symplectic: M^T sigma M = sigma")
+
+        # ---- inverse: inv(M) = sigma^T @ M @ sigma ----
+        self.assertAllClose(
+            jnp.linalg.inv(M), jnp.matmul(sig.T, jnp.matmul(M, sig)),
+            rtol=1e-11, atol=1e-11,
+            msg="ISD matrix inverse must equal sigma^T M sigma")
+
+        # ---- derivatives: shape and conjugation ----
+        dM = self.variant(self.model.dM)(self.z, self.cz)
+        dM_c = self.variant(self.model.dM_c)(self.z, self.cz)
 
         chex.assert_type(dM, complex)
-        chex.assert_shape(dM, (2*(self.model.h12+1),2*(self.model.h12+1),self.model.h12+1))
+        chex.assert_shape(dM, (2 * (self.model.h12 + 1),
+                               2 * (self.model.h12 + 1),
+                               self.model.h12 + 1))
         chex.assert_type(dM_c, complex)
-        chex.assert_shape(dM_c, (2*(self.model.h12+1),2*(self.model.h12+1),self.model.h12+1))
+        chex.assert_shape(dM_c, (2 * (self.model.h12 + 1),
+                                 2 * (self.model.h12 + 1),
+                                 self.model.h12 + 1))
 
-        self.assertAllClose(dM_c,jnp.conj(dM))
+        # anti-holomorphic derivative equals conjugate of holomorphic derivative
+        self.assertAllClose(dM_c, jnp.conj(dM),
+                            msg="dM_c must equal conj(dM)")
 
-        
+
+    # ==========================================================================
+    # Gauge kinetic matrix
+    # ==========================================================================
+
     @chex.variants(with_jit=True, without_jit=True)
     def test_gauge_kinetic_matrix(self):
-        
-        conj=False
-        N = self.variant(lambda x,y: self.model.gauge_kinetic_matrix(x,y,conj=conj))(self.z,self.cz)
-        N_periods = self.variant(lambda x,y: self.model.gauge_kinetic_matrix_periods(x,y,conj=conj))(self.z,self.cz)
-        N_prepotential = self.variant(lambda x,y: self.model.gauge_kinetic_matrix_prepotential(x,y,conj=conj))(self.z,self.cz)
+        r"""**Description:**
 
+        Test the gauge kinetic matrix :math:`\mathcal{N}_{IJ}` returned by
+        :func:`gauge_kinetic_matrix`, :func:`gauge_kinetic_matrix_periods`, and
+        :func:`gauge_kinetic_matrix_prepotential`.
+
+        In the presence of a prepotential :math:`F`, the gauge kinetic matrix
+        can be computed either from the period matrices :math:`P,Q` as
+
+        .. math::
+            \mathcal{N}_{IJ} = P_{IK}(Q^{-1})^K{}_J \,,
+
+        or directly from derivatives of :math:`F` as
+
+        .. math::
+            \mathcal{N}_{IJ} = \bar{F}_{IJ}
+            + 2\mathrm{i}\,
+            \frac{\mathrm{Im}(F_{IL})X^L\,\mathrm{Im}(F_{JK})X^K}
+                 {X^M\,\mathrm{Im}(F_{MN})X^N} \,.
+
+        All three routes must agree at LCS.  Derivatives :math:`\partial_{X^I}
+        \mathcal{N}` and :math:`\partial_{\bar{X}^I}\mathcal{N}` are checked
+        for shape and conjugation.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
+        # ---- conj=False ----
+        conj = False
+        N = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=conj))(self.z, self.cz)
+        N_periods = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_periods(x, y, conj=conj))(self.z, self.cz)
+        N_prepotential = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_prepotential(x, y, conj=conj))(self.z, self.cz)
+
+        # N from gauge_kinetic_matrix must be complex-valued
         chex.assert_type(N, complex)
-        chex.assert_shape(N, (self.model.h12+1,self.model.h12+1))
+        # N must be a square (h12+1) x (h12+1) matrix
+        chex.assert_shape(N, (self.model.h12 + 1, self.model.h12 + 1))
+        # N from the period-matrix route must be complex-valued
         chex.assert_type(N_periods, complex)
-        chex.assert_shape(N_periods, (self.model.h12+1,self.model.h12+1))
+        # N_periods must have the same (h12+1) x (h12+1) shape
+        chex.assert_shape(N_periods, (self.model.h12 + 1, self.model.h12 + 1))
+        # N from the prepotential route must be complex-valued
         chex.assert_type(N_prepotential, complex)
-        chex.assert_shape(N_prepotential, (self.model.h12+1,self.model.h12+1))
+        # N_prepotential must have the same (h12+1) x (h12+1) shape
+        chex.assert_shape(N_prepotential, (self.model.h12 + 1, self.model.h12 + 1))
 
-        dN_X = self.variant(lambda x,y: self.model.dN(x,y,conj=conj))(self.z,self.cz)
-        dN_cX = self.variant(lambda x,y: self.model.dN_c(x,y,conj=conj))(self.z,self.cz)
+        # holomorphic and anti-holomorphic derivatives
+        dN_X = self.variant(lambda x, y: self.model.dN(x, y, conj=conj))(self.z, self.cz)
+        dN_cX = self.variant(lambda x, y: self.model.dN_c(x, y, conj=conj))(self.z, self.cz)
 
+        # Holomorphic derivative dN/dX must be complex-valued
         chex.assert_type(dN_X, complex)
-        chex.assert_shape(dN_X, (self.model.h12+1,self.model.h12+1,self.model.h12+1))
+        # dN/dX must be a rank-3 tensor of shape (h12+1, h12+1, h12+1)
+        chex.assert_shape(dN_X, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
+        # Anti-holomorphic derivative dN/dcX must be complex-valued
         chex.assert_type(dN_cX, complex)
-        chex.assert_shape(dN_cX, (self.model.h12+1,self.model.h12+1,self.model.h12+1))
+        # dN/dcX must have the same rank-3 shape as dN/dX
+        chex.assert_shape(dN_cX, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
 
-        
-        conj=True
-        N_c = self.variant(lambda x,y: self.model.gauge_kinetic_matrix(x,y,conj=conj))(self.z,self.cz)
-        N_periods_c = self.variant(lambda x,y: self.model.gauge_kinetic_matrix_periods(x,y,conj=conj))(self.z,self.cz)
-        N_prepotential_c = self.variant(lambda x,y: self.model.gauge_kinetic_matrix_prepotential(x,y,conj=conj))(self.z,self.cz)
+        # ---- conj=True ----
+        conj = True
+        N_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=conj))(self.z, self.cz)
+        N_periods_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_periods(x, y, conj=conj))(self.z, self.cz)
+        N_prepotential_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_prepotential(x, y, conj=conj))(self.z, self.cz)
 
+        # Conjugated N must be complex-valued
         chex.assert_type(N_c, complex)
-        chex.assert_shape(N_c, (self.model.h12+1,self.model.h12+1))
+        # N_c must have the same (h12+1) x (h12+1) shape
+        chex.assert_shape(N_c, (self.model.h12 + 1, self.model.h12 + 1))
+        # Conjugated N from periods route must be complex-valued
         chex.assert_type(N_periods_c, complex)
-        chex.assert_shape(N_periods_c, (self.model.h12+1,self.model.h12+1))
+        # N_periods_c must have the same (h12+1) x (h12+1) shape
+        chex.assert_shape(N_periods_c, (self.model.h12 + 1, self.model.h12 + 1))
+        # Conjugated N from prepotential route must be complex-valued
         chex.assert_type(N_prepotential_c, complex)
-        chex.assert_shape(N_prepotential_c, (self.model.h12+1,self.model.h12+1))
+        # N_prepotential_c must have the same (h12+1) x (h12+1) shape
+        chex.assert_shape(N_prepotential_c, (self.model.h12 + 1, self.model.h12 + 1))
 
-        dN_X_c = self.variant(lambda x,y: self.model.dN(x,y,conj=conj))(self.z,self.cz)
-        dN_cX_c = self.variant(lambda x,y: self.model.dN_c(x,y,conj=conj))(self.z,self.cz)
+        dN_X_c = self.variant(lambda x, y: self.model.dN(x, y, conj=conj))(self.z, self.cz)
+        dN_cX_c = self.variant(lambda x, y: self.model.dN_c(x, y, conj=conj))(self.z, self.cz)
 
+        # Holomorphic derivative of conjugated N must be complex-valued
         chex.assert_type(dN_X_c, complex)
-        chex.assert_shape(dN_X_c, (self.model.h12+1,self.model.h12+1,self.model.h12+1))
+        # dN_X_c must be a rank-3 tensor of shape (h12+1, h12+1, h12+1)
+        chex.assert_shape(dN_X_c, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
+        # Anti-holomorphic derivative of conjugated N must be complex-valued
         chex.assert_type(dN_cX_c, complex)
-        chex.assert_shape(dN_cX_c, (self.model.h12+1,self.model.h12+1,self.model.h12+1))
+        # dN_cX_c must have the same rank-3 shape
+        chex.assert_shape(dN_cX_c, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
 
-        self.assertAllClose(N_c,jnp.conj(N))
-        self.assertAllClose(dN_cX_c,jnp.conj(dN_X))
-        self.assertAllClose(dN_X_c,jnp.conj(dN_cX))
+        # ---- conjugation of N ----
+        # N(z, cz, conj=True) = conj(N(z, cz, conj=False))
+        self.assertAllClose(N_c, jnp.conj(N),
+                            msg="N_c must equal conj(N)")
+        # cross-derivative conjugation
+        self.assertAllClose(dN_cX_c, jnp.conj(dN_X),
+                            msg="dN_cX (conj=True) must equal conj(dN_X (conj=False))")
+        self.assertAllClose(dN_X_c, jnp.conj(dN_cX),
+                            msg="dN_X (conj=True) must equal conj(dN_cX (conj=False))")
+
+        # ---- three routes must agree ----
+        # periods route == prepotential route (both conj=False)
+        self.assertAllClose(N_periods, N_prepotential,
+                            msg="periods and prepotential routes for N must agree")
+        self.assertAllClose(N_periods_c, N_prepotential_c,
+                            msg="periods and prepotential routes for N_c must agree")
+        self.assertAllClose(N_periods_c, jnp.conj(N_periods),
+                            msg="N_periods_c must equal conj(N_periods)")
+        self.assertAllClose(N_prepotential_c, jnp.conj(N_prepotential),
+                            msg="N_prepotential_c must equal conj(N_prepotential)")
 
 
-        self.assertAllClose(N_periods, N_prepotential)
-        self.assertAllClose(N_periods_c, N_prepotential_c)
-        self.assertAllClose(N_periods_c,jnp.conj(N_periods))
-        self.assertAllClose(N_prepotential_c,jnp.conj(N_prepotential))
-
-        
-
-        
-       
+    # ==========================================================================
+    # Mirror volume (A_per)
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_mirror_volume(self):
+        r"""**Description:**
+
+        Test that the mirror Calabi-Yau volume
+
+        .. math::
+            \widetilde{\mathcal{V}} = -\mathrm{i}\,\Pi^\dagger \Sigma \Pi
+
+        returned by :func:`A_per` is a real positive scalar.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The positivity of :math:`\widetilde{\mathcal{V}}` ensures that the
+            Kähler potential :math:`K = -\ln\widetilde{\mathcal{V}}` is
+            well-defined.
         """
 
-        Test
+        Vtilde = self.variant(self.model.A_per)(self.z, self.cz)
 
-        """
-        Vtilde = self.variant(self.model.A_per)(self.z,self.cz)
-        
+        # must be a scalar
         chex.assert_type(Vtilde, complex)
         chex.assert_shape(Vtilde, ())
-        self.assertAllClose(Vtilde.imag,0.)
+        # imaginary part must vanish
+        self.assertAllClose(Vtilde.imag, 0.,
+                            msg="Mirror CY volume A_per must be real")
 
-        
+
+    # ==========================================================================
+    # Kähler potential
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_kahler_potential(self):
-        KP = self.variant(self.model.kahler_potential_per)(self.z,self.cz)
-        
+        r"""**Description:**
+
+        Test the Kähler potential
+
+        .. math::
+            K = -\ln\!\left(-\mathrm{i}\,\Pi^\dagger\Sigma\Pi\right)
+
+        returned by :func:`kahler_potential_per`.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The Kähler potential is real on the physical moduli space because
+            :math:`\widetilde{\mathcal{V}} > 0`.
+        """
+
+        KP = self.variant(self.model.kahler_potential_per)(self.z, self.cz)
+
+        # must be a scalar
         chex.assert_type(KP, complex)
         chex.assert_shape(KP, ())
-        self.assertAllClose(KP.imag,0.)
+        # must be real
+        self.assertAllClose(KP.imag, 0.,
+                            msg="Kähler potential must be real")
+
+
+    # ==========================================================================
+    # Gradient of Kähler potential
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_dK(self):
-        
-        dK = self.variant(lambda x,y: self.model.grad_kahler_potential_per(x,y,conj=False))(self.z,self.cz)
-        
+        r"""**Description:**
+
+        Test the holomorphic and anti-holomorphic derivatives of the Kähler
+        potential,
+
+        .. math::
+            \partial_{X^I} K \,,\quad \partial_{\bar{X}^I} K \,,
+
+        returned by :func:`grad_kahler_potential_per`.
+
+        The two derivatives are related by complex conjugation:
+
+        .. math::
+            \partial_{\bar{X}^I} K = \overline{\partial_{X^I} K} \,.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+
+        # holomorphic derivative
+        dK = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=False))(self.z, self.cz)
+
         chex.assert_type(dK, complex)
-        chex.assert_shape(dK, (self.model.h12+1,))
+        chex.assert_shape(dK, (self.model.h12 + 1,))   # one entry per X^I
 
-        dK_c = self.variant(lambda x,y: self.model.grad_kahler_potential_per(x,y,conj=True))(self.z,self.cz)
-        
+        # anti-holomorphic derivative
+        dK_c = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=True))(self.z, self.cz)
+
         chex.assert_type(dK_c, complex)
-        chex.assert_shape(dK_c, (self.model.h12+1,))
+        chex.assert_shape(dK_c, (self.model.h12 + 1,))
 
-        self.assertAllClose(dK_c,jnp.conj(dK))
-        
+        # conjugation: dK_c = conj(dK)
+        self.assertAllClose(dK_c, jnp.conj(dK),
+                            msg="Anti-holomorphic dK must equal conj(dK)")
+
+
+    # ==========================================================================
+    # P, Q matrices
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_rest(self):
+        r"""**Description:**
+
+        Test the period matrices :math:`P_{IJ}` and :math:`Q^I{}_J` and their
+        inverses returned by :func:`P_per`, :func:`Q_per`, :func:`Q_inv_per`,
+        and :func:`PQ_per`.
+
+        These matrices are defined as
+
+        .. math::
+            P_{IJ} = \bigl(\mathcal{F}_I,\,
+                       D_{\bar\imath}\bar{\mathcal{F}}_I\bigr)_J \,,\quad
+            Q^I{}_J = \bigl(X^I,\, D_{\bar\jmath}\bar{X}^I\bigr)_J \,,
+
+        see Eq. (3.5) in arXiv:2310.06040.  The gauge kinetic matrix is
+        :math:`\mathcal{N} = P_{IK}(Q^{-1})^K{}_J`.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            All matrices carry the same shape ``(h12+1, h12+1)`` and satisfy
+            standard conjugation relations.
+        """
 
         conj = False
-        P = self.variant(lambda x,y: self.model.P_per(x,y,conj=conj))(self.z,self.cz)
-        Q = self.variant(lambda x,y: self.model.Q_per(x,y,conj=conj))(self.z,self.cz)
-        Qinv = self.variant(lambda x,y: self.model.Q_inv_per(x,y,conj=conj))(self.z,self.cz)
-        P_mod,Q_mod = self.variant(lambda x,y: self.model.PQ_per(x,y,conj=conj))(self.z,self.cz)
-
+        P = self.variant(lambda x, y: self.model.P_per(x, y, conj=conj))(self.z, self.cz)
+        Q = self.variant(lambda x, y: self.model.Q_per(x, y, conj=conj))(self.z, self.cz)
+        Qinv = self.variant(lambda x, y: self.model.Q_inv_per(x, y, conj=conj))(self.z, self.cz)
+        P_mod, Q_mod = self.variant(lambda x, y: self.model.PQ_per(x, y, conj=conj))(self.z, self.cz)
 
         conj = True
-        P_c = self.variant(lambda x,y: self.model.P_per(x,y,conj=conj))(self.z,self.cz)
-        Q_c = self.variant(lambda x,y: self.model.Q_per(x,y,conj=conj))(self.z,self.cz)
-        Qinv_c = self.variant(lambda x,y: self.model.Q_inv_per(x,y,conj=conj))(self.z,self.cz)
-        P_mod_c,Q_mod_c = self.variant(lambda x,y: self.model.PQ_per(x,y,conj=conj))(self.z,self.cz)
+        P_c = self.variant(lambda x, y: self.model.P_per(x, y, conj=conj))(self.z, self.cz)
+        Q_c = self.variant(lambda x, y: self.model.Q_per(x, y, conj=conj))(self.z, self.cz)
+        Qinv_c = self.variant(lambda x, y: self.model.Q_inv_per(x, y, conj=conj))(self.z, self.cz)
+        P_mod_c, Q_mod_c = self.variant(lambda x, y: self.model.PQ_per(x, y, conj=conj))(self.z, self.cz)
 
-        
-        chex.assert_shape(P, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(P_c, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Q, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Q_c, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Qinv, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Qinv_c, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(P_mod, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(P_mod_c, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Q_mod, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(Q_mod_c, (self.model.h12+1,self.model.h12+1))
+        # ---- shapes ----
+        # P matrix (conj=False) must be (h12+1) x (h12+1)
+        chex.assert_shape(P,     (self.model.h12 + 1, self.model.h12 + 1))
+        # P matrix (conj=True) must have the same shape
+        chex.assert_shape(P_c,   (self.model.h12 + 1, self.model.h12 + 1))
+        # Q matrix (conj=False) must be (h12+1) x (h12+1)
+        chex.assert_shape(Q,     (self.model.h12 + 1, self.model.h12 + 1))
+        # Q matrix (conj=True) must have the same shape
+        chex.assert_shape(Q_c,   (self.model.h12 + 1, self.model.h12 + 1))
+        # Q inverse (conj=False) must be (h12+1) x (h12+1)
+        chex.assert_shape(Qinv,  (self.model.h12 + 1, self.model.h12 + 1))
+        # Q inverse (conj=True) must have the same shape
+        chex.assert_shape(Qinv_c, (self.model.h12 + 1, self.model.h12 + 1))
+        # P from PQ_per (conj=False) must be (h12+1) x (h12+1)
+        chex.assert_shape(P_mod,   (self.model.h12 + 1, self.model.h12 + 1))
+        # P from PQ_per (conj=True) must have the same shape
+        chex.assert_shape(P_mod_c, (self.model.h12 + 1, self.model.h12 + 1))
+        # Q from PQ_per (conj=False) must be (h12+1) x (h12+1)
+        chex.assert_shape(Q_mod,   (self.model.h12 + 1, self.model.h12 + 1))
+        # Q from PQ_per (conj=True) must have the same shape
+        chex.assert_shape(Q_mod_c, (self.model.h12 + 1, self.model.h12 + 1))
 
-        self.assertAllClose(Qinv,jnp.linalg.inv(Q))
-        self.assertAllClose(Qinv_c,jnp.linalg.inv(Q_c))
+        # ---- Q_inv = inv(Q) ----
+        self.assertAllClose(Qinv,   jnp.linalg.inv(Q),
+                            msg="Q_inv must equal matrix inverse of Q")
+        self.assertAllClose(Qinv_c, jnp.linalg.inv(Q_c),
+                            msg="Q_inv_c must equal matrix inverse of Q_c")
 
-        self.assertAllClose(Qinv,jnp.conj(Qinv_c))
-        self.assertAllClose(Q,jnp.conj(Q_c))
-        self.assertAllClose(P,jnp.conj(P_c))
-        self.assertAllClose(Q_mod,jnp.conj(Q_mod_c))
-        self.assertAllClose(P_mod,jnp.conj(P_mod_c))
-        self.assertAllClose(Q_mod,Q)
-        self.assertAllClose(P_mod,P)
-        
+        # ---- conjugation relations ----
+        self.assertAllClose(Qinv, jnp.conj(Qinv_c),
+                            msg="Q_inv must equal conj(Q_inv_c)")
+        self.assertAllClose(Q,   jnp.conj(Q_c),    msg="Q must equal conj(Q_c)")
+        self.assertAllClose(P,   jnp.conj(P_c),    msg="P must equal conj(P_c)")
+        self.assertAllClose(Q_mod, jnp.conj(Q_mod_c), msg="Q from PQ_per must equal conj(Q_c from PQ_per)")
+        self.assertAllClose(P_mod, jnp.conj(P_mod_c), msg="P from PQ_per must equal conj(P_c from PQ_per)")
 
-        
+        # ---- PQ_per must agree with individual P_per / Q_per ----
+        self.assertAllClose(Q_mod, Q, msg="Q returned by PQ_per must agree with Q_per")
+        self.assertAllClose(P_mod, P, msg="P returned by PQ_per must agree with P_per")
 
-        
+
+    # ==========================================================================
+    # Period vector — symplectic properties
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_period_vector_symplectic(self):
+        r"""**Description:**
+
+        Test the fundamental symplectic properties of the period vector
+
+        .. math::
+            \Pi = \begin{pmatrix} \mathcal{F}_I \\ X^I \end{pmatrix}
+
+        returned by :func:`period_vector_per`.
+
+        Two identities are verified:
+
+        1. **Isotropy** (follows from degree-2 homogeneity of :math:`F`):
+
+           .. math::
+               \Pi^T \Sigma \Pi = 0 \,.
+
+        2. **Mirror volume** (definition of :func:`A_per`):
+
+           .. math::
+               -\mathrm{i}\,\bar\Pi^T \Sigma \Pi = \widetilde{\mathcal{V}} \,,
+
+           where :math:`\widetilde{\mathcal{V}}` is the mirror CY volume.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The isotropy condition :math:`\Pi^T\Sigma\Pi = 0` is an exact
+            algebraic identity at every point in moduli space.
+        """
+
+        sig = self.model.sigma
+
+        Pi   = self.variant(lambda x: self.model.period_vector_per(x, conj=False))(self.z)
+        Pi_c = self.variant(lambda x: self.model.period_vector_per(x, conj=True))(self.cz)
+
+        # ---- shape ----
+        chex.assert_shape(Pi,   (2 * (self.model.h12 + 1),))
+        chex.assert_shape(Pi_c, (2 * (self.model.h12 + 1),))
+
+        # ---- 1. isotropy: Pi^T sigma Pi = 0 ----
+        # The prepotential F is degree-2 homogeneous in X^I, so by Euler:
+        # F_I X^I = 2F — the bilinear vanishes identically.
+        iso = jnp.dot(Pi, jnp.matmul(sig, Pi))
+        self.assertAllClose(iso, 0. + 0.j, rtol=1e-11, atol=1e-11,
+                            msg="Period vector must be isotropic: Pi^T sigma Pi = 0")
+
+        # ---- 2. mirror volume: A_per = -i Pi_c^T sigma Pi ----
+        A = self.variant(self.model.A_per)(self.z, self.cz)
+        A_from_Pi = -1j * jnp.dot(Pi_c, jnp.matmul(sig, Pi))
+        self.assertAllClose(A_from_Pi, A, rtol=1e-11, atol=1e-11,
+                            msg="Mirror volume must equal -i Pi_c^T sigma Pi")
+
+
+    # ==========================================================================
+    # Gauge kinetic matrix — imaginary part
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_gauge_kinetic_matrix_imaginary_part(self):
+        r"""**Description:**
+
+        Test that the imaginary part
+
+        .. math::
+            \mathcal{I}_{IJ} = \mathrm{Im}\,\mathcal{N}_{IJ}
+
+        of the gauge kinetic matrix is negative semidefinite,
+
+        .. math::
+            \mathcal{I} \leq 0 \,,
+
+        i.e., all eigenvalues of :math:`\mathcal{I}` are non-positive.
+
+        This property is required for the kinetic terms of the gauge fields in
+        the effective supergravity to have the correct sign.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            Negative semidefiniteness is a consequence of the special
+            geometry of the complex structure moduli space and is preserved
+            away from degeneration loci.
+        """
+
+        N = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=False))(self.z, self.cz)
+        N_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=True))(self.z, self.cz)
+
+        # imaginary part of N
+        ImN = -1j * (N - N_c) / 2.
+
+        # ImN must be real (by construction)
+        self.assertAllClose(ImN.imag, jnp.zeros_like(ImN.imag), rtol=1e-11, atol=1e-11,
+                            msg="Im(N) must be a real matrix")
+
+        # compute eigenvalues of the real symmetric imaginary part
+        eigvals = jnp.linalg.eigvalsh(ImN.real)
+
+        # all eigenvalues must be non-positive (negative semidefinite)
+        self.assertTrue(
+            jnp.all(eigvals <= 1e-8),
+            msg="Im(N) must be negative semidefinite: all eigenvalues <= 0")
+
+
+    # ==========================================================================
+    # Period vector — covariant derivative
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_D_period_vector(self):
+        r"""**Description:**
+
+        Test the Kähler-covariant derivative of the period vector
+
+        .. math::
+            D_I\Pi_a = \partial_{X^I}\Pi_a + (\partial_{X^I} K)\,\Pi_a
+
+        returned by :func:`D_period_vector_per`.
+
+        The following identities are verified:
+
+        1. **Shape**: :math:`D\Pi` has shape ``(2(h^{1,2}+1), h^{1,2}+1)``.
+        2. **Conjugation**: :math:`(D\Pi)_c = \overline{D\Pi}`.
+        3. **Consistency** with :func:`grad_period_vector_per` and
+           :func:`grad_kahler_potential_per`:
+
+           .. math::
+               D_I\Pi = \partial_{X^I}\Pi + (\partial_{X^I}K)\,\Pi \,.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The covariant derivative :math:`D_I\Pi` enters the definition of
+            the matrices :math:`P` and :math:`Q` and hence the gauge kinetic
+            matrix :math:`\mathcal{N}`.
+        """
+
+        # ---- evaluate covariant and ordinary derivatives ----
+        DPi = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=False))(self.z, self.cz)
+        DPi_c = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=True))(self.z, self.cz)
+
+        # ---- shape ----
+        chex.assert_shape(DPi,   (2 * (self.model.h12 + 1), self.model.h12 + 1))
+        chex.assert_shape(DPi_c, (2 * (self.model.h12 + 1), self.model.h12 + 1))
+
+        # ---- conjugation ----
+        self.assertAllClose(DPi_c, jnp.conj(DPi),
+                            msg="(D Pi)_c must equal conj(D Pi)")
+
+        # ---- consistency: DPi = dPi + outer(Pi, dK) ----
+        Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=False))(self.z)
+        dPi = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=False))(self.z)
+        dK  = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=False))(self.z, self.cz)
+
+        # D_I Pi = dPi + outer(Pi, dK)
+        DPi_manual = dPi + jnp.outer(Pi, dK)
+        self.assertAllClose(DPi, DPi_manual, rtol=1e-11, atol=1e-11,
+                            msg="D_period_vector must equal dPi + outer(Pi, dK)")
+
+
+    # ==========================================================================
+    # Prepotential
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_prepotential(self):
+        r"""**Description:**
+
+        Test the prepotential :math:`F` and its derivatives returned by
+        :func:`prepot_per`, :func:`prepot_grad_per`, and
+        :func:`prepot_grad_grad_per`, as well as the individual LCS
+        decomposition :func:`F_LCS_per`, :func:`F_LCS_poly_per`, and
+        :func:`F_inst_per`.
+
+        The LCS polynomial prepotential is
+
+        .. math::
+            F_{\mathrm{poly}}(X) = -\frac{1}{6X^0}\widetilde\kappa_{ijk}
+                X^i X^j X^k + \tfrac{1}{2}a_{ij}X^i X^j + b_i X^i X^0
+                + \tfrac{\mathrm{i}}{2}\tilde\xi\,(X^0)^2 \,.
+
+        At the large complex structure point :math:`z^i = 0`, :math:`X^0 = 1`,
+        the polynomial part satisfies the following boundary conditions:
+
+        .. math::
+            F_{\mathrm{poly}}(z^0) = K_0/2 \,,\quad
+            \partial_{X^i}F_{\mathrm{poly}}\big|_0 = b_i \,,\quad
+            \partial_{X^i}\partial_{X^j}F_{\mathrm{poly}}\big|_0 = a_{ij} \,,\quad
+            \partial_{X^i}\partial_{X^j}\partial_{X^k}
+                F_{\mathrm{poly}}\big|_0 = -\widetilde\kappa_{ijk} \,.
+
+        Conjugation relations :math:`\bar F = F(\bar z)` are verified for all
+        of :math:`F`, :math:`F_{\mathrm{LCS}}`, :math:`F_{\mathrm{poly}}`,
+        :math:`F_{\mathrm{inst}}`, :math:`F_I`, and :math:`F_{IJ}`.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        .. note::
+            The instanton corrections :math:`F_{\mathrm{inst}}` use Gopakumar-
+            Vafa invariants and are truncated at ``maximum_degree=5``.
         """
-        Test prepotential.
 
-        Aliases:
-        'prepot'
-        'F'
-
-        """
-
+        # ---- conj=False ----
         conj = False
-        F = self.variant(lambda x: self.model.prepot_per(x,conj=conj))(self.z)
-        F_LCS = self.variant(lambda x: self.model.F_LCS_per(x,conj=conj))(self.z)
-        F_LCS_poly = self.variant(lambda x: self.model.F_LCS_poly_per(x,conj=conj))(self.z)
-        F_inst = self.variant(lambda x: self.model.F_inst_per(x,conj=conj))(self.z)
-        dF = self.variant(lambda x: self.model.prepot_grad_per(x,conj=conj))(self.z)
-        ddF = self.variant(lambda x: self.model.prepot_grad_grad_per(x,conj=conj))(self.z)
+        F          = self.variant(lambda x: self.model.prepot_per(x, conj=conj))(self.z)
+        F_LCS      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.z)
+        F_LCS_poly = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.z)
+        F_inst     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.z)
+        dF         = self.variant(lambda x: self.model.prepot_grad_per(x, conj=conj))(self.z)
+        ddF        = self.variant(lambda x: self.model.prepot_grad_grad_per(x, conj=conj))(self.z)
 
-
+        # ---- conj=True ----
         conj = True
-        F_c = self.variant(lambda x: self.model.prepot_per(x,conj=conj))(self.cz)
-        F_LCS_c = self.variant(lambda x: self.model.F_LCS_per(x,conj=conj))(self.cz)
-        F_LCS_poly_c = self.variant(lambda x: self.model.F_LCS_poly_per(x,conj=conj))(self.cz)
-        F_inst_c = self.variant(lambda x: self.model.F_inst_per(x,conj=conj))(self.cz)
-        dF_c = self.variant(lambda x: self.model.prepot_grad_per(x,conj=conj))(self.cz)
-        ddF_c = self.variant(lambda x: self.model.prepot_grad_grad_per(x,conj=conj))(self.cz)
+        F_c          = self.variant(lambda x: self.model.prepot_per(x, conj=conj))(self.cz)
+        F_LCS_c      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.cz)
+        F_LCS_poly_c = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.cz)
+        F_inst_c     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.cz)
+        dF_c         = self.variant(lambda x: self.model.prepot_grad_per(x, conj=conj))(self.cz)
+        ddF_c        = self.variant(lambda x: self.model.prepot_grad_grad_per(x, conj=conj))(self.cz)
 
-        chex.assert_shape(dF, (self.model.h12+1,))
-        chex.assert_shape(dF_c, (self.model.h12+1,))
-        chex.assert_shape(ddF, (self.model.h12+1,self.model.h12+1))
-        chex.assert_shape(ddF_c, (self.model.h12+1,self.model.h12+1))
-        self.assertAllClose(F_c,jnp.conj(F))
-        self.assertAllClose(F_LCS_c,jnp.conj(F_LCS))
-        self.assertAllClose(F_LCS_poly_c,jnp.conj(F_LCS_poly))
-        self.assertAllClose(F_inst_c,jnp.conj(F_inst))
-        self.assertAllClose(dF_c,jnp.conj(dF))
-        self.assertAllClose(ddF_c,jnp.conj(ddF))
+        # ---- shapes ----
+        chex.assert_shape(dF,   (self.model.h12 + 1,))
+        chex.assert_shape(dF_c, (self.model.h12 + 1,))
+        chex.assert_shape(ddF,   (self.model.h12 + 1, self.model.h12 + 1))
+        chex.assert_shape(ddF_c, (self.model.h12 + 1, self.model.h12 + 1))
 
-        #At LCS, we can test that for the polynomial F, F(0)=xi, F_i(0)=b, F_ij(0)=a, F_ijk(0)=kappa!
+        # ---- conjugation relations ----
+        self.assertAllClose(F_c,          jnp.conj(F),
+                            msg="Conjugate prepotential must equal conj(F)")
+        self.assertAllClose(F_LCS_c,      jnp.conj(F_LCS),
+                            msg="Conjugate F_LCS must equal conj(F_LCS)")
+        self.assertAllClose(F_LCS_poly_c, jnp.conj(F_LCS_poly),
+                            msg="Conjugate F_LCS_poly must equal conj(F_LCS_poly)")
+        self.assertAllClose(F_inst_c,     jnp.conj(F_inst),
+                            msg="Conjugate F_inst must equal conj(F_inst)")
+        self.assertAllClose(dF_c,         jnp.conj(dF),
+                            msg="Conjugate dF must equal conj(dF)")
+        self.assertAllClose(ddF_c,        jnp.conj(ddF),
+                            msg="Conjugate ddF must equal conj(ddF)")
+
+        # ---- LCS boundary conditions (polynomial part) at z^i = 0 ----
         conj = False
-        zzero = jnp.append(jnp.ones(1),jnp.zeros(self.z.shape[0]-1)*1j)
-        F_0 = self.variant(lambda x: self.model.F_LCS_poly_per(x,conj=conj))(zzero)
-        dF_0 = self.variant(lambda x: jax.grad(self.model.F_LCS_poly_per,holomorphic=True)(x,conj=conj))(zzero)
-        ddF_0 = self.variant(lambda x: jax.jacfwd(jax.grad(self.model.F_LCS_poly_per,holomorphic=True),holomorphic=True)(x,conj=conj))(zzero)
-        dddF_0 = self.variant(lambda x: jax.jacfwd(jax.jacfwd(jax.grad(self.model.F_LCS_poly_per,holomorphic=True),holomorphic=True),holomorphic=True)(x,conj=conj))(zzero)
+        F_0 = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.z0)
+        dF_0 = self.variant(
+            lambda x: jax.grad(self.model.F_LCS_poly_per, holomorphic=True)(x, conj=conj)
+        )(self.z0)
+        ddF_0 = self.variant(
+            lambda x: jax.jacfwd(
+                jax.grad(self.model.F_LCS_poly_per, holomorphic=True),
+                holomorphic=True)(x, conj=conj)
+        )(self.z0)
+        dddF_0 = self.variant(
+            lambda x: jax.jacfwd(
+                jax.jacfwd(
+                    jax.grad(self.model.F_LCS_poly_per, holomorphic=True),
+                    holomorphic=True),
+                holomorphic=True)(x, conj=conj)
+        )(self.z0)
 
-        print("Should we test also the derivative along X0?")
+        # F_poly(z^i=0) = K0 / 2
         chex.assert_shape(F_0, ())
-        self.assertAllClose(F_0, self.model.K0/2.)
-        chex.assert_shape(dF_0, (self.model.h12+1,))
-        self.assertAllClose(dF_0[1:], self.model.b_vector)
-        chex.assert_shape(ddF_0, (self.model.h12+1,self.model.h12+1))
-        self.assertAllClose(ddF_0[1:,1:], self.model.a_matrix)
-        chex.assert_shape(dddF_0, (self.model.h12+1,self.model.h12+1,self.model.h12+1))
-        self.assertAllClose(dddF_0[1:,1:,1:], -self.model.mirror_intersection_numbers)
+        self.assertAllClose(F_0, self.model.lcs_tree.K0 / 2.,
+                            msg="F_LCS_poly at LCS must equal K0/2")
+
+        # d_{X^i} F_poly |_0 = b_i  (exclude X^0 component)
+        chex.assert_shape(dF_0, (self.model.h12 + 1,))
+        self.assertAllClose(dF_0[1:], self.model.lcs_tree.b_vector,
+                            msg="First derivatives of F_LCS_poly at LCS must equal b_vector")
+
+        # d_{X^i} d_{X^j} F_poly |_0 = a_ij
+        chex.assert_shape(ddF_0, (self.model.h12 + 1, self.model.h12 + 1))
+        self.assertAllClose(ddF_0[1:, 1:], self.model.lcs_tree.a_matrix,
+                            msg="Second derivatives of F_LCS_poly at LCS must equal a_matrix")
+
+        # d_{X^i} d_{X^j} d_{X^k} F_poly |_0 = -kappa_ijk (mirror intersection numbers)
+        chex.assert_shape(dddF_0, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
+        self.assertAllClose(dddF_0[1:, 1:, 1:], -self.model.lcs_tree.intnums,
+                            msg="Third derivatives of F_LCS_poly at LCS must equal -mirror_intersection_numbers")
 
 
+    # ==========================================================================
+    # Period vector — shapes, conjugation, derivatives
+    # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
     def test_period_vector(self):
-        """
-        Test period vector.
+        r"""**Description:**
 
+        Test the period vector :math:`\Pi`, its ordinary gradient
+        :math:`\partial_{X^I}\Pi`, and its Kähler-covariant derivative
+        :math:`D_I\Pi` returned by :func:`period_vector_per`,
+        :func:`grad_period_vector_per`, and :func:`D_period_vector_per`.
+
+        The period vector is defined as
+
+        .. math::
+            \Pi = \begin{pmatrix} \mathcal{F}_I \\ X^I \end{pmatrix},
+            \quad I = 0, 1, \ldots, h^{1,2} \,,
+
+        with :math:`\mathcal{F}_I = \partial_{X^I} F`.
+
+        Conjugation relations
+
+        .. math::
+            \Pi(\bar z) = \overline{\Pi(z)} \,,\quad
+            \partial_{\bar X^I}\Pi(\bar z) = \overline{\partial_{X^I}\Pi(z)}
+            \,,\quad D\Pi(\bar z) = \overline{D\Pi(z)}
+
+        are verified for all three objects.
+
+        Args:
+            None
+
+        Returns:
+            None
         """
 
+        # ---- period vector ----
         conj = False
-        Pi = self.variant(lambda x: self.model.period_vector_per(x,conj=conj))(self.z)
-        dPi = self.variant(lambda x: self.model.grad_period_vector_per(x,conj=conj))(self.z)
-        DPi = self.variant(lambda x,y: self.model.D_period_vector_per(x,y,conj=conj))(self.z,self.cz)
+        Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.z)
+        dPi = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=conj))(self.z)
+        DPi = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
 
         conj = True
-        Pi_c = self.variant(lambda x: self.model.period_vector_per(x,conj=conj))(self.cz)
-        dPi_c = self.variant(lambda x: self.model.grad_period_vector_per(x,conj=conj))(self.cz)
-        DPi_c = self.variant(lambda x,y: self.model.D_period_vector_per(x,y,conj=conj))(self.z,self.cz)
-        
+        Pi_c  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.cz)
+        dPi_c = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=conj))(self.cz)
+        DPi_c = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
 
-        chex.assert_shape(Pi, (2*(self.model.h12+1),))
-        chex.assert_shape(Pi_c, (2*(self.model.h12+1),))
-        self.assertAllClose(Pi_c,jnp.conj(Pi))
+        # ---- shapes ----
+        chex.assert_shape(Pi,   (2 * (self.model.h12 + 1),))   # full symplectic period vector
+        chex.assert_shape(Pi_c, (2 * (self.model.h12 + 1),))
 
-        print("Not sure if the tests below are correct!")
-        chex.assert_shape(dPi, (2*(self.model.h12+1),self.model.h12+1))
-        chex.assert_shape(dPi_c, (2*(self.model.h12+1),self.model.h12+1))
-        self.assertAllClose(dPi_c,jnp.conj(dPi))
+        chex.assert_shape(dPi,   (2 * (self.model.h12 + 1), self.model.h12 + 1))
+        chex.assert_shape(dPi_c, (2 * (self.model.h12 + 1), self.model.h12 + 1))
 
-        chex.assert_shape(DPi, (2*(self.model.h12+1),self.model.h12+1))
-        chex.assert_shape(DPi_c, (2*(self.model.h12+1),self.model.h12+1))
-        self.assertAllClose(DPi_c,jnp.conj(DPi))
+        chex.assert_shape(DPi,   (2 * (self.model.h12 + 1), self.model.h12 + 1))
+        chex.assert_shape(DPi_c, (2 * (self.model.h12 + 1), self.model.h12 + 1))
 
+        # ---- conjugation of period vector ----
+        self.assertAllClose(Pi_c, jnp.conj(Pi),
+                            msg="Pi_c must equal conj(Pi)")
 
-
-
-
+        # ---- conjugation of gradients ----
+        self.assertAllClose(dPi_c, jnp.conj(dPi),
+                            msg="dPi_c must equal conj(dPi)")
+        self.assertAllClose(DPi_c, jnp.conj(DPi),
+                            msg="DPi_c must equal conj(DPi)")

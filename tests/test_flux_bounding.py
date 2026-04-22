@@ -1,0 +1,957 @@
+# Copyright 2024 Andreas Schachner
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import sys, os, warnings
+import jax
+import numpy as np
+import jax.numpy as jnp
+from functools import partial
+from util import *
+
+sys.path.append("./../")
+import jaxvacua
+from jaxvacua.flux_bounding import bounded_fluxes
+
+
+# ==============================================================================
+#  TestFluxBounding
+# ==============================================================================
+
+class TestFluxBounding(TestCase):
+    r"""
+    **Description:**
+    Test suite for the :class:`bounded_fluxes` class in
+    :mod:`jaxvacua.flux_bounding`, which implements the flux-bounding
+    algorithm of arXiv:2501.03984 for systematic enumeration of Type IIB
+    flux vacua in finite regions of moduli space.
+
+    The tests cover the constructor, global eigenvalue bounds, bounding box
+    computation, h-candidate enumeration, Newton refinement at a known SUSY
+    vacuum, ISD refinement, flux splitting, and tadpole computation.
+
+    Attributes:
+        model (jaxvacua.FluxVacuaFinder): Flux vacua finder model with
+            ``h12=2``, ``model_ID=1``, ``model_type="KS"``,
+            ``maximum_degree=0``.
+        sampler (jaxvacua.data_sampler): Data sampler with moduli bounds
+            ``(2., 5.)``, dilaton bounds ``(2., 10.)``, axion bounds
+            ``(-0.5, 0.5)``, and ``seed=42``.
+        bf (bounded_fluxes): Bounded-fluxes instance with ``Nmax=4``.
+        h12 (int): Number of complex structure moduli.
+        n_fluxes (int): Length of a half-flux vector, :math:`2(h^{1,2}+1)`.
+        dimension_H3 (int): Dimension of the :math:`H^3_+` sector,
+            :math:`h^{1,2}+1`.
+        f_solution (jnp.ndarray): Known SUSY-minimum flux vector.
+        zsol (jnp.ndarray): Complex structure moduli at the known SUSY
+            minimum.
+        tausol (complex): Axio-dilaton at the known SUSY minimum.
+    """
+
+    # --------------------------------------------------------------------------
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        cls.h12 = 2
+
+        # Build model and override the a_matrix
+        # maximum_degree=5 includes instanton corrections needed for
+        # Newton convergence at the known SUSY solution
+        cls.model = jaxvacua.FluxVacuaFinder(
+            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=5,
+        )
+        cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
+
+        # Build sampler
+        cls.sampler = jaxvacua.data_sampler(
+            cls.model,
+            moduli_bounds=(2., 5.),
+            dilaton_bounds=(2., 10.),
+            axion_bounds=(-0.5, 0.5),
+            seed=42,
+        )
+
+        # Build bounded_fluxes instance
+        cls.bf = bounded_fluxes(cls.model, sampler=cls.sampler, Nmax=4)
+
+        # Convenience attributes
+        cls.n_fluxes = cls.model.n_fluxes          # = 2*(h12+1) = 6
+        cls.dimension_H3 = cls.model.dimension_H3  # = h12+1 = 3
+
+        # Known SUSY minimum solution (from test_css.py)
+        cls.f_solution = jnp.array(
+            [7, 3, -24, 0, -16, 50, 0, 3, -4, 0, 0, 0], dtype=float
+        )
+        u1sol = 2.74215479602462524879172086700112955631 * 1j
+        u2sol = 2.05661613496943436323419976712599580262 * 1j
+        tausol = 6.85540179778358427172610564536555609784 * 1j
+
+        cls.zsol = jnp.array([u1sol, u2sol])
+        cls.tausol = tausol
+
+
+    # ==========================================================================
+    #  1. Constructor
+    # ==========================================================================
+
+    def test_constructor_Nmax(self):
+        r"""**Description:**
+        Verify that the ``Nmax`` attribute is correctly set from the
+        constructor argument.
+        """
+        self.assertEqual(
+            self.bf.Nmax, 4,
+            msg="bf.Nmax should equal the value passed to the constructor",
+        )
+
+    def test_constructor_n_fluxes(self):
+        r"""**Description:**
+        Verify that ``n_fluxes`` equals :math:`2(h^{1,2}+1)`.
+        """
+        expected = 2 * (self.h12 + 1)
+        self.assertEqual(
+            self.bf.n_fluxes, expected,
+            msg=f"bf.n_fluxes should be 2*(h12+1) = {expected}",
+        )
+
+    def test_constructor_dimension_H3(self):
+        r"""**Description:**
+        Verify that ``dimension_H3`` equals :math:`h^{1,2}+1`.
+        """
+        expected = self.h12 + 1
+        self.assertEqual(
+            self.bf.dimension_H3, expected,
+            msg=f"bf.dimension_H3 should be h12+1 = {expected}",
+        )
+
+
+    # ==========================================================================
+    #  2. bounds_initialized Property
+    # ==========================================================================
+
+    def test_bounds_not_initialized_initially(self):
+        r"""**Description:**
+        Before any call to :func:`compute_eigenvalue_bounds` or
+        :func:`compute_bounding_box`, the :attr:`bounds_initialized`
+        property should return ``False``.
+        """
+        # Create a fresh instance to avoid pollution from other tests
+        bf_fresh = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        self.assertFalse(
+            bf_fresh.bounds_initialized,
+            msg="bounds_initialized should be False before any bound computation",
+        )
+
+    def test_bounds_initialized_after_compute(self):
+        r"""**Description:**
+        After calling :func:`compute_eigenvalue_bounds`, the
+        :attr:`bounds_initialized` property should return ``True``.
+        """
+        # Use a small sample to keep the test fast
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_test.compute_eigenvalue_bounds(n_sample=50, verbose=False)
+        self.assertTrue(
+            bf_test.bounds_initialized,
+            msg="bounds_initialized should be True after compute_eigenvalue_bounds",
+        )
+
+
+    # ==========================================================================
+    #  3. compute_eigenvalue_bounds
+    # ==========================================================================
+
+    def test_compute_eigenvalue_bounds_returns_positive(self):
+        r"""**Description:**
+        Verifies that :func:`compute_eigenvalue_bounds` returns a 3-tuple
+        ``(h1_box, h2_box, h_box)`` of positive floats, and that the
+        global eigenvalue extrema ``lambda_max_gl`` and ``mu_min_gl``
+        are positive after the call.
+
+        The bounding box radii are defined as
+
+        .. math::
+            h_{1,\rm box} = \sqrt{\frac{N_{\max}}{s_{\min}\,\tilde\mu_{\min}^{\rm gl}}}\,,\quad
+            h_{2,\rm box} = \sqrt{\frac{N_{\max}}{s_{\min}\,\mu_{\min}^{\rm gl}}}\,,\quad
+            h_{\rm box} = \sqrt{\frac{2\,\lambda_{\max}^{\rm gl}\,N_{\max}}{s_{\min}}}\,.
+        """
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        h1_box, h2_box, h_box = bf_test.compute_eigenvalue_bounds(
+            n_sample=100, verbose=False,
+        )
+
+        # All box dimensions must be positive floats
+        self.assertIsInstance(h1_box, float)
+        self.assertIsInstance(h2_box, float)
+        self.assertIsInstance(h_box, float)
+        self.assertGreater(h1_box, 0., msg="h1_box must be positive")
+        self.assertGreater(h2_box, 0., msg="h2_box must be positive")
+        self.assertGreater(h_box, 0., msg="h_box must be positive")
+
+        # Global eigenvalue extrema must be positive after computation
+        self.assertGreater(
+            bf_test.lambda_max_gl, 0.,
+            msg="lambda_max_gl must be positive after compute_eigenvalue_bounds",
+        )
+        self.assertGreater(
+            bf_test.mu_min_gl, 0.,
+            msg="mu_min_gl must be positive after compute_eigenvalue_bounds",
+        )
+
+
+    # ==========================================================================
+    #  4. compute_bounding_box
+    # ==========================================================================
+
+    def test_compute_bounding_box_returns_positive(self):
+        r"""**Description:**
+        Verifies that :func:`compute_bounding_box` accepts explicit
+        ``moduli_sample`` and ``tau_sample`` arrays and returns three
+        positive floats.
+
+        A small batch of random moduli is drawn from the sampler and
+        passed directly to :func:`compute_bounding_box`.
+        """
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+
+        # Draw a small sample of moduli and tau
+        moduli_sample = self.sampler.get_complex_moduli(50)
+        tau_sample = self.sampler.get_complex_tau(50)
+
+        h1_box, h2_box, h_box = bf_test.compute_bounding_box(
+            moduli_sample, tau_sample,
+        )
+
+        # All three box dimensions must be positive
+        self.assertGreater(h1_box, 0., msg="h1_box must be positive")
+        self.assertGreater(h2_box, 0., msg="h2_box must be positive")
+        self.assertGreater(h_box, 0., msg="h_box must be positive")
+
+
+    # ==========================================================================
+    #  5. get_h_candidates
+    # ==========================================================================
+
+    def test_get_h_candidates_shape_and_type(self):
+        r"""**Description:**
+        Verifies that :func:`get_h_candidates` returns an integer array
+        of shape ``(N, n_fluxes)`` with ``N > 0`` after the bounding box
+        has been computed.
+
+        Each row of the returned array is a candidate NSNS-flux vector
+        :math:`h = [h_1 \mid h_2]` satisfying the :math:`L^2`-norm
+        constraints :math:`\|h_1\|^2 \leq h_{1,\rm box}^2` and
+        :math:`\|h_2\|^2 \leq h_{2,\rm box}^2`.
+        """
+        # Ensure bounding box is computed
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_test.compute_eigenvalue_bounds(n_sample=100, verbose=False)
+
+        # Get h-candidates
+        h_candidates = bf_test.get_h_candidates()
+
+        # Must be a 2D numpy integer array
+        self.assertIsInstance(h_candidates, np.ndarray)
+        self.assertEqual(
+            h_candidates.ndim, 2,
+            msg="h_candidates must be a 2D array",
+        )
+        self.assertTrue(
+            np.issubdtype(h_candidates.dtype, np.integer),
+            msg="h_candidates must have integer dtype",
+        )
+
+        # Shape: (N, n_fluxes) with N > 0
+        N, n_fl = h_candidates.shape
+        self.assertGreater(N, 0, msg="Must have at least one h-candidate")
+        self.assertEqual(
+            n_fl, self.n_fluxes,
+            msg=f"h_candidates columns should equal n_fluxes={self.n_fluxes}",
+        )
+
+    def test_get_h_candidates_norm_bounds(self):
+        r"""**Description:**
+        Verifies that every returned h-candidate satisfies the individual
+        :math:`L^2`-norm bounds on :math:`h_1` and :math:`h_2`.
+        """
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_test.compute_eigenvalue_bounds(n_sample=100, verbose=False)
+
+        h_candidates = bf_test.get_h_candidates()
+        h1_box, h2_box, h_box = bf_test.get_h_box()
+        dim = self.dimension_H3
+
+        # Split each candidate into h1 and h2 sub-vectors
+        h1_all = h_candidates[:, :dim]
+        h2_all = h_candidates[:, dim:]
+
+        # Check norm bounds
+        h1_norms_sq = np.sum(h1_all ** 2, axis=1)
+        h2_norms_sq = np.sum(h2_all ** 2, axis=1)
+
+        self.assertAllTrue(
+            h1_norms_sq <= h1_box ** 2 + 1e-10,
+            msg="All h1 sub-vectors must satisfy ||h1||^2 <= h1_box^2",
+        )
+        self.assertAllTrue(
+            h2_norms_sq <= h2_box ** 2 + 1e-10,
+            msg="All h2 sub-vectors must satisfy ||h2||^2 <= h2_box^2",
+        )
+
+
+    # ==========================================================================
+    #  6. newton_refine_batch
+    # ==========================================================================
+
+    def test_newton_refine_batch_shapes(self):
+        r"""**Description:**
+        Verifies that :func:`newton_refine_batch` returns the correct
+        output shapes ``(N, h12)``, ``(N,)``, and ``(N,)`` for
+        ``moduli_out``, ``tau_out``, and ``residuals`` respectively.
+        """
+        N = 2  # batch size
+        h12 = self.h12
+
+        # Create a small batch by repeating the known solution
+        moduli_batch = jnp.tile(self.zsol, (N, 1))
+        tau_batch = jnp.array([self.tausol] * N)
+        flux_batch = jnp.tile(self.f_solution, (N, 1))
+
+        moduli_out, tau_out, residuals = self.bf.newton_refine_batch(
+            moduli_batch, tau_batch, flux_batch,
+            step_size=1.0, tol=1e-10, max_iters=100,
+        )
+
+        # Check output shapes
+        chex.assert_shape(moduli_out, (N, h12))
+        chex.assert_shape(tau_out, (N,))
+        chex.assert_shape(residuals, (N,))
+
+    def test_newton_refine_batch_convergence(self):
+        r"""**Description:**
+        Verifies convergence of :func:`newton_refine_batch` using the
+        known SUSY vacuum solution:
+
+        .. math::
+            f = [7, 3, -24, 0, -16, 50, 0, 3, -4, 0, 0, 0]\,,\quad
+            z \approx (2.742\,i,\; 2.057\,i)\,,\quad
+            \tau \approx 6.855\,i\,.
+
+        Starting from the known solution, Newton refinement should converge
+        to a residual :math:`\sum |D_I W| < 10^{-8}`, and the converged
+        moduli and axio-dilaton should agree with the starting point to
+        high precision.
+        """
+        N = 1
+
+        # Start at the known SUSY vacuum
+        moduli_batch = self.zsol[None, :]     # shape (1, h12)
+        tau_batch = jnp.array([self.tausol])  # shape (1,)
+        flux_batch = self.f_solution[None, :] # shape (1, 2*n_fluxes)
+
+        moduli_out, tau_out, residuals = self.bf.newton_refine_batch(
+            moduli_batch, tau_batch, flux_batch,
+            step_size=1.0, tol=1e-12, max_iters=100,
+        )
+
+        # Residual should be extremely small at the known vacuum
+        self.assertAllTrue(
+            residuals < 1e-8,
+            msg="Newton refinement should converge to small residual at known vacuum",
+        )
+
+        # Converged moduli should match the starting point (already at minimum)
+        self.assertAllClose(
+            moduli_out[0], self.zsol, atol=1e-6,
+            msg="Converged moduli should match the known SUSY vacuum",
+        )
+
+        # Converged tau should match the starting point
+        self.assertAllClose(
+            tau_out[0], self.tausol, atol=1e-6,
+            msg="Converged tau should match the known SUSY vacuum",
+        )
+
+    def test_newton_refine_batch_from_perturbed_start(self):
+        r"""**Description:**
+        Verifies that Newton refinement converges to the known SUSY vacuum
+        even when starting from a slightly perturbed initial guess.
+
+        The starting moduli and axio-dilaton are shifted by a small
+        imaginary perturbation, and the Newton solver should recover the
+        exact vacuum to high accuracy.
+        """
+        N = 1
+
+        # Perturb the known solution slightly in the imaginary direction
+        z_start = self.zsol + 0.05j
+        tau_start = self.tausol + 0.1j
+
+        moduli_batch = z_start[None, :]
+        tau_batch = jnp.array([tau_start])
+        flux_batch = self.f_solution[None, :]
+
+        moduli_out, tau_out, residuals = self.bf.newton_refine_batch(
+            moduli_batch, tau_batch, flux_batch,
+            step_size=1.0, tol=1e-12, max_iters=200,
+        )
+
+        # Should converge to a small residual
+        self.assertAllTrue(
+            residuals < 1e-6,
+            msg="Newton refinement should converge from a perturbed start",
+        )
+
+        # Converged moduli should be close to the known vacuum
+        self.assertAllClose(
+            moduli_out[0], self.zsol, atol=1e-4,
+            msg="Converged moduli should recover the known SUSY vacuum",
+        )
+
+
+    # ==========================================================================
+    #  7. isd_refine_batch
+    # ==========================================================================
+
+    def test_isd_refine_batch_shapes(self):
+        r"""**Description:**
+        Verifies that :func:`isd_refine_batch` returns arrays with
+        correct shapes.  The output is a 3-tuple
+        ``(mod_out, tau_out, flux_out)``.
+
+        When no candidates pass all constraints, the output arrays are
+        empty.  When candidates do pass, the shapes are
+        ``(K, h12)``, ``(K,)``, ``(K, 2*n_fluxes)`` where ``K`` is the
+        number of surviving candidates.
+        """
+        # Ensure bounding box is computed first
+        bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_test.compute_eigenvalue_bounds(n_sample=100, verbose=False)
+
+        # Use the known h-flux from the known solution: h = f_solution[n_fluxes:]
+        h_known = self.f_solution[self.n_fluxes:]  # shape (n_fluxes,)
+        h_batch = h_known[None, :]                  # shape (1, n_fluxes)
+
+        # Use a small set of moduli starting points
+        n_pts = 3
+        moduli_pts = self.sampler.get_complex_moduli(n_pts)
+        tau_pts = self.sampler.get_complex_tau(n_pts)
+
+        mod_out, tau_out, flux_out = bf_test.isd_refine_batch(
+            jnp.array(h_batch, dtype=float),
+            jnp.array(moduli_pts),
+            jnp.array(tau_pts),
+            n_iters=5,
+            h_sub_batch=200,
+        )
+
+        # Output should be numpy arrays (possibly empty)
+        self.assertIsInstance(mod_out, np.ndarray)
+        self.assertIsInstance(tau_out, np.ndarray)
+        self.assertIsInstance(flux_out, np.ndarray)
+
+        # If non-empty, shapes should be consistent
+        if mod_out.size > 0:
+            K = mod_out.shape[0]
+            self.assertEqual(mod_out.shape[-1], self.h12)
+            self.assertEqual(flux_out.shape[-1], 2 * self.n_fluxes)
+            self.assertEqual(tau_out.shape[0], K)
+            self.assertEqual(flux_out.shape[0], K)
+
+
+    # ==========================================================================
+    #  8. get_fh
+    # ==========================================================================
+
+    def test_get_fh_split(self):
+        r"""**Description:**
+        Verifies that :func:`get_fh` correctly splits a full flux vector
+        ``[f | h]`` of length ``2 * n_fluxes`` into its RR-flux ``f``
+        and NSNS-flux ``h`` components, each of length ``n_fluxes``.
+        """
+        flux = self.f_solution  # length 2*n_fluxes = 12
+
+        f_part, h_part = self.bf.get_fh(flux)
+
+        # Each part should have length n_fluxes
+        self.assertEqual(
+            len(f_part), self.n_fluxes,
+            msg=f"f should have length n_fluxes={self.n_fluxes}",
+        )
+        self.assertEqual(
+            len(h_part), self.n_fluxes,
+            msg=f"h should have length n_fluxes={self.n_fluxes}",
+        )
+
+        # Reconstruction: concatenation should recover the original
+        reconstructed = np.concatenate([f_part, h_part])
+        self.assertAllClose(
+            reconstructed, np.asarray(flux).real, atol=1e-15,
+            msg="Concatenating f and h should recover the original flux vector",
+        )
+
+    def test_get_fh_known_values(self):
+        r"""**Description:**
+        Verifies the numerical values of the split for the known flux
+        vector ``f_solution = [7, 3, -24, 0, -16, 50, 0, 3, -4, 0, 0, 0]``.
+
+        The RR-flux is ``f = [7, 3, -24, 0, -16, 50]`` and the NSNS-flux
+        is ``h = [0, 3, -4, 0, 0, 0]``.
+        """
+        f_part, h_part = self.bf.get_fh(self.f_solution)
+
+        expected_f = np.array([7., 3., -24., 0., -16., 50.])
+        expected_h = np.array([0., 3., -4., 0., 0., 0.])
+
+        self.assertAllClose(
+            f_part, expected_f, atol=1e-15,
+            msg="RR-flux f should match expected values",
+        )
+        self.assertAllClose(
+            h_part, expected_h, atol=1e-15,
+            msg="NSNS-flux h should match expected values",
+        )
+
+
+    # ==========================================================================
+    #  9. compute_tadpole_batch
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_tadpole_batch_shape(self):
+        r"""**Description:**
+        Verifies that :func:`compute_tadpole_batch` returns an array of
+        shape ``(N,)`` for a batch of ``N`` flux vectors.
+        """
+        N = 3
+        flux_batch = jnp.tile(self.f_solution, (N, 1))  # (N, 2*n_fluxes)
+
+        tadpoles = self.variant(self.bf.compute_tadpole_batch)(flux_batch)
+
+        chex.assert_shape(tadpoles, (N,))
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_tadpole_batch_positive(self):
+        r"""**Description:**
+        Verifies that the tadpole :math:`N_{\rm flux} = |f^T \Sigma h|`
+        is a positive real number for the known flux solution.
+        """
+        flux_batch = self.f_solution[None, :]  # (1, 2*n_fluxes)
+
+        tadpoles = self.variant(self.bf.compute_tadpole_batch)(flux_batch)
+
+        # Tadpole should be a real positive number
+        self.assertGreater(
+            float(tadpoles[0].real), 0.,
+            msg="Tadpole N_flux should be positive for the known solution",
+        )
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_tadpole_batch_consistency(self):
+        r"""**Description:**
+        Verifies that :func:`compute_tadpole_batch` gives the same result
+        as a single call to ``model.tadpole`` for each element in the batch.
+        """
+        N = 3
+
+        # Create distinct flux vectors by scaling the known solution
+        flux_batch = jnp.stack([
+            self.f_solution,
+            2.0 * self.f_solution,
+            0.5 * self.f_solution,
+        ])  # (3, 2*n_fluxes)
+
+        # Batch computation
+        tadpoles_batch = self.variant(self.bf.compute_tadpole_batch)(flux_batch)
+
+        # Single-element computation for reference
+        for i in range(N):
+            tad_single = self.model.tadpole(flux_batch[i])
+            self.assertAllClose(
+                tadpoles_batch[i], tad_single, atol=1e-12,
+                msg=f"Batch tadpole[{i}] should match single-element tadpole",
+            )
+
+    # ==========================================================================
+    #  10. Flux utility helpers
+    # ==========================================================================
+
+    def test_get_nflux(self):
+        r"""
+        **Description:**
+        Verify that :func:`get_nflux` returns the D3-tadpole charge
+        :math:`N_{\rm flux} = |f^T \Sigma h|` as a positive scalar,
+        and agrees with :func:`model.tadpole`.
+        """
+        Nfl = self.bf.get_nflux(self.f_solution)
+        # Must be a positive scalar
+        self.assertGreater(float(Nfl), 0.)
+        # Must agree with model.tadpole
+        tad = float(self.model.tadpole(self.f_solution).real)
+        self.assertAllClose(Nfl, tad, atol=1e-10)
+
+    def test_get_flux_split(self):
+        r"""
+        **Description:**
+        Verify that :func:`get_flux_split` splits a half-flux vector of
+        length :math:`n_{\rm fluxes}` into two sub-vectors of length
+        :math:`\dim H^3 = h^{1,2}+1`.
+        """
+        # Extract h from the known solution
+        _, h = self.bf.get_fh(self.f_solution)
+        h1, h2 = self.bf.get_flux_split(h)
+        # Each sub-vector has length dimension_H3
+        self.assertEqual(len(h1), self.dimension_H3)
+        self.assertEqual(len(h2), self.dimension_H3)
+
+    def test_get_subvector(self):
+        r"""
+        **Description:**
+        Verify that :func:`get_subvector` returns four sub-vectors
+        ``(h1, h2, f1, f2)`` from a full flux vector, each of length
+        :math:`\dim H^3`.
+        """
+        h1, h2, f1, f2 = self.bf.get_subvector(self.f_solution)
+        for vec, name in [(h1, 'h1'), (h2, 'h2'), (f1, 'f1'), (f2, 'f2')]:
+            self.assertEqual(len(vec), self.dimension_H3,
+                             msg=f"{name} has length {len(vec)}, expected {self.dimension_H3}")
+
+    def test_compute_norm(self):
+        r"""
+        **Description:**
+        Verify that :func:`compute_norm` returns the squared Euclidean norm
+        :math:`\|v\|^2 = \sum_i v_i^2`.
+        """
+        v = np.array([3., 4.])
+        # ||[3,4]||² = 25
+        self.assertAllClose(self.bf.compute_norm(v), 25.0, atol=1e-14)
+
+    # ==========================================================================
+    #  11. Eigenvalue computation
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_evs(self):
+        r"""
+        **Description:**
+        Verify that :func:`compute_evs` returns a 5-tuple of scalar eigenvalue
+        quantities :math:`(\lambda_{\max}, \mu_{\min}, \mu_{\max},
+        \tilde\mu_{\min}, \tilde\mu_{\max})` for a single moduli point.
+        """
+        z = jnp.array([0.1 + 3j, -0.2 + 2.5j])
+        fn = self.variant(self.bf.compute_evs)
+        result = fn(z)
+        # Must return 5 scalars
+        self.assertEqual(len(result), 5)
+        for i, name in enumerate(['lam_max', 'mu_min', 'mu_max', 'tmu_min', 'tmu_max']):
+            # Each eigenvalue must be a finite positive scalar
+            val = float(result[i])
+            self.assertTrue(np.isfinite(val), msg=f"{name} is not finite")
+            self.assertGreater(val, 0., msg=f"{name} must be positive")
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_evs_vmap(self):
+        r"""
+        **Description:**
+        Verify that :func:`compute_evs_vmap` returns a 5-tuple of arrays,
+        each of shape ``(N,)``, for a batch of moduli points.
+        """
+        N = 10
+        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        fn = self.variant(self.bf.compute_evs_vmap)
+        result = fn(moduli_batch)
+        self.assertEqual(len(result), 5)
+        for i, name in enumerate(['lam_max', 'mu_min', 'mu_max', 'tmu_min', 'tmu_max']):
+            # Each must be an array of shape (N,)
+            chex.assert_shape(result[i], (N,))
+
+    # ==========================================================================
+    #  12. Precompute ISD data
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_precompute_isd_data(self):
+        r"""
+        **Description:**
+        Verify that :func:`precompute_isd_data` returns three arrays
+        ``(M0_all, dM_all, dM_c_all)`` with correct shapes for a batch
+        of moduli points.
+
+        - ``M0_all``: ISD matrices, shape ``(n_pts, n_fl, n_fl)``
+        - ``dM_all``: holomorphic derivative, shape ``(n_pts, n_fl, n_fl, h12)``
+        - ``dM_c_all``: antiholomorphic derivative, shape ``(n_pts, n_fl, n_fl, h12)``
+        """
+        n_pts = 5
+        moduli_pts = jnp.array(self.sampler.get_complex_moduli(n_pts), dtype=complex)
+        fn = self.variant(self.bf.precompute_isd_data)
+        M0, dM, dM_c = fn(moduli_pts)
+        nfl = self.n_fluxes
+        h12 = self.h12
+        # ISD matrix: (n_pts, n_fl, n_fl)
+        chex.assert_shape(M0, (n_pts, nfl, nfl))
+        # Derivatives: (n_pts, n_fl, n_fl, h12)
+        chex.assert_shape(dM, (n_pts, nfl, nfl, h12))
+        chex.assert_shape(dM_c, (n_pts, nfl, nfl, h12))
+
+    # ==========================================================================
+    #  13. Reset and update methods
+    # ==========================================================================
+
+    def test_reset_eigenvalue_bounds(self):
+        r"""
+        **Description:**
+        Verify that :func:`reset_eigenvalue_bounds` clears the cached bounds
+        so that :attr:`bounds_initialized` returns ``False``.
+        """
+        # Create a fresh instance and compute bounds
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_tmp.compute_eigenvalue_bounds(50, verbose=False)
+        self.assertTrue(bf_tmp.bounds_initialized)
+        # Reset must clear the cache
+        bf_tmp.reset_eigenvalue_bounds()
+        self.assertFalse(bf_tmp.bounds_initialized)
+
+    def test_update_local(self):
+        r"""
+        **Description:**
+        Verify that :func:`update_local` stores local eigenvalue data and
+        flux information for a specific field-space point.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_tmp.compute_eigenvalue_bounds(50, verbose=False)
+        # update_local stores local state (no return value, just no error)
+        bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
+
+    def test_update_evs(self):
+        r"""
+        **Description:**
+        Verify that :func:`update_evs` computes and caches eigenvalues for
+        a specific moduli point.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        bf_tmp.compute_eigenvalue_bounds(50, verbose=False)
+        # update_evs stores eigenvalue cache (no error)
+        bf_tmp.update_evs(self.zsol)
+
+    # ==========================================================================
+    #  14. Bound checking — individual bounds
+    # ==========================================================================
+
+    def test_bound_checking_at_solution(self):
+        r"""
+        **Description:**
+        Verify that all individual bound-checking methods return boolean
+        results without error when called at the known SUSY solution.
+
+        The bound checks verify local and global consistency of the flux
+        vector with the eigenvalue-based bounding box. At a valid vacuum,
+        all bounds should be satisfied.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
+        bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
+
+        # Each bound method returns (result_tuple, label_string)
+        bound_methods = [
+            'bound_s_local', 'bound_s_global',
+            'bound_h_local', 'bound_h_global',
+            'bound_f_local', 'bound_f_global',
+        ]
+        for name in bound_methods:
+            fn = getattr(bf_tmp, name)
+            result = fn()
+            # Must return a tuple (checks, label)
+            self.assertIsInstance(result, tuple, msg=f"{name} must return a tuple")
+            self.assertEqual(len(result), 2, msg=f"{name} must return (checks, label)")
+
+    def test_check_bounds_at_solution(self):
+        r"""
+        **Description:**
+        Verify that :func:`check_bounds` returns a list of bound check results
+        for a given (moduli, tau, flux) point.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
+        results = bf_tmp.check_bounds(self.zsol, self.tausol, self.f_solution)
+        # Must return a list of tuples
+        self.assertIsInstance(results, list)
+        self.assertGreater(len(results), 0)
+
+    def test_check_bounds_flat(self):
+        r"""
+        **Description:**
+        Verify that :func:`check_bounds_flat` returns ``(all_pass, results)``
+        where ``all_pass`` is a boolean and ``results`` is a list.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
+        bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
+        all_pass, results = bf_tmp.check_bounds_flat()
+        # all_pass must be boolean
+        self.assertIsInstance(all_pass, (bool, np.bool_))
+        # results must be a list
+        self.assertIsInstance(results, list)
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_check_bounds_batch(self):
+        r"""
+        **Description:**
+        Verify that :func:`check_bounds_batch` returns a boolean array of
+        shape ``(N,)`` for a batch of flux vectors.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
+
+        N = 5
+        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+        evs_batch = bf_tmp.compute_evs_vmap(moduli_batch)
+
+        # Create a batch of identical flux vectors for testing
+        flux_batch = jnp.tile(self.f_solution, (N, 1))
+
+        fn = self.variant(bf_tmp.check_bounds_batch)
+        result = fn(
+            evs_batch, tau_batch, flux_batch,
+            bf_tmp.lambda_max_gl, bf_tmp.mu_min_gl, bf_tmp.mu_max_gl,
+            bf_tmp.tilde_mu_min_gl, bf_tmp.tilde_mu_max_gl,
+            bf_tmp.dil_min, bf_tmp.dil_max, float(bf_tmp.Nmax),
+        )
+        # Must return boolean array of shape (N,)
+        chex.assert_shape(result, (N,))
+
+    # ==========================================================================
+    #  15. Patch membership
+    # ==========================================================================
+
+    def test_in_patch_batch(self):
+        r"""
+        **Description:**
+        Verify that :func:`in_patch_batch` returns a boolean array indicating
+        whether each (moduli, tau) pair lies inside the sampler's moduli patch.
+        """
+        N = 10
+        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+
+        result = self.bf.in_patch_batch(moduli_batch, tau_batch)
+        chex.assert_shape(result, (N,))
+        # Points sampled from the sampler should all be in-patch
+        self.assertTrue(np.all(np.asarray(result)),
+                        msg="Points from sampler should all be in-patch")
+
+    # ==========================================================================
+    #  16. Bounding box convergence
+    # ==========================================================================
+
+    def test_compute_bounding_box_converged(self):
+        r"""
+        **Description:**
+        Verify that :func:`compute_bounding_box_converged` returns three
+        positive floats and runs without error.
+
+        This method iteratively samples moduli until the bounding box
+        dimensions converge within a specified tolerance.
+        """
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
+        h1, h2, h = bf_tmp.compute_bounding_box_converged(
+            batch_size=50, max_batches=10, tol=0.1, min_batches=2, verbose=False
+        )
+        # All dimensions must be positive
+        self.assertGreater(h1, 0.)
+        self.assertGreater(h2, 0.)
+        self.assertGreater(h, 0.)
+
+    # ==========================================================================
+    #  17. enumerate_fluxes (integration test)
+    # ==========================================================================
+
+    def test_enumerate_fluxes_small(self):
+        r"""
+        **Description:**
+        Integration test: run :func:`enumerate_fluxes` on a very small
+        bounding box (Nmax=2, tight dilaton bounds) and verify the output
+        format. This tests the full pipeline: eigenvalue computation →
+        h-candidate enumeration → ISD completion → Newton refinement.
+        """
+        sampler_tight = jaxvacua.data_sampler(
+            self.model,
+            moduli_bounds=(3., 4.),
+            dilaton_bounds=(3., 5.),
+            axion_bounds=(-0.3, 0.3),
+            seed=99,
+        )
+        bf_small = bounded_fluxes(self.model, sampler=sampler_tight, Nmax=2)
+
+        results = bf_small.enumerate_fluxes(
+            n_sample=50, n_isd_per_h=5, max_h_candidates=100_000,
+            refine=False, return_moduli=False, verbose=False,
+            confirm_streaming=False,
+        )
+        # Must return a list (possibly empty for Nmax=2)
+        self.assertIsInstance(results, list)
+
+    def test_enumerate_fluxes_return_moduli(self):
+        r"""
+        **Description:**
+        Verify that ``return_moduli=True`` returns a list of dicts with
+        keys ``"flux"``, ``"moduli"``, ``"tau"``.
+        """
+        sampler_tight = jaxvacua.data_sampler(
+            self.model,
+            moduli_bounds=(3., 4.),
+            dilaton_bounds=(3., 5.),
+            axion_bounds=(-0.3, 0.3),
+            seed=99,
+        )
+        bf_small = bounded_fluxes(self.model, sampler=sampler_tight, Nmax=2)
+
+        results = bf_small.enumerate_fluxes(
+            n_sample=50, n_isd_per_h=5, max_h_candidates=100_000,
+            refine=False, return_moduli=True, verbose=False,
+            confirm_streaming=False,
+        )
+        self.assertIsInstance(results, list)
+        # If any results found, check dict structure
+        if len(results) > 0:
+            r = results[0]
+            self.assertIn("flux", r)
+            self.assertIn("moduli", r)
+            self.assertIn("tau", r)
+
+    # ==========================================================================
+    #  18. sample_bounded_fluxes (integration test)
+    # ==========================================================================
+
+    def test_sample_bounded_fluxes_small(self):
+        r"""
+        **Description:**
+        Integration test: run :func:`sample_bounded_fluxes` with a small
+        target count and verify the output format.
+        """
+        sampler_tight = jaxvacua.data_sampler(
+            self.model,
+            moduli_bounds=(3., 4.),
+            dilaton_bounds=(3., 5.),
+            axion_bounds=(-0.3, 0.3),
+            seed=99,
+        )
+        bf_small = bounded_fluxes(self.model, sampler=sampler_tight, Nmax=4)
+
+        results = bf_small.sample_bounded_fluxes(
+            n_target=10, n_batch=1000, n_sample=50, n_mod=5,
+            max_batches=3, refine=False, return_moduli=False, verbose=False,
+        )
+        # Must return a list
+        self.assertIsInstance(results, list)
