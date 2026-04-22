@@ -20,18 +20,30 @@
         ~periods.D_period_vector_per
         ~periods.F_LCS_per
         ~periods.F_LCS_poly_per
+        ~periods.F_coniLCS_bulk_per
+        ~periods.F_coniLCS_exp_per
+        ~periods.F_coniLCS_poly_split_per
+        ~periods.F_coniLCS_series_per
+        ~periods.F_coni_per
         ~periods.F_inst_per
+        ~periods.F_inst_per_coni
         ~periods.ISD_matrix
-        ~periods.ISD_matrix_grad_cperiods
-        ~periods.ISD_matrix_grad_periods
+        ~periods.M
+        ~periods.N
         ~periods.PQ_per
         ~periods.P_per
         ~periods.Q_inv_per
         ~periods.Q_per
         ~periods.__init__
+        ~periods.dF_coniLCS_poly_per
+        ~periods.dM
+        ~periods.dM_c
+        ~periods.dN
+        ~periods.dN_c
+        ~periods.ddF_coniLCS_poly_per
+        ~periods.dddF_coniLCS_poly_per
+        ~periods.ddddF_coniLCS_poly_per
         ~periods.gauge_kinetic_matrix
-        ~periods.gauge_kinetic_matrix_grad_cperiods
-        ~periods.gauge_kinetic_matrix_grad_periods
         ~periods.gauge_kinetic_matrix_periods
         ~periods.gauge_kinetic_matrix_prepotential
         ~periods.grad_kahler_potential_per
@@ -46,5 +58,11 @@
     
 
     
+    
+    .. rubric:: Attributes
+
+    .. autosummary::
+    
+        ~periods.lcs_tree
     
     
