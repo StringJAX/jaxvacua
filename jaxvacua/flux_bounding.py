@@ -683,8 +683,12 @@ class bounded_fluxes:
             )
 
         t0 = time.perf_counter()
-        moduli = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
-        tau = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+        #moduli = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
+        #tau = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+        moduli, tau = self.sampler.initial_guesses(n_sample,
+                                                   filter_moduli=True,
+                                                   include_fluxes=False, 
+                                                   rns_key=rns_key)
 
         h1, h2, h = self.compute_bounding_box(moduli, tau)
 
@@ -2045,8 +2049,11 @@ class bounded_fluxes:
         lm_prev = self.lambda_max_gl  # nan if fresh; existing value if warm-starting
 
         for batch_idx in range(max_batches):
-            mod_batch = self.sampler.get_complex_moduli(batch_size)
-            tau_batch = self.sampler.get_complex_tau(batch_size)
+            #mod_batch = self.sampler.get_complex_moduli(batch_size)
+            #tau_batch = self.sampler.get_complex_tau(batch_size)
+            mod_batch, tau_batch = self.sampler.initial_guesses(batch_size,
+                                            filter_moduli=True,
+                                            include_fluxes=False)
             h1_box, h2_box, h_box = self.compute_bounding_box(mod_batch, tau_batch)
 
             lm_new = self.lambda_max_gl
@@ -2494,12 +2501,18 @@ class bounded_fluxes:
             print(f"[{label}] Moduli region: {region_str}", flush=True)
 
         _bounds_precomputed = self.bounds_initialized
+        
+        #moduli_sample = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
+        #tau_sample = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+        
+        moduli_sample, tau_sample = self.sampler.initial_guesses(n_sample,filter_moduli=True,include_fluxes=False,rns_key=rns_key)
+        
         if _bounds_precomputed:
             h1_box = self._h1_box
             h2_box = self._h2_box
             h_box  = self._h_box
-            moduli_sample = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
-            tau_sample = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+            
+            
             if verbose:
                 print(f"[{label}] Step 1 — Using pre-computed eigenvalue bounds.", flush=True)
         else:
@@ -2507,8 +2520,7 @@ class bounded_fluxes:
                 print(
                     f"[{label}] Step 1 — Sampling {n_sample} moduli points "
                     f"and computing eigenvalue bounds ...", flush=True)
-            moduli_sample = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
-            tau_sample = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+            
             h1_box, h2_box, h_box = self.compute_bounding_box(moduli_sample, tau_sample)
 
         if verbose:
@@ -2715,11 +2727,13 @@ class bounded_fluxes:
             if use_linearised_shifts:
                 # Resample moduli for each chunk to improve coverage
                 n_mod = min(len(moduli_slice), n_sample)
-                moduli_slice0 = jnp.array(
-                    self.sampler.get_complex_moduli(n_mod, rns_key=rns_key)[:n_mod],
-                    dtype=complex)
-                tau_slice0 = jnp.array(
-                    self.sampler.get_complex_tau(n_mod, rns_key=rns_key)[:n_mod])
+                
+                #moduli_slice0 = jnp.array(self.sampler.get_complex_moduli(n_mod, rns_key=rns_key)[:n_mod], dtype=complex)
+                #tau_slice0 = jnp.array( self.sampler.get_complex_tau(n_mod, rns_key=rns_key)[:n_mod])
+                    
+                moduli_sample, tau_sample = self.sampler.initial_guesses(n_mod,filter_moduli=True,include_fluxes=False,rns_key=rns_key)
+                
+                moduli_slice0, tau_slice0 = jnp.array(moduli_sample[:n_mod], dtype=complex), jnp.array(tau_sample[:n_mod])
 
                 mod_out, tau_out, flux_out = self.isd_refine_batch(
                     h_chunk, moduli_slice0, tau_slice0, n_isd_iters,
@@ -2753,11 +2767,12 @@ class bounded_fluxes:
                 if use_linearised_shifts:
                     # Resample moduli for each chunk to improve coverage
                     n_mod = min(len(moduli_slice), n_sample)
-                    moduli_slice0 = jnp.array(
-                        self.sampler.get_complex_moduli(n_mod, rns_key=rns_key)[:n_mod],
-                        dtype=complex)
-                    tau_slice0 = jnp.array(
-                        self.sampler.get_complex_tau(n_mod, rns_key=rns_key)[:n_mod])
+                    #moduli_slice0 = jnp.array( self.sampler.get_complex_moduli(n_mod, rns_key=rns_key)[:n_mod], dtype=complex)
+                    #tau_slice0 = jnp.array(self.sampler.get_complex_tau(n_mod, rns_key=rns_key)[:n_mod])
+                    
+                    moduli_sample, tau_sample = self.sampler.initial_guesses(n_mod,filter_moduli=True,include_fluxes=False,rns_key=rns_key)
+                
+                    moduli_slice0, tau_slice0 = jnp.array(moduli_sample[:n_mod], dtype=complex), jnp.array(tau_sample[:n_mod])
 
                     mod_out, tau_out, flux_out = self.isd_refine_batch(
                         h_chunk, moduli_slice0, tau_slice0, n_isd_iters,
@@ -3065,8 +3080,11 @@ class bounded_fluxes:
                     f"points and computing eigenvalue bounds ...",
                     flush=True,
                 )
-            moduli_sample = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
-            tau_sample = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+            #moduli_sample = self.sampler.get_complex_moduli(n_sample, rns_key=rns_key)
+            #tau_sample = self.sampler.get_complex_tau(n_sample, rns_key=rns_key)
+            
+            moduli_sample, tau_sample = self.sampler.initial_guesses(n_sample,filter_moduli=True,include_fluxes=False,rns_key=rns_key)
+            
             h1_box, h2_box, h_box = self.compute_bounding_box(
                 moduli_sample, tau_sample,
             )
@@ -3254,10 +3272,11 @@ class bounded_fluxes:
             # sample a small set for ISD completion + compute their evs/M.
             if _bounds_precomputed:
                 n_mod = n_isd_per_h
-                _isd_moduli = self.sampler.get_complex_moduli(
-                    n_mod, rns_key=rns_key,
-                )
-                _isd_tau = self.sampler.get_complex_tau(n_mod, rns_key=rns_key)
+                #_isd_moduli = self.sampler.get_complex_moduli(n_mod, rns_key=rns_key, )
+                #_isd_tau = self.sampler.get_complex_tau(n_mod, rns_key=rns_key)
+                
+                _isd_moduli, _isd_tau = self.sampler.initial_guesses(n_mod,filter_moduli=True,include_fluxes=False, rns_key=rns_key)
+                
                 moduli_slice = jnp.array(_isd_moduli, dtype=complex)
                 tau_slice = jnp.array(_isd_tau)
                 evs_all_r, M_all_r = self._compute_evs_and_M_vmap(moduli_slice)
@@ -3427,7 +3446,10 @@ class bounded_fluxes:
             # 30 points gives good coverage with ~5× faster filtering than 100.
             n_filter_pts = max(30, len(moduli_slice))
             if n_filter_pts > len(moduli_slice):
-                filter_moduli = self.sampler.get_complex_moduli(n_filter_pts)
+                #filter_moduli = self.sampler.get_complex_moduli(n_filter_pts)
+                filter_moduli, _ = self.sampler.initial_guesses(n_filter_pts,
+                                                                filter_moduli=True,
+                                                                include_fluxes=False)
                 filter_M_inv = []
                 for j in range(n_filter_pts):
                     zj = jnp.array(filter_moduli[j], dtype=complex)

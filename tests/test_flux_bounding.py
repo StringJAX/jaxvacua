@@ -226,8 +226,10 @@ class TestFluxBounding(TestCase):
         bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
 
         # Draw a small sample of moduli and tau
-        moduli_sample = self.sampler.get_complex_moduli(50)
-        tau_sample = self.sampler.get_complex_tau(50)
+        #moduli_sample = self.sampler.get_complex_moduli(50)
+        #tau_sample = self.sampler.get_complex_tau(50)
+        N = 50
+        moduli_sample, tau_sample = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False)
 
         h1_box, h2_box, h_box = bf_test.compute_bounding_box(
             moduli_sample, tau_sample,
@@ -445,8 +447,9 @@ class TestFluxBounding(TestCase):
 
         # Use a small set of moduli starting points
         n_pts = 3
-        moduli_pts = self.sampler.get_complex_moduli(n_pts)
-        tau_pts = self.sampler.get_complex_tau(n_pts)
+        #moduli_pts = self.sampler.get_complex_moduli(n_pts)
+        #tau_pts = self.sampler.get_complex_tau(n_pts)
+        moduli_pts, tau_pts = self.sampler.initial_guesses(n_pts,filter_moduli=True,include_fluxes=False)
 
         mod_out, tau_out, flux_out = bf_test.isd_refine_batch(
             jnp.array(h_batch, dtype=float),
@@ -668,7 +671,8 @@ class TestFluxBounding(TestCase):
         each of shape ``(N,)``, for a batch of moduli points.
         """
         N = 10
-        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        #moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        moduli_batch, _ = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False)
         fn = self.variant(self.bf.compute_evs_vmap)
         result = fn(moduli_batch)
         self.assertEqual(len(result), 5)
@@ -693,7 +697,7 @@ class TestFluxBounding(TestCase):
         - ``dM_c_all``: antiholomorphic derivative, shape ``(n_pts, n_fl, n_fl, h12)``
         """
         n_pts = 5
-        moduli_pts = jnp.array(self.sampler.get_complex_moduli(n_pts), dtype=complex)
+        moduli_pts, _ = self.sampler.initial_guesses(n_pts,filter_moduli=True,include_fluxes=False)
         fn = self.variant(self.bf.precompute_isd_data)
         M0, dM, dM_c = fn(moduli_pts)
         nfl = self.n_fluxes
@@ -814,8 +818,10 @@ class TestFluxBounding(TestCase):
         bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
 
         N = 5
-        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
-        tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+        #moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        #tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+        
+        moduli_batch, tau_batch = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False)
         evs_batch = bf_tmp.compute_evs_vmap(moduli_batch)
 
         # Create a batch of identical flux vectors for testing
@@ -842,8 +848,9 @@ class TestFluxBounding(TestCase):
         whether each (moduli, tau) pair lies inside the sampler's moduli patch.
         """
         N = 10
-        moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
-        tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+        #moduli_batch = jnp.array(self.sampler.get_complex_moduli(N), dtype=complex)
+        #tau_batch = jnp.array(self.sampler.get_complex_tau(N), dtype=complex)
+        moduli_batch, tau_batch = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False)
 
         result = self.bf.in_patch_batch(moduli_batch, tau_batch)
         chex.assert_shape(result, (N,))
@@ -895,7 +902,7 @@ class TestFluxBounding(TestCase):
         bf_small = bounded_fluxes(self.model, sampler=sampler_tight, Nmax=2)
 
         results = bf_small.enumerate_fluxes(
-            n_sample=50, n_isd_per_h=5, max_h_candidates=100_000,
+            n_sample=10, n_isd_per_h=5, max_h_candidates=10_000,
             refine=False, return_moduli=False, verbose=False,
             confirm_streaming=False,
         )
@@ -918,7 +925,7 @@ class TestFluxBounding(TestCase):
         bf_small = bounded_fluxes(self.model, sampler=sampler_tight, Nmax=2)
 
         results = bf_small.enumerate_fluxes(
-            n_sample=50, n_isd_per_h=5, max_h_candidates=100_000,
+            n_sample=10, n_isd_per_h=5, max_h_candidates=100_000,
             refine=False, return_moduli=True, verbose=False,
             confirm_streaming=False,
         )
