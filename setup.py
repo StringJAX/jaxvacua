@@ -1,27 +1,40 @@
 from setuptools import setup
+from pathlib import Path
 
 setup(
     name='jaxvacua',
-    version='0.0.1',
-    description='',
+    version='0.1.0',
+    description='A JAX-based framework for sampling and analysing flux vacua in string theory.',
+    long_description=Path('README.md').read_text(encoding='utf-8'),
+    long_description_content_type='text/markdown',
     author='Andreas Schachner',
-    author_email='andreas.schachner@gmx.de',
+    author_email='as3475@cornell.edu',
+    url='https://github.com/AndreasSchachner/jaxvacua',
+    license='GPL-3.0-or-later',
     packages=['jaxvacua'],
     python_requires='>=3.12',
     install_requires=[
         'numpy',
         'jax',
         'jaxlib',
-	    'optax',
-        'partial',
+        'optax',
         'matplotlib',
         'seaborn',
-        'jupyter',
         'h5py',
         'pandas',
         'tqdm',
         'sympy',
-        'flax',
-        'jaxpolylog@git+https://github.com/AndreasSchachner/jaxpolylog.git#egg=jaxpolylog'
+        'cytools',
+        'python-flint',
+        'gurobipy',
+        'jaxpolylog>=0.1.0',
+    ],
+    classifiers=[
+        'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Topic :: Scientific/Engineering :: Physics',
+        'Intended Audience :: Science/Research',
     ],
 )

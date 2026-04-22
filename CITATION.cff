@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+title: JAXVacua
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+authors:
+  - given-names: Andreas
+    family-names: Schachner
+    email: as3475@cornell.edu
+    affiliation: Cornell University
+    orcid: "https://orcid.org/0000-0002-2855-7481"
+repository-code: "https://github.com/AndreasSchachner/jaxvacua"
+license: GPL-3.0-or-later
+preferred-citation:
+  type: article
+  title: "JAXVacua — a framework for sampling string vacua"
+  authors:
+    - given-names: Abhishek
+      family-names: Dubey
+    - given-names: Sven
+      family-names: Krippendorf
+    - given-names: Andreas
+      family-names: Schachner
+  journal: "JHEP"
+  year: 2023
+  identifiers:
+    - type: other
+      value: "arXiv:2306.06160"
+      description: "arXiv preprint"

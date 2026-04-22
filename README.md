@@ -1,5 +1,7 @@
 # JAXVacua - Flux Vacua in String Theory with JAX
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 **JAXVacua** is a Python library designed for the systematic exploration of flux vacua in string theory through the numerical analysis of supergravity scalar potentials. It leverages automatic differentiation and just-in-time compilation tools provided by the [JAX library](https://github.com/google/jax) to efficiently locate and analyze critical points of highly non-linear potentials. The package is intended to be accessible both as a high-level user-facing library and as a flexible collection of modular components that can be reused or extended for custom workflows. In particular, JAXVacua is well suited for the study of flux compactifications in string theory, where large parameter spaces and intricate scalar potentials make traditional analytic approaches challenging.
 
 
@@ -31,7 +33,7 @@ Next, choose the installation method that best fits your use case:
 
 ## Requirements
 
-Currently, the code works with python versions greater or equal version `3.7`, both with or without JAX GPU support.
+Currently, the code supports Python versions `>= 3.12`, both with and without JAX GPU support.
 
 The required packages, which are listed in `setup.py`, are automatically installed with the above installation process. Otherwise, they have to be installed manually.
 
@@ -74,24 +76,28 @@ The documentation of this repository is generated with [sphinx](https://www.sphi
 
 ## Contact
 
-For questions or feedback, please get in touch: <as3475@cornell.edu> or <a.schachner@lmu.de>.
+For questions or feedback, please get in touch: <as3475@cornell.edu>.
 
-## Reference
+## License
 
-If you find this work useful, please cite::
+JAXVacua is released under the [GNU General Public License v3.0](LICENSE).
 
-    @article{Dubey:2023dvu,
-        author = "Dubey, Abhishek and Krippendorf, Sven and Schachner, Andreas",
-        title = "{JAXVacua \textemdash{} a framework for sampling string vacua}",
-        eprint = "2306.06160",
-        archivePrefix = "arXiv",
-        primaryClass = "hep-th",
-        doi = "10.1007/JHEP12(2023)146",
-        journal = "JHEP",
-        volume = "12",
-        pages = "146",
-        year = "2023"
-    }
+## Citation
 
+If you find this software useful, please cite:
 
+```bibtex
+@article{Dubey:2023dvu,
+    author = "Dubey, Abhishek and Krippendorf, Sven and Schachner, Andreas",
+    title = "{JAXVacua \textemdash{} a framework for sampling string vacua}",
+    eprint = "2306.06160",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-th",
+    doi = "10.1007/JHEP12(2023)146",
+    journal = "JHEP",
+    volume = "12",
+    pages = "146",
+    year = "2023"
+}
+```
 
