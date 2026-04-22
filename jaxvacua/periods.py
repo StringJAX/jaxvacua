@@ -24,48 +24,67 @@ import jax
 from jax import jit, vmap, config
 import jax.numpy as jnp
 from jax import Array
-#from jax.typing import ArrayLike
-from numpy.typing import ArrayLike
 from jax.scipy.special import zeta
 from jax.numpy import pi as Pi
-
-os.environ["JAX_PLATFORM_NAME"] = "cpu"
+from jax.tree_util import register_pytree_node
 
 # Enable 64 bit precision
-config.update("jax_enable_x64", True)
+#Polylog imports
+from jaxpolylog import jax_polylog_vmap
 
 # JAXVacua custom imports
 from .util import *
-from .periods_LCS import periods_LCS
-from .periods_coniLCS import periods_coniLCS
-from .periods_coniLCSbulk import periods_coniLCSbulk
+from .utils_jaxvacua import flatten_func, unflatten_func_class
+from .lcs import lcs_tree
 
 
 
-class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
-    
+class periods:
+    """
+    **Description:** 
+    Period class for Calabi-Yau threefold compactifications. Provides functions to compute periods, prepotential, Kähler potential, gauge kinetic matrix, and derived objects at various moduli space limits (LCS, coniLCS, etc.).
+    """
+
     def __init__(
-        self,
-        h12: int | None = None,
-        model_ID: int | None = None,
-        model_type: str = "KS",
-        moduli_space_limit: str = "LCS",
-        maximum_degree: int = 0,
-        mirror_cy: object | None = None,
-        model_data: dict | None = None,
-        instanton_data: list | None = None,
-        use_cytools: bool = False,
-        basis_transformation: ArrayLike | None = None,
-        grading_vector: ArrayLike | None = None,
-        ncf: int | None = None,
-        conifold_curve: object | None = None,
-        period_input: Callable | None = None,
-        prepotential_input: Callable | None = None,
-        prange: int = 500,
-        use_gvs: bool = False,
-        save_file: bool = False,
-        **kwargs
-    ) -> None:
+                self,
+                
+                # Model and limit data
+                h12: int | None = None,
+                model_ID: int | None = None,
+                model_type: str = "KS",
+                limit: str = "LCS",
+                save_file: bool = False,
+                
+                # CYTools interface
+                use_cytools: bool = False,
+                mirror_cy: object | None = None,
+                
+                # Model data input
+                lcs_tree_input: object | None = None,
+                model_file: str = "",
+                model_data: dict | None = None,
+                
+                # Basis transformation 
+                basis_change: Array | None = None,
+                
+                # Instaton data input
+                maximum_degree: int = 0,
+                grading_vector: Array | None = None,
+                use_gvs: bool = False,
+                prange: int = 500,
+                
+                # Conifold data for coniLCS limits
+                ncf: int | None = None,
+                conifold_curve: object | None = None,
+                conifold_basis: bool | None = True,
+                
+                # Custom period input
+                period_input: Callable | None = None,
+                prepotential_input: Callable | None = None,
+                
+                # Extra inputs 
+                **kwargs
+                ) -> None:
         r"""
 
         **Description:**
@@ -79,23 +98,30 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             h12 (int): The number of moduli for the compactified geometry.
             model_type (string): The type of manifold considered for the compactification. Currently, ``"KS"`` and ``"CICY"`` are available.
             model_ID (int): ID specifying a certain model.
-            moduli_space_limit (string): String identifying the type of periods to be considered. Currently, only ``"LCS"`` is available.
+            limit (string): String identifying the type of periods to be considered. Currently, only ``"LCS"`` is available.
             model_data (dictionary): Contains model data like triple intersection numbers etc.
-            instanton_data (list): List of GV and GW invariants.
             maximum_degree (int): Maximum degree used for the instanton sum.
             use_cytools (boolean): Whether or not to use CYTools to compute topological data of Calabi-Yau.
             mirror_cy (cytools.CalabiYau): Mirror Calabi-Yau threefold.
-            basis_transformation (ArrayLike): Basis transformation to be applied to topological data of Calabi-Yau.
-            grading_vector (ArrayLike): Grading vector to be used for the GV computation.
+            basis_change (Array): Basis transformation to be applied to topological data of Calabi-Yau.
+            grading_vector (Array): Grading vector to be used for the GV computation.
+            lcs_tree_input (lcs_tree | None, optional): Pre-built lcs_tree object. If provided, skips model construction. Defaults to ``None``.
+            ncf (int | None, optional): Number of conifolds for the coniLCS limit. Defaults to ``None``.
+            conifold_curve (Array | None, optional): Conifold curve charges. Defaults to ``None``.
+            prange (int, optional): Truncation order for the polylogarithm series. Defaults to ``500``.
+            use_gvs (bool, optional): Whether to use GV invariants instead of GW invariants for the instanton sum. Defaults to ``False``.
             period_input (function): Input for periods.
             prepotential_input (function): Input for prepotential.
             save_file (bool, optional): Save files for new models. Defaults to ``False``.
             **kwargs: Extra inputs.
 
+        Raises:
+            ValueError: If model inputs are inconsistent or required data is missing.
+
         Attributes:
             h12 (int): :math:`h^{1,2}(X,\mathbb{Z})` of the CY :math:`X`.
             model_type (str): Model type. Defaults to ``None``. Currently, ``"KS"`` and ``"CICY"`` are available.
-            moduli_space_limit (str): Moduli space limit. Defaults to ``None``. Currently, only ``"LCS"`` is available.
+            limit (str): Moduli space limit. Defaults to ``None``. Currently, only ``"LCS"`` is available.
             model_ID (int): Internal model ID. Defaults to ``None``.
             dimension_H3 (int): Dimension of :math:`H^{3}(X,\mathbb{Z})`.
             _dimension_H3_tot (int): Dimension of :math:`H^{3}(X,\mathbb{Z})` plus dimension of :math:`H_{3}(X,\mathbb{Z})`.
@@ -105,7 +131,6 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
         """
         
-        # -----------------------------------------------------------------------------------
         # Testing inputs...
         ## Check correct model types
         model_types=[None,"KS","CICY"]
@@ -113,157 +138,312 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             raise ValueError(f"Model type must be one of {model_types}!")
             
         
-        # DONE
-        # -----------------------------------------------------------------------------------
-
-
-        # -----------------------------------------------------------------------------------
         # Initialisation of class
         ## Setting general attributes from input
         self.model_type = model_type
-        self.moduli_space_limit = moduli_space_limit
+        self.limit = limit
         self.model_ID = model_ID
-        self.period_input = period_input
-        self.prepotential_input = prepotential_input
+        self.maximum_degree = maximum_degree
+        self.prange = prange
+        
+        # Set whether to use GV invariants for the instanton sum
+        self.use_gvs = use_gvs
+        
+        # If no instanton corrections are requested, disable GV invariant usage
+        if self.maximum_degree==0:
+            self.use_gvs=False
+            self.include_mirror_wsi = False
+        else:
+            self.include_mirror_wsi = True
+            
+        if limit in ["coniLCS_series","coniLCS_bulk"]:
+            conifold_basis = True
+        
+        # Set lcs_tree from input or construct it from provided data or CYTools interface. The lcs_tree object holds all the relevant data of the CY model and is used as input for the period calculations. If no lcs_tree_input is provided, we construct the lcs_tree object from the provided data or using the CYTools interface. If an lcs_tree_input is provided, we use it directly.
+        if prepotential_input is not None or period_input is not None:
+            if lcs_tree_input is not None:
+                self._lcs_tree = lcs_tree_input.__copy__()
+                self.limit = lcs_tree_input.limit
+            else:
+                self._lcs_tree = lcs_tree(intnums=jnp.array([[[0]]]),c2=jnp.array([0]))
+            #    self.lcs_tree = {}
+            
+        else:
+            if lcs_tree_input is None:
+                
+                if use_cytools or mirror_cy is not None:
+                    
+                    if mirror_cy is None:
+                        raise ValueError(f"Need to provide `mirror_cy` if `use_cytools=True`!")
+                    
+                    time_out = kwargs.get('time_out', 120)
+                    compute_gws = kwargs.get('compute_gws', False)
+                    
+                    if self.maximum_degree>0:
+                        if self.use_gvs==False:
+                            compute_gws = True
+                    
+                    out = lcs_tree.from_cytools(cy = mirror_cy,
+                                                maximum_degree=maximum_degree,
+                                                basis_change=basis_change,
+                                                ncf=ncf,
+                                                conifold_curve=conifold_curve,
+                                                conifold_basis=conifold_basis,
+                                                grading_vector=grading_vector,
+                                                limit=limit,
+                                                save_file=save_file,
+                                                model_ID=model_ID,
+                                                time_out=time_out,
+                                                compute_gws=compute_gws
+                                                )
+                    
+                    self._lcs_tree = out
+                else:
+                    if model_file == "":
+                        if model_data is None:
+                            if model_ID is None:
+                                raise ValueError(f"Need to provide `lcs_tree_input`, `model_file`, `model_data` or `model_ID` if not using CYTools interface!")
 
-        if h12 is not None:
+                            # Some global variables
+                            home_dir=os.path.dirname(os.path.realpath(__file__))
+                            files_dir=home_dir+"/models"
+
+                            file = files_dir+f"/h12_{h12}/model_{model_ID}.p"
+                            
+                            if not os.path.isfile(file):
+                                raise ValueError(f"Could not find file for path {file}!")
+                            
+                            model_data = load_zipped_pickle(file)
+                            
+
+                        if type(model_data) != dict:
+                            raise ValueError(f"`model_data` needs to be of type `dict`, but got {type(model_data)}!")
+                        
+                        model_data["maximum_degree"]=maximum_degree
+                        
+                        self._lcs_tree = lcs_tree.from_dict(model_data)
+                    else:
+                        if not os.path.isfile(model_file):
+                            raise ValueError(f"Could not find file for path {model_file}!")
+                        
+                        self._lcs_tree = lcs_tree.from_file(model_file,maximum_degree=maximum_degree)
+                        
+            else:
+                self._lcs_tree = lcs_tree_input.__copy__()
+                self.limit = lcs_tree_input.limit
+
+        # Set h12 from lcs_tree
+        if h12 is None:
+            self.h12 = self._lcs_tree.h12
+        else:
             self.h12 = h12
-        else:
-            if use_cytools:
-                self.h12 = mirror_cy.h11()
-            else:
-                if model_type=="KS":
-                    raise ValueError("For `model_type=KS`, the number of moduli should be provided explicitly!")
-            
+
+        # Define the symplectic pairing matrix for the periods. This is a constant matrix that encodes the symplectic structure of the period vector. It is defined as
+        self.sigma = self.sigma()
         
-        ## Defining class based on model_type
-        if self.moduli_space_limit!="LCS":
-            file_KS = None
-            file_KS_inst = None
-        else:
-            if use_cytools:
-                file_KS = None
-                file_KS_inst = None
-            else:
-                if self.model_ID is None:
-                    if model_data is None:
-                        raise ValueError(f"Need to provide model_ID if grabbing model_data and instanton_data from files!")
+        # Set the dimension of the 3rd cohomology group H^3(X) to h12 + 1
+        self.dimension_H3 = self.h12 + 1
 
-            
-        ## Grabbing model data     
-        if self.moduli_space_limit=="LCS":
-
-            periods_LCS.__init__(self, h12=h12, model_ID = model_ID,model_type = model_type, maximum_degree = maximum_degree, mirror_cy = mirror_cy,
-                                model_data = model_data,instanton_data = instanton_data,use_cytools = use_cytools,
-                                basis_transformation = basis_transformation,grading_vector = grading_vector, prange = prange, use_gvs = use_gvs,save_file=save_file,**kwargs)
-
-            class_attr_rm = [periods_coniLCS,periods_coniLCSbulk]
-        elif self.moduli_space_limit=="coniLCS":
-
-            periods_coniLCS.__init__(self, h12=h12, model_ID = model_ID,model_type = model_type, maximum_degree = maximum_degree, mirror_cy = mirror_cy,
-                                model_data = model_data,instanton_data = instanton_data,use_cytools = use_cytools, ncf=ncf,conifold_curve=conifold_curve,
-                                basis_transformation = basis_transformation,grading_vector = grading_vector, prange = prange, use_gvs = use_gvs,save_file=save_file,**kwargs)
-
-            class_attr_rm = [periods_LCS,periods_coniLCSbulk]
-        elif self.moduli_space_limit=="coniLCSbulk":
-
-            periods_coniLCSbulk.__init__(self, h12=h12, model_ID = model_ID,model_type = model_type, maximum_degree = maximum_degree, mirror_cy = mirror_cy,
-                                model_data = model_data,instanton_data = instanton_data,use_cytools = use_cytools, ncf=ncf,conifold_curve=conifold_curve,
-                                basis_transformation = basis_transformation,grading_vector = grading_vector, prange = prange, use_gvs = use_gvs,save_file=save_file,**kwargs)
-            
-            # Need to keep LCS attributes!
-            class_attr_rm = [periods_coniLCS]
-
-        else:
-            
-            #raise NotImplementedError("Implementation for other moduli space limits not yet implemented!")
-            warnings.warn("Implementation for other moduli space limits not yet tested!")
-
-        
-        """
-        for class_attr in class_attr_rm:
-            periods_attributes = [x for x in dir(class_attr) if "__" not in x]
-            for attr in periods_attributes:
-                delattr(class_attr, str(attr))
-        """
-        
-        self.dimension_H3 = self.h12 + 1 #Dimension of the 3rd cohomology group
-
+        # Set the total dimension of H^3 (both A and B cycles) to 2*(h12 + 1)
         self._dimension_H3_tot = 2*(self.h12 + 1)
-
-        try:
-            if self.maximum_degree>0:
-                if self.use_gvs==False:
-                    if len(self.GW_inv_lim)==1 and self.GW_inv_lim[0]==0:
-                        print("GW invariants not available. Use GVs instead for computations!")
-                        self.use_gvs = True
-        except:
-            self.Q = None
-            self.name = ""
-            pass
-
-        if 'amatrix' in kwargs:
-            self.a_matrix = kwargs["amatrix"]
-
-        ## Check moduli space limit
-        moduli_space_limits = ["LCS","coniLCS","coniLCSbulk"]
-        if moduli_space_limit not in moduli_space_limits:
-            ### Test input for 
-            if period_input is None and prepotential_input is None:
-                raise ValueError("Need to provide input for periods or prepotential.\
-                                    Currently, only LCS is implemented as moduli space limit!")
-            else:
-                #raise NotImplementedError("Implementation for general input periods not completed!")
-                warnings.warn("Implementation for general input periods not tested!")
-                
-            ### Raise warning if both prepotential and periods are being provided as inputs...
-            if period_input is not None and prepotential_input is not None:
-                warnings.warn("If both periods and prepotential are provided,\
-                                please make sure input is consistent. \
-                                Only the provided period vector \
-                                will be used for the computation!")
-
-            if period_input is not None:
+        
+        # Validate the specified moduli space limit
+        self.period_input = None
+        self._period_input_used = False
+        self.prepotential_input = None
+        self._prepotential_input_used = False
+        
+        
+        
+        limits = ["LCS","coniLCS","coniLCS_series","coniLCS_bulk"]
+        if limit not in limits or self._lcs_tree is None:
+            self._setup_custom_input(period_input, prepotential_input)
             
-                z = np.random.uniform(-1,1,self.h12+1)+1j*np.random.uniform(-1,1,self.h12+1)
+            
+        if self.limit in ["coniLCS_series","coniLCS_bulk"]:
+            # Number of terms in the conifold expansion to be included. Only relevant for the "coniLCS_series" limit.
+            # Setting default to 2 in order to get linear expansion at the level of the superpotential.
+            self.nmax = kwargs.get("nmax", 2) 
+            
+            gv_charges = self._lcs_tree.gv_charges
+            gv_invariants = self._lcs_tree.gv_invariants
+            
+            if conifold_basis:
+                coninop0 = self._lcs_tree.conifold_curve0
+            else:
+                coninop0 = self._lcs_tree.conifold_curve
+                if coninop0 is None:
+                    raise ValueError("Conifold curve data not found in lcs_tree! Please check conifold curve input and basis choice!")
                 
-                try:
-                    period_output = period_input(z)
-                except:
-                    raise ValueError("Failed to evaluate `period_input`. Please check input function!")
-                
-                if period_output.shape != ((self.h12+1)*2,):
-                    raise ValueError(f"Wrong output shape for period.\
-                            Output shape is {period_output.shape}, but should be {((self.h12+1)*2,)}")
+            # Find index of conifold curve in GV charge data 
+            flag = jnp.any(gv_charges!=coninop0,axis=1)
+            # Test if conifold curve is found in GV charge data
+            coni_index = jnp.where(flag==False)[0]
+            if len(coni_index)==0:
+                raise ValueError("Could not find conifold curve in GV charge data! Please check conifold curve input and basis choice!")
+            
+            # Remove conifold curve from gvs!
+            gv_charges = gv_charges[flag]
+            gv_invariants = gv_invariants[flag]
+            self._lcs_tree.gv_charges = gv_charges
+            self._lcs_tree.gv_invariants = gv_invariants
 
+        # DONE
+        # -----------------------------------------------------------------------------------
+
+    
+    @property
+    def lcs_tree(self):
+        r"""
+        Description:
+        The underlying lcs_tree object holding the CY model data.
+        
+        Args:
+            None
+            
+        Returns:
+            lcs_tree: The lcs_tree object holding the CY model data.
+        
+        """
+        return self._lcs_tree
+
+    @lcs_tree.setter
+    def lcs_tree(self, value):
+        r"""
+        **Description:**
+        Sets the underlying lcs_tree object holding the CY model data.
+        
+        Args:
+            value (lcs_tree): The lcs_tree object to set.
+        
+        """
+        
+        self._lcs_tree = value.__copy__()
+        
+        
+    def _setup_custom_input(
+                            self,
+                            period_input: Callable | None,
+                            prepotential_input: Callable | None,
+                            ) -> None:
+        r"""
+        **Description:**
+        Validate and register a user-supplied period or prepotential function.
+        Called during initialisation when ``limit`` is not one of the built-in
+        moduli-space limits.
+
+        Checks that the callable returns the expected shape and is consistent
+        with complex conjugation, then sets ``self.period_input``,
+        ``self.prepotential_input``, and the corresponding ``_used`` flags.
+
+        Args:
+            period_input (callable | None): Period function ``Pi(z, conj=False)`` returning an array of shape ``(2*(h12+1),)``.
+            prepotential_input (callable | None): Prepotential function ``F(z, conj=False)`` returning a complex scalar.
+
+        Raises:
+            ValueError: If neither input is provided, if the output shape is wrong, or if the function is inconsistent with complex conjugation.
+        """
+        
+        # If custom moduli space limit is used, require either period or prepotential input
+        if period_input is None and prepotential_input is None:
+            raise ValueError("Need to provide input for periods or prepotential.\
+                    Currently, only LCS is implemented as moduli space limit!")
+        else:
+            warnings.warn("Implementation for general input periods not tested!")
+        
+        # Warn if both prepotential and periods are provided as inputs
+        if period_input is not None and prepotential_input is not None:
+            warnings.warn("If both periods and prepotential are provided,\
+                please make sure input is consistent. \
+                Only the provided period vector \
+                will be used for the computation!")
+
+        # Validate the provided period input function
+        if period_input is not None:
+        
+            # Generate random test input for validation
+            z = np.random.uniform(-1,1,self.h12+1)+1j*np.random.uniform(-1,1,self.h12+1)
+            
+            # Compute output of period function and check that it has the expected shape of a period vector with dimension 2*(h12+1)
+            try:
+                period_output = period_input(z)
+            except:
+                raise ValueError("Failed to evaluate `period_input`. Please check input function!")
+        
+            # Check that output shape matches expected period vector dimension
+            if period_output.shape != ((self.h12+1)*2,):
+                raise ValueError(f"Wrong output shape for period.\
+                    Output shape is {period_output.shape}, but should be {((self.h12+1)*2,)}")
+                
+            # Compute complex conjugate of output and check consistency with conjugate input
+            try:
+                period_output_conj = period_input(jnp.conj(z),conj=True)
+            except:
+                raise ValueError("Failed to evaluate `period_input` with conjugate input. Please check input function!")
+        
+            # Check that output shape matches expected period vector dimension
+            if period_output_conj.shape != ((self.h12+1)*2,):
+                raise ValueError(f"Wrong output shape for period.\
+                    Output shape is {period_output_conj.shape}, but should be {((self.h12+1)*2,)}")
+                
+            # Check that the output of the period function is consistent with complex conjugation
+            if not jnp.allclose(jnp.conj(period_output), period_output_conj, atol=1e-12, rtol=1e-12):
+                raise ValueError("Output of `period_input` is not consistent with complex conjugation! Please check input function!")
+            
+            self.period_input = period_input
+            self._period_input_used = True
+            self.prepotential_input = prepotential_input
+            self._prepotential_input_used = False
+        else:
+            
+            
+            # Validate the provided prepotential input function
             if prepotential_input is not None:
             
+                # Generate random test input for validation
                 z = np.random.uniform(-1,1,self.h12+1)+1j*np.random.uniform(-1,1,self.h12+1)
                 z = jnp.array(z)
 
                 try:
                     prepotential_output = prepotential_input(z)
                 except:
-                    raise ValueError("Failed to evaluate `period_input`. Please check input function!")
+                    raise ValueError("Failed to evaluate `prepotential_input`. Please check input function!")
                     
-
+                # Check that output is a scalar complex number
                 if prepotential_output.shape!=():
                     
-                    raise ValueError(f"Wrong output type for prepotential.\
-                            Output type is {type(prepotential_output)}, but should be {np.complex128}")
-
-        # DONE
-        # -----------------------------------------------------------------------------------
+                    raise ValueError(f"Wrong output shape for prepotential.\
+                        Output shape is {prepotential_output.shape}, but should be {()}")
+                    
+                try:
+                    prepotential_output_conj = prepotential_input(jnp.conj(z),conj=True)
+                except:
+                    raise ValueError("Failed to evaluate `prepotential_input` with conjugate input. Please check input function!")
+                    
+                # Check that output is a scalar complex number
+                if prepotential_output_conj.shape!=():
+                    
+                    raise ValueError(f"Wrong output shape for prepotential on conjugate input.\
+                        Output shape is {prepotential_output_conj.shape}, but should be {()}")
+                    
+                if not jnp.allclose(jnp.conj(prepotential_output_conj), prepotential_output, atol=1e-12, rtol=1e-12):
+                    raise ValueError("Output of `prepotential_input` is not consistent with complex conjugation! Please check input function!")
+                    
+                self.prepotential_input = prepotential_input
+                self._prepotential_input_used = True
 
     def __repr__(self) -> str:
-    
-        return f"Period calculations for h12={self.h12}."
+        r"""
+        **Description:**
+        String representation of the periods object.
 
-    # Symplectic Matrix
-    @partial(jit, static_argnums = (0,))
+        Returns:
+            str: A string summarizing h12 of the model.
+        """
+        return f"Period calculations for h12={self.h12}."
+    
     def sigma(self) -> Array:
         r"""
-        
         **Description:**
         Returns the symplectic matrix
         
@@ -274,7 +454,7 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             None
         
         Returns:
-            ArrayLike: Symplectic pairing matrix.
+            Array: Symplectic pairing matrix.
         
         """
 
@@ -284,13 +464,233 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         return jnp.concatenate((Block2,Block1))
     
     
+    
+    ###################################################################################################################################
+    #################################### PREPOTENTIAL ETC. AS FUNCTIONS OF PERIODS FOR LCS ############################################
+    ###################################################################################################################################
+
+    @partial(jit, static_argnums = (2,))
+    def F_LCS_poly_per(self, XPer: Array, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the polynomial part :math:`F_{\mathrm{poly}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`
+        in terms of the periods. 
+
+        .. admonition:: Details
+            :class: dropdown
+
+            The polynomial part :math:`F_{\mathrm{poly}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`
+            can be expressed in terms of the periods :math:`X^I=(X^0,X^i)` as
+            
+            .. math::
+                F_{\mathrm{poly}}(X) = -\frac{1}{6X^0}\widetilde{\kappa}_{ijk}X^iX^jX^k+\frac{1}{2}a_{ij}X^iX^j
+                    +b_{i}X^i\, X^0 + \dfrac{\text{i}}{2}\tilde{\xi}\, (X^0)^2\, .
+
+            Here, :math:`\widetilde{\kappa}_{ijk}` are the triple intersection numbers of
+            the mirror dual Calabi-Yau threefold :math:`\widetilde{X}`.
+            Here, we defined
+
+            .. math::
+                a_{ij} = \dfrac{1}{2}\begin{cases}
+                                        \widetilde{\kappa}_{iij} & i\geq j\\[0.3em]
+                                        \widetilde{\kappa}_{ijj} & i<j
+                                    \end{cases} \, , \quad 
+                b_i = \dfrac{1}{24} \int_{\tilde{D}^i}\, c_2(\widetilde{X})\, , \quad  
+                \tilde{\xi}=\frac{\zeta(3)\, \chi(\widetilde{X})}{(2\pi)^3}\, .
+                
+            The :math:`a_{ij}` are rational numbers, while the :math:`b_i` are integers.
+            The :math:`\tilde{D}^i` are the divisors dual to the basis of :math:`H^{1,1}(\widetilde{X},\mathbb{Z})`.
+            Finally, :math:`\chi(\widetilde{X})` is the Euler characteristic of :math:`\widetilde{X}`.
+            The last term in :math:`F_{\mathrm{poly}}` is the so-called :math:`(\alpha')^3` 1-loop correction
+            on the mirror dual side.
+
+        Args:
+            XPer (Array): Values of periods.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+
+        Returns:
+            complex: Value of the polynomial contribution :math:`F_{\mathrm{poly}}` to 
+                the LCS prepotential :math:`F_{\mathrm{LCS}}`.
+
+        See also: :func:`F_LCS_per`
+
+        """
+        
+        cubic = -jnp.dot(self.lcs_tree.intnums_coo_sym[:,-1],XPer[self.lcs_tree.intnums_coo_sym[:,0]+1]*XPer[self.lcs_tree.intnums_coo_sym[:,1]+1]*XPer[self.lcs_tree.intnums_coo_sym[:,2]+1])/6./XPer[0]
+        #quadratic = jnp.einsum('ij,i,j',self.lcs_tree.a_matrix,XPer[1:],XPer[1:])/(2.)
+        quadratic = jnp.matmul(jnp.matmul(self.lcs_tree.a_matrix,XPer[1:]),XPer[1:])/(2.)
+        # Alternative sparse version, which does not seem to be faster....
+        #quadratic = jnp.dot(self.a_matrix_sparse_values,XPer[self.a_matrix_sparse[:,0]+1]*XPer[self.a_matrix_sparse[:,1]+1])/(2.)
+        #linear = jnp.einsum('i,i',self.lcs_tree.b_vector,XPer[1:])*XPer[0]
+        linear = jnp.matmul(self.lcs_tree.b_vector,XPer[1:])*XPer[0]
+        val =  cubic + quadratic + linear
+        
+        if not conj:
+            return val + self.lcs_tree.K0/2.*XPer[0]**(2)
+        else:
+            return val - self.lcs_tree.K0/2.*XPer[0]**(2)
+
+    @partial(jit, static_argnums = (2,))
+    def F_inst_per(self,XPer: Array, conj: bool = False) -> complex:
+        r"""
+        **Description:**
+        Computes the instanton part :math:`F_{\mathrm{inst}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`
+        in terms of the periods.
+
+        .. admonition:: Details
+            :class: dropdown
+
+            The instanton part :math:`F_{\mathrm{inst}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`
+            can be expressed in terms of the periods :math:`X^I=(X^0,X^i)` as
+
+            .. math::
+                F_{\mathrm{inst}}(X) = -\frac{(X^0)^2}{(2\pi\mathrm{i})^3}\, \sum_{q\in\mathcal{M}(\widetilde{X})}\, 
+                n_q^{0}\, \text{Li}_3\left (\text{e}^{2\pi \text{i} q_i X^i / X^0}\right )\; , \quad 
+                \text{Li}_3\left (x\right )=\sum_{m=1}^{\infty}\, \dfrac{x^{m}}{m^{3}}\, .
+        
+            Here the sum is performed over all effective curve classes :math:`q\in\mathcal{M}(\widetilde{X})`
+            in the Mori cone :math:`\mathcal{M}(\widetilde{X})` of the mirror dual manifold :math:`\widetilde{X}`.
+            Here, the :math:`n_q^{0}` are the genus-0 Gopakumar-Vafa (GV) invariants which can be computed
+            systematically using methods described in `hep-th/9308122 <https://arxiv.org/pdf/hep-th/9308122.pdf>`_.
+        
+            The infinite sum appearing in the poly-logarithm :math:`\text{Li}_3` can be rewritten to arrive at
+
+            .. math::
+                \sum_{q\in\mathcal{M}(\widetilde{X})}\, n_q^{0}\, \text{Li}_3\left (\text{e}^{2\pi \text{i} q_i X^i / X^0}\right )
+                = \sum_{q\in\mathcal{M}(\widetilde{X})}\, N_q\, \text{e}^{2\pi \text{i} q_i X^i / X^0}
+
+            in terms of genus-0 Gromov-Witten (GW) invariants :math:`N_q`. We typically work with the latter to simplify the calculation.
+            The relation between the two types of invariants is more explicitly given by
+            
+            .. math::
+                N_q = \sum_{d|q}\, \dfrac{1}{d^3}\, n_{q/d}^{0}\, .
+                
+            Here, the sum runs over all divisors :math:`d` of the curve class :math:`q`.
+            The :math:`N_q` are typically rational numbers, while the :math:`n_q^{0}` are integers. 
+            The curve classes :math:`q` are specified in a basis of the Mori cone :math:`\mathcal{M}(\widetilde{X})`
+            of the mirror dual Calabi-Yau threefold :math:`\widetilde{X}`.
+            The Mori cone is dual to the Kähler cone of :math:`\widetilde{X}`.
+            The curve classes :math:`q` can be expressed in terms of the generators of the Mori cone.
+            The curve classes are also referred to as curve charges in the following.
+            The curve charges are stored in the attribute ``GW_charges`` (``GV_charges``) for the GW (GV) invariants.
+            The corresponding invariants are stored in the attributes ``GW_inv`` (``GV_inv``).
+            The curve charges and invariants are limited to a certain maximum degree :math:`d=\text{max_deg}` in the attributes
+            ``GW_charges_lim``, ``GV_charges_lim``, ``GW_inv_lim``, ``GV_inv_lim``.
+            The maximum degree can be specified when initialising the class.
+            The maximum degree is defined with respect to a grading vector which can be specified when initialising
+            the class. If no grading vector is provided, the default grading vector :math:`(1,1,\ldots,1)` is used.
+            The maximum available degree for the instanton data is stored in the attribute ``max_available_deg``.
+            If the specified maximum degree exceeds the maximum available degree, a warning is raised and
+            the maximum available degree is used instead.
+            
+        .. admonition:: Note
+            :class: dropdown
+            
+            The sum over curve classes is truncated at a certain maximum degree :math:`d=\text{max_deg}` in our implementation.
+            This is justified since the instanton contributions are exponentially suppressed at large complex structure.
+            The maximum degree can be specified when initialising the class.
+        
+
+        Args:
+            XPer (Array): Values of periods.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+
+        Returns:
+            complex: Value of the instanton part :math:`F_{\mathrm{inst}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`.
+
+        See also: :func:`F_LCS_per`
+
+        """
+        
+        if self.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
+            approx="inf"
+        elif self.limit == "coniLCS":
+            approx="patch"
+        else:
+            approx="inf"
+            
+        coeff = 2.*Pi*1j
+        if conj:
+            coeff = - coeff
+        
+        if self.use_gvs:
+            t = jnp.matmul(self.lcs_tree.gv_charges,XPer[1:])
+            invs = self.lcs_tree.gv_invariants
+        else:
+            t = jnp.matmul(self.lcs_tree.gw_charges,XPer[1:])
+            invs = self.lcs_tree.gw_invariants
+            
+        t = t/XPer[0]
+        z = jnp.exp(coeff*t)
+        
+        if self.use_gvs:
+            z = jax_polylog_vmap(z,3,self.prange,approx=approx)
+            
+        sum_wsi = jnp.matmul(invs,z)
+        
+        return -sum_wsi/(coeff)**(3)*XPer[0]**(2)
+
+
+    
+
+    @partial(jit, static_argnums = (2,))
+    def F_LCS_per(self, XPer: Array, conj: bool = False) -> complex:
+        r"""
+
+        **Description:**
+        Calculates the value of the LCS prepotential :math:`F_{\text{LCS}}` in terms of the periods :math:`X^I`.
+
+        .. admonition:: Details
+            :class: dropdown
+
+            At Large Complex Structure (LCS), the prepotential can be expressed as
+
+            .. math::
+                F_{\mathrm{LCS}}(X) = F_{\mathrm{poly}}(X) + F_{\mathrm{inst}}(X)
+            
+            where
+
+            .. math::
+                F_{\mathrm{poly}}(X) = -\frac{1}{6X^0}\widetilde{\kappa}_{ijk}X^iX^jX^k+\frac{1}{2}a_{ij}X^iX^j
+                    +b_{i}X^i\, X^0 + \dfrac{\text{i}}{2}\tilde{\xi}\, (X^0)^2\, ,
+
+            and
+
+            .. math::
+                F_{\mathrm{inst}}(X) = -\frac{(X^0)^2}{(2\pi\mathrm{i})^3}\, \sum_{q\in\mathcal{M}(\widetilde{X})}\, 
+                n_q^{0}\, \text{Li}_3\left (\text{e}^{2\pi \text{i} q_i X^i / X^0}\right )\; , \quad 
+                \text{Li}_3\left (x\right )=\sum_{m=1}^{\infty}\, \dfrac{x^{m}}{m^{3}}\, .
+
+            The former is computed via :func:`F_LCS_poly_per`, while the latter in :func:`F_inst_per`.
+            See the respective function for more details.
+            
+        Args:
+            XPer (Array): Values of periods.
+            conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+
+        Returns:
+            complex: Value of the LCS prepotential :math:`F_{\text{LCS}}`.
+
+        See also: :func:`F_LCS_poly_per`
+
+        See also: :func:`F_inst_per`
+
+        """
+        if self.include_mirror_wsi:
+            return self.F_LCS_poly_per(XPer,conj=conj)+self.F_inst_per(XPer,conj=conj)
+        else:
+            return self.F_LCS_poly_per(XPer,conj=conj)
+        
+    
+    
+    
     ###################################################################################################################################
     ####################################### PREPOTENTIAL ETC. AS FUNCTIONS OF PERIODS #################################################
     ###################################################################################################################################
 
 
-    @partial(jit, static_argnums = (0,2,))
-    def prepot_per(self, XPer: ArrayLike, conj: bool = False) -> complex:
+    @partial(jit, static_argnums = (2,))
+    def prepot_per(self, XPer: Array, conj: bool = False) -> complex:
         r"""
 
         **Description:**
@@ -322,7 +722,7 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
         .. warning::
             The moduli space limit around which the prepotential is computed is set by the 
-            global parameter ``self.moduli_space_limit``. Currently, only the limits ``"LCS"``, ``"coniLCS"``, and ``"coniLCSbulk"``
+            global parameter ``self.periods.limit``. Currently, only the limits ``"LCS"``, ``"coniLCS_series"``, and ``"coniLCS_bulk"``
             are supported.
 
         .. note::
@@ -331,7 +731,7 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             flux vacua.
 
         Args:
-            XPer (ArrayLike): Values of periods.
+            XPer (Array): Values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
@@ -345,20 +745,20 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
         """
         
-        if self.moduli_space_limit == "LCS":
+        if self.limit in ["LCS","coniLCS"]:
             return self.F_LCS_per(XPer,conj=conj)
-        elif self.moduli_space_limit == "coniLCS":
-            return self.F_coniLCS_per(XPer,conj=conj)
-        elif self.moduli_space_limit == "coniLCSbulk":
-            return self.F_coniLCSbulk_per(XPer,conj=conj)
-        elif self.prepotential_input is not None:
+        elif self.limit == "coniLCS_series":
+            return self.F_coniLCS_series_per(XPer,conj=conj)
+        elif self.limit == "coniLCS_bulk":
+            return self.F_coniLCS_bulk_per(XPer,conj=conj)
+        elif self._prepotential_input_used:
             return self.prepotential_input(XPer,conj=conj)
         else:
-            raise ValueError("Prepotential undefined! If no input was provided, use one of the pre-implemented methods!")
+            raise ValueError("Prepotential undefined! Please specify the limit in moduli space or provide a prepotential or period vector input!")
     
     
-    @partial(jit, static_argnums = (0,2,))
-    def prepot_grad_per(self, XPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (2,))
+    def prepot_grad_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -366,19 +766,19 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         with respect to the periods :math:`X^I`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
+            XPer (Array): Values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Holomorphic derivatives :math:`F_{I}=\partial_{X^I}F` of the prepotential :math:`F`.
+            Array: Holomorphic derivatives :math:`F_{I}=\partial_{X^I}F` of the prepotential :math:`F`.
 
         """
 
         #Derivative of prepotential:
         return jax.grad(self.prepot_per,holomorphic=True)(XPer,conj=conj)
 
-    @partial(jit, static_argnums = (0,2,))
-    def prepot_grad_grad_per(self, XPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (2,))
+    def prepot_grad_grad_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -391,7 +791,7 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             for SUSY flux vacua, see :func:`gauge_kinetic_matrix_prepotential`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
+            XPer (Array): Values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
@@ -404,8 +804,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         #Second derivative of prepotential:
         return jax.jacrev(self.prepot_grad_per,holomorphic=True)(XPer,conj=conj)
 
-    @partial(jit, static_argnums = (0,2,))
-    def period_vector_per(self, XPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (2,))
+    def period_vector_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -441,23 +841,23 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
 
         Args:
-            XPer (ArrayLike): Values of periods.
+            XPer (Array): Values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Period vector :math:`\Pi`.
+            Array: Period vector :math:`\Pi`.
 
         """
         
-        if self.period_input is not None:
+        if self._period_input_used:
             return self.period_input(XPer,conj=conj)
-        elif self.prepotential_input is not None or self.moduli_space_limit in ["LCS","coniLCS","coniLCSbulk"]:
+        elif self._prepotential_input_used or self.limit in ["LCS","coniLCS","coniLCS_bulk"]:
             return jnp.concatenate((self.prepot_grad_per(XPer,conj=conj), XPer))
         else:
             raise ValueError("Period vector undefined! If no input was provided, use one of the pre-implemented methods!")
 
-    @partial(jit, static_argnums = (0,))
-    def A_per(self, XPer: ArrayLike, cXPer: ArrayLike) -> complex:
+    @partial(jit, static_argnums = ())
+    def A_per(self, XPer: Array, cXPer: Array) -> complex:
         r"""
 
         **Description:**
@@ -472,18 +872,18 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
                 \tilde{\mathcal{V}} = -\text{i}\, \Pi^\dagger\cdot \Sigma\cdot\Pi\, .
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
 
         Returns:
-            ArrayLike: Value of the mirror CY volume in terms of the period :math:`X^I`.
+            Array: Value of the mirror CY volume in terms of the period :math:`X^I`.
 
         """
 
-        return -1.j*jnp.matmul(self.period_vector_per(cXPer,conj=True), jnp.matmul(self.sigma(), self.period_vector_per(XPer)))
+        return -1.j*jnp.matmul(self.period_vector_per(cXPer,conj=True), jnp.matmul(self.sigma, self.period_vector_per(XPer)))
     
-    @partial(jit, static_argnums = (0,))
-    def kahler_potential_per(self, XPer: ArrayLike, cXPer: ArrayLike) -> complex:
+    @partial(jit, static_argnums = ())
+    def kahler_potential_per(self, XPer: Array, cXPer: Array) -> complex:
         r"""
 
         **Description:**
@@ -504,11 +904,11 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
 
         Returns:
-            ArrayLike: Value of the Kähler potential :math:`K`.
+            Array: Value of the Kähler potential :math:`K`.
 
         """
 
@@ -517,8 +917,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
 
     
-    @partial(jit, static_argnums = (0,2,))
-    def grad_period_vector_per(self, XPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (2,))
+    def grad_period_vector_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -526,11 +926,11 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         periods :mathh`X^I`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
+            XPer (Array): Values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Derivatives :math:`\partial_{X^I}\Pi` of the period vector :math:`\Pi`.
+            Array: Derivatives :math:`\partial_{X^I}\Pi` of the period vector :math:`\Pi`.
 
         """
         
@@ -538,8 +938,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
     
     
     
-    @partial(jit, static_argnums = (0,3,))
-    def grad_kahler_potential_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def grad_kahler_potential_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -551,12 +951,12 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             :math:`\partial_{\overline{X}^I}K` instead!
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: First derivative :math:`\partial_{X^I}K` of the Kähler potential :math:`K`.
+            Array: First derivative :math:`\partial_{X^I}K` of the Kähler potential :math:`K`.
 
         """
 
@@ -566,20 +966,20 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             return jax.grad(self.kahler_potential_per,holomorphic=True,argnums=1)(XPer,cXPer)
 
     
-    @partial(jit, static_argnums = (0,3,))
-    def D_period_vector_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def D_period_vector_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
         Computes the Kähler convariant derivative :math:`D_I\Pi`. of the period vector :math:`\Pi`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Values of :math:`D_I\Pi`.
+            Array: Values of :math:`D_I\Pi`.
 
         """
         
@@ -594,8 +994,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
     
     
-    @partial(jit, static_argnums = (0,3,))
-    def P_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def P_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -612,12 +1012,12 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             see Eq. (3.5) in `2310.06040 <https://arxiv.org/abs/2310.06040>`_.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Values of :math:`P_{IJ}`.
+            Array: Values of :math:`P_{IJ}`.
 
         """
         
@@ -634,8 +1034,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         
         return jnp.append(jnp.array([PPi]),DPi[1:],axis=0)
     
-    @partial(jit, static_argnums = (0,3,))
-    def Q_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def Q_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -652,12 +1052,12 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             see Eq. (3.5) in `2310.06040 <https://arxiv.org/abs/2310.06040>`_.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Values of :math:`Q^{I}\,_{J}`.
+            Array: Values of :math:`Q^{I}\,_{J}`.
 
         """
 
@@ -674,8 +1074,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             
         return jnp.append(jnp.array([PPi]),DPi[1:],axis=0)
     
-    @partial(jit, static_argnums = (0,3,))
-    def Q_inv_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def Q_inv_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -692,20 +1092,20 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             see Eq. (3.5) in `2310.06040 <https://arxiv.org/abs/2310.06040>`_.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Values of :math:`(Q^{-1})^{I}\,_{J}`.
+            Array: Values of :math:`(Q^{-1})^{I}\,_{J}`.
 
         """
 
         # see https://arxiv.org/abs/2310.06040
         return jnp.linalg.inv(self.Q_per(XPer,cXPer,conj=conj))
 
-    @partial(jit, static_argnums = (0,3,))
-    def PQ_per(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Tuple[Array,Array]:
+    @partial(jit, static_argnums = (3,))
+    def PQ_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Tuple[Array,Array]:
         r"""
 
         **Description:**
@@ -723,13 +1123,13 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             see Eq. (3.5) in `2310.06040 <https://arxiv.org/abs/2310.06040>`_.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Values of :math:`P_{IJ}`.
-            ArrayLike: Values of :math:`Q^{I}\,_{J}`.
+            Array: Values of :math:`P_{IJ}`.
+            Array: Values of :math:`Q^{I}\,_{J}`.
 
         """
         
@@ -757,8 +1157,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
     ############################## GAUGE KINETIC MATRIX ######################################
     ##########################################################################################
     
-    @partial(jit, static_argnums = (0,3,))
-    def gauge_kinetic_matrix_prepotential(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def gauge_kinetic_matrix_prepotential(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -779,12 +1179,12 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Value of the gauge kinetic matrix :math:`\mathcal{N}` from prepotential.
+            Array: Value of the gauge kinetic matrix :math:`\mathcal{N}` from prepotential.
 
         """
 
@@ -807,8 +1207,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             return FIJ-2.*1j*jnp.dot(jnp.array([TFI]).T,jnp.array([TFI]))/jnp.dot(cXPer,TFI)
 
 
-    @partial(jit, static_argnums = (0,3,))
-    def gauge_kinetic_matrix_periods(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def gauge_kinetic_matrix_periods(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -834,26 +1234,28 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Value of the gauge kinetic matrix :math:`\mathcal{N}` from periods.
+            Array: Value of the gauge kinetic matrix :math:`\mathcal{N}` from periods.
 
         """
 
         P,Q = self.PQ_per(XPer,cXPer,conj=conj)
 
-        Qinv = jnp.linalg.inv(Q)
+        #Qinv = jnp.linalg.inv(Q)
         
-        return jnp.matmul(Qinv,P)
+        #return jnp.matmul(Qinv,P)
+        
+        return jnp.linalg.solve(Q, P)
     
     
     
     
-    @partial(jit, static_argnums = (0,3,))
-    def gauge_kinetic_matrix(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def gauge_kinetic_matrix(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -885,24 +1287,25 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
             where :math:`F_{IJ}=\partial_{X^{I}}\partial_{X^{J}}F` is the second derivative of the prepotential :math:`F`
             with respect to the periods :math:`X^I`.
 
-            Both formulas for the gauge kinetic matrix :math:`\mathcal{N}` have been implemented. The mode of computation 
+            Both formulas for the gauge kinetic matrix :math:`\mathcal{N}` have been implemented. The mode of computation
             depends on the provided input:
-                * at LCS, we use the formula from the periods,
-                * with input periods, we use the formula from the periods, and
-                * otherwise, with input prepotential, we use the formula for the prepotential.
+
+            * at LCS, we use the formula from the periods,
+            * with input periods, we use the formula from the periods, and
+            * otherwise, with input prepotential, we use the formula for the prepotential.
 
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Value of the gauge kinetic matrix :math:`\mathcal{N}`.
+            Array: Value of the gauge kinetic matrix :math:`\mathcal{N}`.
 
         """
 
-        if self.moduli_space_limit in ["LCS","coniLCS","coniLCSbulk"] or self.period_input is not None:
+        if self.limit in ["LCS","coniLCS","coniLCS_series","coniLCS_bulk"] or self.period_input is not None:
             return self.gauge_kinetic_matrix_periods(XPer,cXPer,conj=conj)
         elif self.prepotential_input is not None:
             return self.gauge_kinetic_matrix_prepotential(XPer,cXPer,conj=conj)
@@ -911,8 +1314,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
     N = gauge_kinetic_matrix
 
-    @partial(jit, static_argnums = (0,3,))
-    def dN(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def dN(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -921,20 +1324,20 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
 
         Args:
-            XPer (ArrayLike): JAX array of shape (:math:`h^{1,2}+1`, ) containing the value of the periods.
-            cXPer (ArrayLike): JAX array of shape (:math:`h^{1,2}+1`, ) containing the complex conjugate value of the periods.
+            XPer (Array): JAX array of shape (:math:`h^{1,2}+1`, ) containing the value of the periods.
+            cXPer (Array): JAX array of shape (:math:`h^{1,2}+1`, ) containing the complex conjugate value of the periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
 
         Returns:
-            ArrayLike: Holomorphic derivative :math:`\partial_{X^I}\mathcal{N}` of the 
+            Array: Holomorphic derivative :math:`\partial_{X^I}\mathcal{N}` of the 
                 gauge kinetic matrix :math:`\mathcal{N}`.
 
         """
         
         return jax.jacrev(self.gauge_kinetic_matrix,holomorphic=True,argnums=0)(XPer,cXPer,conj=conj)
 
-    @partial(jit, static_argnums = (0,3,))
-    def dN_c(self, XPer: ArrayLike, cXPer: ArrayLike, conj: bool = False) -> Array:
+    @partial(jit, static_argnums = (3,))
+    def dN_c(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -943,12 +1346,12 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         complex conjugate periods :math:`\overline{X}^I`.
 
         Args:
-            XPer (ArrayLike): JAX array of shape (:math:`h^{1,2}+1`, ) containing the value of the periods.
-            cXPer (ArrayLike): JAX array of shape (:math:`h^{1,2}+1`, ) containing the complex conjugate value of the periods.
+            XPer (Array): JAX array of shape (:math:`h^{1,2}+1`, ) containing the value of the periods.
+            cXPer (Array): JAX array of shape (:math:`h^{1,2}+1`, ) containing the complex conjugate value of the periods.
             conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
             
         Returns:
-            ArrayLike: Anti-holomorphic derivative :math:`\partial_{\overline{X}^I}\mathcal{N}` of the 
+            Array: Anti-holomorphic derivative :math:`\partial_{\overline{X}^I}\mathcal{N}` of the 
                 gauge kinetic matrix :math:`\mathcal{N}`.
 
         """
@@ -959,8 +1362,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
     ###################################### ISD MATRIX ########################################
     ##########################################################################################
 
-    @partial(jit, static_argnums = (0,))
-    def ISD_matrix(self, XPer: ArrayLike, cXPer: ArrayLike) -> Array:
+    @partial(jit, static_argnums = ())
+    def ISD_matrix(self, XPer: Array, cXPer: Array) -> Array:
         r"""
 
         **Description:**
@@ -1000,11 +1403,11 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
                 \mathcal{M}_{\mathrm{here}} = \mathcal{M}_{\mathrm{there}}^{-1}\, .
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
 
         Returns:
-            ArrayLike: Value of the ISD-matrix :math:`\mathcal{M}`.
+            Array: Value of the ISD-matrix :math:`\mathcal{M}`.
 
         Aliases:
             :func:`M`
@@ -1036,8 +1439,8 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
 
     M = ISD_matrix
 
-    @partial(jit, static_argnums = (0,))
-    def dM(self, XPer: ArrayLike, cXPer: ArrayLike) -> Array:
+    @partial(jit, static_argnums = ())
+    def dM(self, XPer: Array, cXPer: Array) -> Array:
         r"""
 
         **Description:**
@@ -1045,19 +1448,19 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         ISD-matrix :math:`\mathcal{M}` with respect to the periods :math:`X^I`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             
         Returns:
-            ArrayLike: Holomorphic derivative :math:`\partial_{X^I}\mathcal{M}` of the 
+            Array: Holomorphic derivative :math:`\partial_{X^I}\mathcal{M}` of the 
                 ISD-matrix :math:`\mathcal{M}`.
 
         """
 
         return jax.jacrev(self.M,holomorphic=True,argnums=0)(XPer,cXPer)
 
-    @partial(jit, static_argnums = (0,))
-    def dM_c(self, XPer: ArrayLike, cXPer: ArrayLike) -> Array:
+    @partial(jit, static_argnums = ())
+    def dM_c(self, XPer: Array, cXPer: Array) -> Array:
         r"""
 
         **Description:**
@@ -1066,11 +1469,11 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         the complex conjugate periods :math:`\overline{X}^I`.
 
         Args:
-            XPer (ArrayLike): Values of periods.
-            cXPer (ArrayLike): Complex conjugate values of periods.
+            XPer (Array): Values of periods.
+            cXPer (Array): Complex conjugate values of periods.
             
         Returns:
-            ArrayLike: Anti-holomorphic derivative :math:`\partial_{\overline{X}^I}\mathcal{M}` of the 
+            Array: Anti-holomorphic derivative :math:`\partial_{\overline{X}^I}\mathcal{M}` of the 
                 ISD-matrix :math:`\mathcal{M}`.
 
         """
@@ -1078,6 +1481,20 @@ class periods(periods_LCS,periods_coniLCS,periods_coniLCSbulk):
         return jax.jacrev(self.M,holomorphic=True,argnums=1)(XPer,cXPer)
 
     
-        
 
+from .conifold_utils import F_coniLCS_series_per,F_coniLCS_exp_per, F_inst_per_coni,F_coniLCS_poly_split_per,dF_coniLCS_poly_per,ddF_coniLCS_poly_per,dddF_coniLCS_poly_per, ddddF_coniLCS_poly_per,F_coniLCS_bulk_per,F_coni_per
 
+periods.F_coniLCS_series_per = F_coniLCS_series_per
+periods.F_coniLCS_exp_per = F_coniLCS_exp_per
+periods.F_coni_per = F_coni_per 
+periods.F_inst_per_coni = F_inst_per_coni 
+periods.F_coniLCS_poly_split_per = F_coniLCS_poly_split_per 
+periods.dF_coniLCS_poly_per = dF_coniLCS_poly_per 
+periods.ddF_coniLCS_poly_per = ddF_coniLCS_poly_per 
+periods.dddF_coniLCS_poly_per = dddF_coniLCS_poly_per 
+periods.ddddF_coniLCS_poly_per = ddddF_coniLCS_poly_per 
+periods.F_coniLCS_bulk_per = F_coniLCS_bulk_per 
+
+unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, periods)
+
+register_pytree_node(periods, flatten_func, unflatten_func)

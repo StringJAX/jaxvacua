@@ -70,3 +70,73 @@ def save_model_data(data,fname,model_ID,h12):
             save_zipped_pickle(data, filename, protocol=-1)
     else:
         save_zipped_pickle(data, filename, protocol=-1)
+        
+def flatten_func(obj):
+    r"""
+    **Description:**
+    Flattens the object for use in JAX transformations.
+    This function is used by JAX to convert the object into a tuple of children and auxiliary data.
+    The children contain all arrays and pytrees, while the auxiliary data contains static, hashable data.
+    
+    Args:
+        obj (myclass): Instance of the object to be flattened.
+        
+    Returns:
+        tuple: A tuple containing the children and auxiliary data.
+    """
+    # Based on https://docs.jax.dev/en/latest/_autosummary/jax.tree_util.register_pytree_node.html
+    
+    children = tuple(list(obj.__dict__.values()))
+    #children = (obj.h11, obj.intnums2)  # children must contain arrays & pytrees
+    
+    # Using aux_data to store model attribtues
+    aux_data = tuple(list(obj.__dict__.keys()))  # aux_data must contain static, hashable data.
+    
+    static_keys = ["h11","h12","model_ID","dimension_H3","_dimension_H3_tot","model_type","n_fluxes","gauge_choice","prange","maximum_degree","D3_tadpole","conifold_limits","n_conifolds","ncf","nmax"]
+    
+    children = []
+    aux_data = []
+    static = []
+    for key, value in obj.__dict__.items():
+        if type(value) in [str,bool] or key in static_keys:
+            static.append((key, value))
+        else:
+            children.append(value)
+            aux_data.append(key)
+            
+    for x in static:
+        aux_data.append(x)
+    
+    children = tuple(children)
+    aux_data = tuple(aux_data)
+    
+    return (children, aux_data)
+
+def unflatten_func_class(aux_data, children, myclass):
+    r"""
+    **Description:**
+    Unflattens the object for use in JAX transformations.
+    This function is used by JAX to reconstruct the object from a tuple of children and auxiliary data.
+    The children contain all arrays and pytrees, while the auxiliary data contains static, hashable data.
+    
+    Args:
+        aux_data (tuple): Auxiliary data containing static, hashable data.
+        children (tuple): Children containing all arrays and pytrees.
+        myclass (type): The class of the object to be reconstructed.
+        
+    Returns:
+        myclass: Reconstructed object of the specified class.
+    """
+    # Based on https://docs.jax.dev/en/latest/_autosummary/jax.tree_util.register_pytree_node.html
+    
+    # Here we avoid `__init__` because it has extra logic we don't require:
+    obj = object.__new__(myclass)
+    
+    # Using aux_data to store model attribtues
+    for i,attr in enumerate(aux_data):
+        if type(attr) in [tuple]:
+            object.__setattr__(obj,attr[0],attr[1])
+        else:
+            object.__setattr__(obj,attr,children[i])
+        
+    return obj
