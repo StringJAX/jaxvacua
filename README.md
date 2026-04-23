@@ -1,9 +1,10 @@
 # JAXVacua - Flux Vacua in String Theory with JAX
 
 <p align="center">
-[![CI](https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+  <a href="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
 </p>
+
 
 **JAXVacua** is a Python library designed for the systematic exploration of flux vacua in string theory through the numerical analysis of supergravity scalar potentials. It leverages automatic differentiation and just-in-time compilation tools provided by the [JAX library](https://github.com/google/jax) to efficiently locate and analyze critical points of highly non-linear potentials. The package is intended to be accessible both as a high-level user-facing library and as a flexible collection of modular components that can be reused or extended for custom workflows. In particular, JAXVacua is well suited for the study of flux compactifications in string theory, where large parameter spaces and intricate scalar potentials make traditional analytic approaches challenging.
 
