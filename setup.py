@@ -36,8 +36,6 @@ setup(
         'tqdm',
         'requests',
         'osqp',
-        'pip',
-        'pip':
         'ortools',
         'mosek',
         'triangulumancer',
