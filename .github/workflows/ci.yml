@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * *"   # 04:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  fast:
+    name: Fast (no cytools / gurobi)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install jaxvacua (without cytools / gurobipy)
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy scipy sympy matplotlib seaborn h5py pandas tqdm
+          pip install jax jaxlib optax chex pytest
+          pip install "jaxpolylog>=0.1.0"
+          # Skip heavy deps (cytools, gurobipy, python-flint) — they're
+          # not needed for the markered subset run in this job.
+          pip install --no-deps -e .
+
+      - name: Run fast test suite
+        env:
+          JAX_ENABLE_X64: "1"
+        run: pytest tests/ -v -m "not slow and not requires_cytools and not requires_gurobi"
+
+  full:
+    name: Full (cytools + gurobi)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install jaxvacua + all heavy deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest chex "jaxpolylog>=0.1.0"
+          # setup.py picks up cytools, gurobipy, python-flint
+          pip install -e .
+
+      - name: Run full test suite
+        env:
+          JAX_ENABLE_X64: "1"
+        run: pytest tests/ -v

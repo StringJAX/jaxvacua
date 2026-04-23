@@ -43,6 +43,7 @@
 # Standard libraries
 import sys, os
 import numpy as np
+import pytest
 
 # JAX
 import jax
@@ -730,6 +731,7 @@ class TestDataSampler(TestCase):
     # Optionally normalises each point to unit L2-norm.
     # ==========================================================================
 
+    @pytest.mark.requires_gurobi
     def test_find_interior_points_basic(self):
         r"""
         **Description:**
@@ -747,6 +749,7 @@ class TestDataSampler(TestCase):
         # Each point must have exactly h12 coordinates (one per Kaehler modulus)
         self.assertEqual(pts.shape[1], self.model.h12)
 
+    @pytest.mark.requires_gurobi
     def test_find_interior_points_normalised(self):
         r"""
         **Description:**
@@ -759,6 +762,7 @@ class TestDataSampler(TestCase):
             norms, np.ones(len(norms)), atol=1e-6,
         )
 
+    @pytest.mark.requires_gurobi
     def test_find_interior_points_in_cone(self):
         r"""
         **Description:**
@@ -840,6 +844,7 @@ class TestDataSampler(TestCase):
     #   sample_rays           – samples k rays without replacement from _rays
     # ==========================================================================
 
+    @pytest.mark.requires_gurobi
     def test_sample_interior_point(self):
         r"""
         **Description:**
@@ -850,6 +855,7 @@ class TestDataSampler(TestCase):
             pt = s.sample_interior_point(rns_key=self.key)
             chex.assert_shape(pt, (self.model.h12,))
 
+    @pytest.mark.requires_gurobi
     def test_sample_ray(self):
         r"""
         **Description:**
