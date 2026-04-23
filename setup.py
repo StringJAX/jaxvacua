@@ -27,7 +27,6 @@ setup(
         'python-flint',
         'gurobipy',
         'numba',
-        'normaliz',
         'scipy',
         'cvxopt',
         'python-flint',
