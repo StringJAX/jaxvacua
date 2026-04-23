@@ -86,6 +86,66 @@ def _get_default_data_dir() -> str:
 #: Default local cache directory (kept for backwards compatibility).
 DEFAULT_CACHE_DIR: str = _get_default_data_dir()
 
+#: Name of the permanent vacuum-solutions directory.
+VAULT_DIRNAME: str = "vacua_vault"
+
+
+def _find_jaxvacua_repo_root(start: Optional[Path] = None) -> Optional[Path]:
+    r"""
+    **Description:**
+    Walk up from *start* (default: cwd) looking for a jaxvacua source
+    checkout.  A directory counts as the repo root when it contains both
+    a ``setup.py`` with ``name="jaxvacua"`` and a ``jaxvacua/`` package
+    directory.
+
+    Args:
+        start (Path | None): Starting directory.  Defaults to cwd.
+
+    Returns:
+        Path | None: Absolute path to the repo root, or None if not
+        found.
+    """
+    current = Path(start or os.getcwd()).resolve()
+    for candidate in [current, *current.parents]:
+        setup_py = candidate / "setup.py"
+        pkg_dir  = candidate / "jaxvacua"
+        if setup_py.is_file() and pkg_dir.is_dir():
+            try:
+                text = setup_py.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if 'name="jaxvacua"' in text or "name='jaxvacua'" in text:
+                return candidate
+    return None
+
+
+def _resolve_vault_dir() -> Path:
+    r"""
+    **Description:**
+    Resolve the location of the permanent vacuum-solutions directory
+    (``vacua_vault/``).  Resolution order:
+
+    1. ``JAXVACUA_VAULT`` env var (explicit override).
+    2. ``<repo_root>/vacua_vault/`` when cwd is inside a jaxvacua source
+       checkout.
+    3. ``<cwd>/vacua_vault/`` otherwise.
+
+    The directory is **not** created by this function; callers create it
+    on demand.
+
+    Returns:
+        Path: Absolute path to the vault directory (may not exist yet).
+    """
+    override = os.environ.get("JAXVACUA_VAULT")
+    if override:
+        return Path(override).expanduser().resolve()
+
+    repo_root = _find_jaxvacua_repo_root()
+    if repo_root is not None:
+        return repo_root / VAULT_DIRNAME
+
+    return Path(os.getcwd()).resolve() / VAULT_DIRNAME
+
 #: Recognised sub-dataset identifiers and their model_type strings.
 _DATASET_CONFIGS: Dict[str, str] = {
     "tdf":  "KS",
@@ -1526,6 +1586,7 @@ class CYDatabase:
         h12 = kwargs["h12"]
         kwargs["h11"] = h12
         kwargs["h12"] = h11
+        kwargs["chi"] = None
         
         # ---- Optionally fetch conifold data --------------------------------
         # NOTE: `h11` was swapped with h12 above (line 1524-1525) for API
@@ -2122,8 +2183,83 @@ class CYDatabase:
 
     @property
     def _designated_dir(self) -> Path:
-        r"""Root directory for designated (permanent) vacua storage."""
-        return self.cache_dir / "designated_vacua"
+        r"""
+        Description:
+        Root directory for designated (permanent) vacua storage.
+
+        Resolves to the project-local ``vacua_vault/`` directory (see
+        :func:`_resolve_vault_dir`).  Falls back to the legacy
+        ``<cache_dir>/designated_vacua/`` location only when a user has
+        pre-existing data there and the vault directory is empty — this
+        preserves backwards compatibility without silent duplication.
+        """
+        vault = _resolve_vault_dir()
+        legacy = self.cache_dir / "designated_vacua"
+        # Prefer vault unless only legacy has data (one-time migration hint).
+        if (not vault.exists()) and legacy.exists() and any(legacy.iterdir()):
+            return legacy
+        return vault
+
+    def _resolve_vacua_dir(self, model: Any = None, **identity_kwargs: Any) -> Path:
+        r"""
+        Description:
+        Return the per-model subdirectory inside the vault for designated
+        vacua belonging to *model*.
+
+        Path layout:
+
+        - Local KS / CICY models (no ks_id / cicy_id in metadata) →
+          ``<vault>/KS/h12_{h12}_model_{model_ID}/`` (analogous for
+          CICY).
+        - HF-downloaded TDF models → ``<vault>/tdf/ks_{ks_id}_tri_{triang_id}/``.
+        - HF-downloaded CICY models → ``<vault>/cicy/cicy_{cicy_id}/``.
+        - Fallback (custom model) → ``<vault>/custom/{model_hash}/``.
+
+        Args:
+            model: Optional ``flux_sector`` or ``lcs_tree`` used for
+                identity extraction.
+            **identity_kwargs: Explicit overrides forwarded to
+                :func:`_extract_model_identity`.
+
+        Returns:
+            Path: Absolute directory path.  Not created on disk.
+        """
+        vault = _resolve_vault_dir()
+        ident = _extract_model_identity(model=model, **identity_kwargs)
+
+        ks = ident.get("ks_id", -1)
+        tr = ident.get("triang_id", -1)
+        cicy_id = ident.get("cicy_id", -1)
+        h12    = ident.get("h12")
+        name   = ident.get("model_name") or ""
+        mhash  = ident.get("model_hash") or ""
+
+        # HF-downloaded TDF models
+        if ks >= 0 and tr >= 0:
+            return vault / "tdf" / f"ks_{ks}_tri_{tr}"
+
+        # HF-downloaded CICY models
+        if cicy_id >= 0:
+            return vault / "cicy" / f"cicy_{cicy_id}"
+
+        # Local models: extract model_ID from auto-generated name
+        # ("local_h12_{h12}_ID_{mid}")
+        model_ID = None
+        if name.startswith("local_h12_") and "_ID_" in name:
+            try:
+                model_ID = int(name.split("_ID_")[-1])
+            except ValueError:
+                model_ID = None
+
+        if h12 is not None and model_ID is not None:
+            # Distinguish KS from CICY for local models via stored tree
+            # metadata if available; default to KS.
+            tree = getattr(getattr(model, "periods", None), "lcs_tree", model)
+            model_type = getattr(tree, "model_type", None) or "KS"
+            return vault / model_type / f"h12_{h12}_model_{model_ID}"
+
+        # Fallback: hash-keyed custom model
+        return vault / "custom" / (mhash or "unknown")
 
     def _ensure_designated_catalog(self) -> None:
         r"""Load designated vacua catalog from disk if not yet in memory."""
@@ -2913,15 +3049,13 @@ class CYDatabase:
             }
             data_rows.append(drow)
 
-        # Determine shard path
-        ks = identity["ks_id"]
-        tr = identity["triang_id"]
-        if ks >= 0 and tr >= 0:
-            shard_dir = self._designated_dir / f"ks_{ks}" / f"triang_{tr}"
-        else:
-            mhash = identity["model_hash"]
-            shard_dir = self._designated_dir / "custom" / mhash
-
+        # Determine shard path — per-model subdirectory inside vacua_vault/
+        shard_dir = self._resolve_vacua_dir(model=model, **{
+            k: identity[k] for k in (
+                "h11", "h12", "ks_id", "triang_id",
+                "conifold_id", "cicy_id", "model_name",
+            ) if k in identity
+        })
         shard_dir.mkdir(parents=True, exist_ok=True)
         shard_path = shard_dir / "shard_0.parquet"
 
@@ -3149,6 +3283,63 @@ class CYDatabase:
                       f"{g['n_vacua']:7d}")
         else:
             print(f"  ({len(groups)} models — use query_designated() for details)")
+
+    def load_local_vacua(
+        self,
+        model: Any = None,
+        label: Optional[str] = None,
+        include_retracted: bool = False,
+        **identity_kwargs: Any,
+    ) -> Any:
+        r"""
+        **Description:**
+        Load designated vacua stored in the local ``vacua_vault/`` for a
+        given model.
+
+        Convenience wrapper around :meth:`query_designated` that
+        resolves the per-model vault subdirectory via
+        :meth:`_resolve_vacua_dir` and returns any solutions previously
+        designated for that model.
+
+        Args:
+            model: Optional ``flux_sector`` or ``lcs_tree`` used for
+                identity extraction.
+            label (str | None): If given, filter by designation label.
+            include_retracted (bool): Include retracted entries.
+                Defaults to False.
+            **identity_kwargs: Explicit identity overrides
+                (``h11``, ``h12``, ``ks_id``, ``triang_id``,
+                ``cicy_id``, ``model_name``).
+
+        Returns:
+            pandas.DataFrame: Solutions with the standard vacuum
+            columns.  Empty DataFrame if no vacua are stored.
+        """
+        ident = _extract_model_identity(model=model, **identity_kwargs)
+        query = {}
+        if ident.get("h11") is not None:     query["h11"]       = ident["h11"]
+        if ident.get("h12") is not None:     query["h12"]       = ident["h12"]
+        if ident.get("ks_id", -1) >= 0:      query["ks_id"]     = ident["ks_id"]
+        if ident.get("triang_id", -1) >= 0:  query["triang_id"] = ident["triang_id"]
+        if ident.get("cicy_id", -1) >= 0:    query["cicy_id"]   = ident["cicy_id"]
+        if label is not None:                query["label"]     = label
+
+        try:
+            df = self.query_designated(**query)
+        except TypeError:
+            # Fallback for a reduced query_designated signature: query
+            # by label (if any) and filter remaining columns manually.
+            df = self.query_designated(label=label) if label else self.query_designated()
+            if df is not None and len(df) > 0:
+                for col, val in query.items():
+                    if col in df.columns:
+                        df = df[df[col] == val]
+                df = df.reset_index(drop=True)
+
+        if df is not None and len(df) > 0 and not include_retracted:
+            if "retracted" in df.columns:
+                df = df[~df["retracted"].fillna(False).astype(bool)].reset_index(drop=True)
+        return df
 
     def retract_designated(
         self,

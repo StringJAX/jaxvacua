@@ -109,6 +109,36 @@ def set_data_dir(path):
     data_dir = str(path)
 # ──────────────────────────────────────────────────────────────────────────
 
+# ── Vacua vault directory ────────────────────────────────────────────────
+# Permanent storage for designated vacuum solutions.  Resolves in priority:
+#   1. JAXVACUA_VAULT env var (explicit override), or value set via
+#      jvc.set_vault_dir(path)
+#   2. <repo_root>/vacua_vault/ when inside a jaxvacua source checkout
+#   3. <cwd>/vacua_vault/ otherwise
+# The vault is **not** under the cache dir — it persists across
+# clear_cache() calls.
+
+def set_vault_dir(path):
+    r"""
+    **Description:**
+    Set the vault directory for designated vacuum solutions by
+    exporting ``JAXVACUA_VAULT`` into the environment.  Takes effect
+    for all subsequent :class:`~jaxvacua.database.CYDatabase` calls.
+
+    Args:
+        path (str | Path): Absolute or relative path to the vault
+            directory.  Pass ``None`` to clear the override and fall
+            back to repo-root / cwd auto-detection.
+
+    Returns:
+        None
+    """
+    if path is None:
+        _os.environ.pop("JAXVACUA_VAULT", None)
+    else:
+        _os.environ["JAXVACUA_VAULT"] = str(path)
+# ──────────────────────────────────────────────────────────────────────────
+
 from .util import *
 from .utils_jaxvacua import *
 from .cytools_interface import *
