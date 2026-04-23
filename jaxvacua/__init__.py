@@ -137,6 +137,27 @@ def set_vault_dir(path):
         _os.environ.pop("JAXVACUA_VAULT", None)
     else:
         _os.environ["JAXVACUA_VAULT"] = str(path)
+
+
+def set_vault_repo(repo_id):
+    r"""
+    **Description:**
+    Set the HuggingFace dataset repo ID used for uploading / fetching
+    community vacuum solutions.  Sets the ``JAXVACUA_VAULT_REPO`` env
+    var.
+
+    Args:
+        repo_id (str | None): ``"user/repo"`` on HuggingFace Hub, or
+            ``None`` to clear the override and fall back to the
+            package default ``aschachner/vacua_vault``.
+
+    Returns:
+        None
+    """
+    if repo_id is None:
+        _os.environ.pop("JAXVACUA_VAULT_REPO", None)
+    else:
+        _os.environ["JAXVACUA_VAULT_REPO"] = str(repo_id)
 # ──────────────────────────────────────────────────────────────────────────
 
 from .util import *

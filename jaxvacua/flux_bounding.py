@@ -5340,11 +5340,28 @@ bounded_fluxes.process_chunk_from_disk(
         tags: list = None,
         verbose: bool = True,
         map_to_fd: bool = False,
+        designate: bool = False,
+        label: str = None,
+        committed_by: str = None,
+        validate_before_designate: bool = True,
     ) -> list:
         r"""
         **Description:**
         Merge results from all cluster workers, deduplicate, optionally
         Newton-refine, and optionally write to the vacua database.
+
+        Two levels of database integration:
+
+        1. ``database=<CYDatabase>``: write the merged results as a
+           **session-tier** batch via
+           :meth:`jaxvacua.database.CYDatabase.vacua_writer`.  The
+           results are queryable via :meth:`query_vacua` but not yet
+           permanent.
+        2. ``designate=True`` (requires ``database``, ``label``,
+           ``committed_by``): additionally promote the merged results to
+           the **permanent vault** via
+           :meth:`jaxvacua.database.CYDatabase.designate_vacua`.  The
+           results are retrievable via :meth:`load_local_vacua`.
 
         Args:
             output_dir (str): Directory containing results/ subdirectory.
@@ -5362,6 +5379,17 @@ bounded_fluxes.process_chunk_from_disk(
             map_to_fd (bool): If ``True`` and *model* has ``map_to_FD``,
                 map each vacuum to the fundamental domain before
                 deduplicating.  Defaults to ``False``.
+            designate (bool): If True, also promote the merged results
+                to the permanent vault via
+                :meth:`designate_vacua`.  Requires *database*, *label*,
+                and *committed_by*.
+            label (str | None): Designation label (required when
+                ``designate=True``).
+            committed_by (str | None): Contributor identifier (required
+                when ``designate=True``).
+            validate_before_designate (bool): Run
+                :meth:`validate_vacua` before designation.  Defaults to
+                True.
 
         Returns:
             list: Merged results as list of dicts.
@@ -5480,7 +5508,7 @@ bounded_fluxes.process_chunk_from_disk(
                 entry['residual'] = float(res_arr[i])
             results.append(entry)
 
-        # Optional database write
+        # Optional database write (session tier)
         if database is not None and model is not None and len(results) > 0:
             try:
                 with database.vacua_writer(
@@ -5493,6 +5521,54 @@ bounded_fluxes.process_chunk_from_disk(
             except Exception as e:
                 if verbose:
                     print(f"[merge] Database write failed: {e}")
+
+        # Optional promotion to permanent vault via designate_vacua
+        if designate and len(results) > 0:
+            if database is None:
+                raise ValueError(
+                    "designate=True requires a CYDatabase instance passed "
+                    "via `database=...`."
+                )
+            if model is None:
+                raise ValueError(
+                    "designate=True requires `model=...` for identity "
+                    "extraction and validation."
+                )
+            if not label or not label.strip():
+                raise ValueError(
+                    "designate=True requires a non-empty `label` kwarg."
+                )
+            if not committed_by or not committed_by.strip():
+                raise ValueError(
+                    "designate=True requires a non-empty `committed_by` "
+                    "kwarg."
+                )
+            try:
+                import pandas as pd
+                df_rows = [{
+                    "flux":      list(int(x) for x in fluxes[i]),
+                    "moduli_re": list(float(x) for x in np.asarray(moduli[i]).real),
+                    "moduli_im": list(float(x) for x in np.asarray(moduli[i]).imag),
+                    "tau_re":    float(np.asarray(taus[i]).real),
+                    "tau_im":    float(np.asarray(taus[i]).imag),
+                    "residual":  (float(res_arr[i]) if res_arr is not None else None),
+                } for i in range(len(fluxes))]
+                df = pd.DataFrame(df_rows)
+                ids = database.designate_vacua(
+                    df,
+                    label=label,
+                    committed_by=committed_by,
+                    model=model,
+                    tags=tags,
+                    validate=validate_before_designate,
+                    force=not validate_before_designate,
+                )
+                if verbose:
+                    print(f"[merge] Designated {len(ids)} vacua to vault "
+                          f"with label={label!r}")
+            except Exception as e:
+                if verbose:
+                    print(f"[merge] Designation failed: {e}")
 
         if verbose:
             print(f"[merge] Final: {len(results)} flux vacua")

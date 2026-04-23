@@ -89,6 +89,19 @@ DEFAULT_CACHE_DIR: str = _get_default_data_dir()
 #: Name of the permanent vacuum-solutions directory.
 VAULT_DIRNAME: str = "vacua_vault"
 
+#: Default HuggingFace dataset repository for community vacuum uploads.
+DEFAULT_VAULT_REPO: str = "aschachner/vacua_vault"
+
+
+def _resolve_vault_repo() -> str:
+    r"""
+    **Description:**
+    Return the HuggingFace dataset repo ID for vacua uploads.  Honours
+    ``JAXVACUA_VAULT_REPO`` env var, falling back to
+    :data:`DEFAULT_VAULT_REPO`.
+    """
+    return os.environ.get("JAXVACUA_VAULT_REPO", DEFAULT_VAULT_REPO)
+
 
 def _find_jaxvacua_repo_root(start: Optional[Path] = None) -> Optional[Path]:
     r"""
@@ -229,8 +242,8 @@ def _require_pyarrow() -> Any:
 def _require_hf_hub() -> Any:
     r"""
     **Description:**
-    Import and return the ``huggingface_hub`` module, raising a clear error
-    if absent.
+    Import and return the ``hf_hub_download`` function, raising a clear
+    error if ``huggingface_hub`` is absent.
     """
     try:
         from huggingface_hub import hf_hub_download
@@ -239,6 +252,24 @@ def _require_hf_hub() -> Any:
         raise ImportError(
             "The 'huggingface_hub' package is required to use CYDatabase.  "
             "Install it with:  pip install huggingface-hub"
+        )
+
+
+def _require_hf_api() -> Any:
+    r"""
+    **Description:**
+    Import and return a fresh ``HfApi`` instance, raising a clear error
+    if ``huggingface_hub`` is absent.  Used for write operations
+    (uploading files, opening pull requests, identifying the
+    authenticated user).
+    """
+    try:
+        from huggingface_hub import HfApi
+        return HfApi()
+    except ImportError:
+        raise ImportError(
+            "The 'huggingface_hub' package is required for upload "
+            "operations. Install it with:  pip install huggingface-hub"
         )
 
 
@@ -776,6 +807,7 @@ class CYDatabase:
         self,
         include_vacua: bool = False,
         include_designated: bool = False,
+        keep_vault: bool = True,
     ) -> None:
         r"""
         **Description:**
@@ -787,18 +819,29 @@ class CYDatabase:
         repository.  Useful after a schema version mismatch or when the
         remote database has been updated.
 
-        By default, stored vacua (``vacua/``) and designated vacua
-        (``designated_vacua/``) are **preserved**.  Pass
+        The **permanent vacua vault** (``vacua_vault/`` — see
+        :func:`_resolve_vault_dir`) is **never** touched by this method:
+        it lives outside the cache directory and is protected by design.
+        The *include_designated* flag only controls the legacy
+        ``<cache_dir>/designated_vacua/`` location (used as a fallback
+        for pre-vault installations).
+
+        By default, session vacua (``<cache_dir>/vacua/``) and the
+        legacy designated dir are preserved.  Pass
         ``include_vacua=True`` / ``include_designated=True`` to delete
         them as well.
 
         Args:
-            include_vacua (bool): If True, also delete the ``vacua/``
-                subdirectory containing session vacuum solutions.
-                Defaults to ``False``.
-            include_designated (bool): If True, also delete the
-                ``designated_vacua/`` subdirectory containing permanent
-                designated solutions.  Defaults to ``False``.
+            include_vacua (bool): If True, also delete the
+                ``<cache_dir>/vacua/`` subdirectory containing session
+                vacuum solutions.  Defaults to ``False``.
+            include_designated (bool): If True, also delete the legacy
+                ``<cache_dir>/designated_vacua/`` subdirectory.  The
+                modern vault (``vacua_vault/``) is unaffected and must
+                be removed manually if desired.  Defaults to ``False``.
+            keep_vault (bool): Reserved for symmetry; ``vacua_vault/``
+                is always protected and this flag has no effect in
+                normal use.  Defaults to ``True``.
 
         Raises:
             RuntimeError: If ``offline=True``, since clearing the cache
@@ -809,10 +852,13 @@ class CYDatabase:
                 "Cannot clear cache while offline=True — doing so would "
                 "leave the database inaccessible.  Set offline=False first."
             )
+        # keep_vault is documented for API symmetry; the vault lives
+        # outside self.cache_dir so this method cannot touch it anyway.
+        del keep_vault
         import shutil
-        vacua_dir = self.cache_dir / "vacua"
+        vacua_dir      = self.cache_dir / "vacua"
         designated_dir = self.cache_dir / "designated_vacua"
-        protected = set()
+        protected: set = set()
         if not include_vacua and vacua_dir.exists():
             protected.add(vacua_dir)
         if not include_designated and designated_dir.exists():
@@ -2860,6 +2906,628 @@ class CYDatabase:
 
         return report
 
+    def _validate_for_upload(
+        self,
+        vacua_df: Any,
+        label: str,
+        committed_by: str,
+        model: Any = None,
+        F_term_tol: float = 1e-6,
+        check_remote: bool = True,
+        repo_id: Optional[str] = None,
+    ) -> dict:
+        r"""
+        **Description:**
+        Upload-specific validation wrapper around :meth:`validate_vacua`.
+        Runs the standard physics/dedup checks plus extras required for
+        pushing to a HuggingFace dataset repo:
+
+        - ``label`` matches the filesystem-safe slug regex.
+        - ``committed_by`` is non-empty.
+        - Schema version of this package matches the remote repo's
+          ``schema.json`` (when *check_remote* is True and the package
+          is online).
+        - Optional remote duplicate check against the remote catalog.
+
+        Args:
+            vacua_df: Vacuum rows to upload.
+            label (str): Dataset label (filesystem-safe).
+            committed_by (str): Contributor identifier.
+            model: Optional ``flux_sector`` for F-term re-verification.
+            F_term_tol (float): F-term tolerance.  Defaults to ``1e-6``.
+            check_remote (bool): Check schema + catalog on the remote
+                repo.  Requires network; skipped automatically when
+                ``self.offline`` is True.
+            repo_id (str | None): Override target repo.  Defaults to the
+                package-wide vault repo (see :func:`set_vault_repo`).
+
+        Returns:
+            dict: ``{"passed": bool, "errors": list, "warnings": list,
+            "per_row_report": list}``.  Suitable for including in a PR
+            summary comment.
+        """
+        import re
+        errors: List[str] = []
+        warnings_: List[str] = []
+
+        # 1. Upload-specific bookkeeping
+        if not label or not label.strip():
+            errors.append("label must be non-empty")
+        else:
+            slug = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+            if not slug.match(label):
+                errors.append(
+                    f"label {label!r} is not a valid slug "
+                    f"(must match {slug.pattern})"
+                )
+        if not committed_by or not committed_by.strip():
+            errors.append("committed_by must be non-empty")
+
+        # 2. Remote schema + catalogue checks
+        if check_remote and not self.offline:
+            try:
+                repo = repo_id or _resolve_vault_repo()
+                hf_download = _require_hf_hub()
+                schema_path = hf_download(
+                    repo_id=repo,
+                    filename="schema.json",
+                    repo_type="dataset",
+                )
+                with open(schema_path) as f:
+                    remote_schema = json.load(f)
+                remote_ver = int(remote_schema.get("schema_version", -1))
+                if remote_ver != SCHEMA_VERSION:
+                    errors.append(
+                        f"Schema version mismatch: remote={remote_ver}, "
+                        f"local={SCHEMA_VERSION}.  Upgrade your local "
+                        f"`jaxvacua` package or coordinate with the repo "
+                        f"maintainer."
+                    )
+            except Exception as e:
+                # Remote schema may not exist yet (fresh repo) — warn only.
+                warnings_.append(f"Could not fetch remote schema: {e}")
+
+        # 3. Row-level validation (reuses existing validate_vacua)
+        per_row = self.validate_vacua(
+            vacua_df, model=model, F_term_tol=F_term_tol,
+            check_tadpole=True,
+            check_physics=(model is not None),
+            check_duplicates=True,
+        )
+        n_failed = sum(1 for r in per_row if not r["passed"])
+        if n_failed > 0:
+            errors.append(
+                f"{n_failed}/{len(per_row)} rows failed per-row validation"
+            )
+
+        return {
+            "passed":          len(errors) == 0,
+            "errors":          errors,
+            "warnings":        warnings_,
+            "per_row_report":  per_row,
+        }
+
+    def push_vacua_to_hub(
+        self,
+        vacua_df: Any,
+        label: str,
+        committed_by: str,
+        model: Any,
+        tags: Optional[list] = None,
+        notes: str = "",
+        repo_id: Optional[str] = None,
+        create_pr: bool = True,
+        partial_failure: str = "strict",
+        if_exists: str = "error",
+        check_remote: bool = True,
+        token: Optional[str] = None,
+        classification: Optional[dict] = None,
+    ) -> dict:
+        r"""
+        **Description:**
+        Upload a batch of vacuum solutions to the HuggingFace
+        ``aschachner/vacua_vault`` dataset repository (or an override
+        via *repo_id* / ``JAXVACUA_VAULT_REPO``).
+
+        The upload lands inside the target model's ``community/``
+        directory: ``tdf/h12_{N}/ks_{X}_tri_{Y}/community/{hf_username}_{label}.parquet``
+        (or the analogous CICY path).  Filesystem-free-form labels
+        (see §5.6 of the vacua-storage plan) mean classification
+        (``susy``, ``method``, ``nmax``, ``qualifiers``) is stored as
+        parquet-level key-value metadata and extracted by the remote
+        catalogue rebuild on merge.
+
+        Args:
+            vacua_df: Rows to upload.  Must include at least ``flux``,
+                ``moduli_re``, ``moduli_im``, ``tau_re``, ``tau_im``.
+            label (str): Filesystem-safe slug for the output file.
+            committed_by (str): Contributor identifier (ORCID preferred;
+                HF username accepted).
+            model: Required ``flux_sector`` for identity extraction and
+                physics validation.
+            tags (list | None): Free-form tags attached to the dataset.
+            notes (str): Free-text annotation.
+            repo_id (str | None): Target dataset repo.  Defaults to
+                :func:`_resolve_vault_repo`.
+            create_pr (bool): If ``True`` (default), open a pull
+                request rather than pushing directly to ``main``.
+            partial_failure (str): ``"strict"`` (default, refuse the
+                upload if any rows fail validation) or ``"split"``
+                (valid rows go to the main file; failing rows go to
+                ``_rejected/{filename}.rejected.parquet``).
+            if_exists (str): Behaviour on filename collision in the
+                target repo.  ``"error"`` (default), ``"append"``, or
+                ``"new_version"`` (auto-suffix ``_v2``, ``_v3``, ...).
+                ``"append"`` is only supported with
+                ``create_pr=False`` because it requires a read-modify-
+                write round-trip.
+            check_remote (bool): Perform remote schema check during
+                validation.  Requires network access.
+            token (str | None): Optional HF access token.  Falls back
+                to the token cached by ``huggingface-cli login`` and
+                then to ``HF_TOKEN``.
+            classification (dict | None): Optional parquet-level
+                metadata to attach to the uploaded file.  Expected
+                keys: ``susy`` (``"SUSY"`` | ``"nonSUSY"`` | ``"mixed"``),
+                ``method`` (str), ``nmax`` (int), and ``qualifiers``
+                (dict).  When omitted, sensible defaults are inferred.
+
+        Returns:
+            dict: ``{"pr_url": str | None, "commit_url": str,
+            "file_path": str, "n_uploaded": int, "n_rejected": int,
+            "report": ValidationReport}``.
+
+        Raises:
+            RuntimeError: If ``self.offline=True``.
+            ValidationError: If validation fails and
+                ``partial_failure="strict"``.
+            FileExistsError: If the target filename exists and
+                ``if_exists="error"``.
+        """
+        if self.offline:
+            raise RuntimeError(
+                "push_vacua_to_hub requires network access "
+                "(self.offline=True)."
+            )
+        if partial_failure not in ("strict", "split"):
+            raise ValueError(
+                f"partial_failure must be 'strict' or 'split', "
+                f"got {partial_failure!r}"
+            )
+        if if_exists not in ("error", "append", "new_version"):
+            raise ValueError(
+                f"if_exists must be 'error', 'append', or 'new_version', "
+                f"got {if_exists!r}"
+            )
+
+        pd = _require_pandas()
+        pq = _require_pyarrow()
+        try:
+            import pyarrow as pa  # for Table-level metadata manipulation
+        except ImportError as e:
+            raise ImportError(
+                "The 'pyarrow' package is required for push_vacua_to_hub."
+            ) from e
+        hf_api = _require_hf_api()
+        hf_download = _require_hf_hub()
+        repo = repo_id or _resolve_vault_repo()
+
+        # 1. Client-side validation
+        report = self._validate_for_upload(
+            vacua_df, label=label, committed_by=committed_by,
+            model=model, check_remote=check_remote, repo_id=repo,
+        )
+
+        # 2. Apply partial-failure policy
+        n_total = len(vacua_df)
+        passed_idx = [r["index"] for r in report["per_row_report"] if r["passed"]]
+        failed_idx = [r["index"] for r in report["per_row_report"] if not r["passed"]]
+
+        if failed_idx and partial_failure == "strict":
+            msg = (
+                f"{len(failed_idx)}/{n_total} rows failed validation. "
+                f"Use partial_failure='split' to upload only the valid rows."
+            )
+            raise ValidationError(msg, report=report["per_row_report"])
+
+        valid_df    = vacua_df.iloc[passed_idx].reset_index(drop=True)
+        rejected_df = vacua_df.iloc[failed_idx].reset_index(drop=True) if failed_idx else None
+        if rejected_df is not None and len(rejected_df) > 0:
+            # Attach per-row error strings
+            errs = []
+            for r in report["per_row_report"]:
+                if not r["passed"]:
+                    errs.append("; ".join(r["errors"]))
+            rejected_df = rejected_df.copy()
+            rejected_df["error"] = errs
+
+        # Abort if nothing to upload
+        if len(valid_df) == 0:
+            raise ValidationError(
+                "No valid rows to upload.", report=report["per_row_report"],
+            )
+
+        # 3. Identify the authenticated HF user (for filename prefix)
+        try:
+            who = hf_api.whoami(token=token)
+            hf_username = who.get("name") or who.get("username") or "anonymous"
+        except Exception as e:
+            raise RuntimeError(
+                f"Could not identify HF user (check HF_TOKEN / huggingface-cli login): {e}"
+            ) from e
+
+        # 4. Resolve remote paths
+        identity = _extract_model_identity(model=model)
+        model_dir_remote = self._remote_model_dir(identity)
+        if model_dir_remote is None:
+            raise ValueError(
+                "Could not derive a remote model directory from the "
+                "given model.  Pass ks_id/triang_id or cicy_id "
+                "explicitly."
+            )
+
+        base_name = f"{hf_username}_{label}"
+        ext = ".parquet"
+        target_rel = f"{model_dir_remote}/community/{base_name}{ext}"
+
+        # 5. Handle filename collisions according to if_exists
+        final_rel = self._resolve_remote_filename(
+            hf_api, hf_download, repo, target_rel, if_exists=if_exists,
+            token=token,
+        )
+
+        # 6. Write the valid rows (plus pyarrow metadata) to a scratch
+        #    parquet file locally, then upload it.
+        import tempfile, time
+        cls_meta = classification or {}
+        arrow_meta = {
+            "schema_version": str(SCHEMA_VERSION),
+            "susy":           str(cls_meta.get("susy", "unknown")),
+            "method":         str(cls_meta.get("method", "unknown")),
+            "nmax":           str(cls_meta.get("nmax", "")),
+            "qualifiers":     json.dumps(cls_meta.get("qualifiers", {})),
+            "label":          label,
+            "committed_by":   committed_by,
+            "notes":          notes or "",
+            "uploaded_at":    datetime.datetime.now(
+                                  datetime.timezone.utc).isoformat(),
+        }
+        if tags:
+            arrow_meta["tags"] = json.dumps(list(tags))
+
+        def _write_with_metadata(df, path, meta):
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            existing = dict(table.schema.metadata or {})
+            existing.update({k.encode(): v.encode() for k, v in meta.items()})
+            table = table.replace_schema_metadata(existing)
+            pq.write_table(table, path)
+
+        result: Dict[str, Any] = {
+            "pr_url":       None,
+            "commit_url":   None,
+            "file_path":    final_rel,
+            "n_uploaded":   len(valid_df),
+            "n_rejected":   len(rejected_df) if rejected_df is not None else 0,
+            "report":       report,
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Valid file
+            local_main = os.path.join(tmpdir, os.path.basename(final_rel))
+            _write_with_metadata(valid_df, local_main, arrow_meta)
+
+            # Optional rejected file
+            local_rejected = None
+            rejected_rel   = None
+            if rejected_df is not None and len(rejected_df) > 0:
+                rej_name = (
+                    os.path.splitext(os.path.basename(final_rel))[0]
+                    + ".rejected" + ext
+                )
+                rejected_rel = f"{model_dir_remote}/community/_rejected/{rej_name}"
+                local_rejected = os.path.join(tmpdir, rej_name)
+                rej_meta = dict(arrow_meta)
+                rej_meta["status"] = "rejected"
+                _write_with_metadata(rejected_df, local_rejected, rej_meta)
+
+            # Upload
+            commit_msg = f"add: {final_rel} (label={label}, by={committed_by})"
+            operations = []
+            operations.append(dict(
+                local_path=local_main, path_in_repo=final_rel,
+            ))
+            if local_rejected is not None:
+                operations.append(dict(
+                    local_path=local_rejected, path_in_repo=rejected_rel,
+                ))
+
+            uploaded_paths = []
+            for op in operations:
+                ci = hf_api.upload_file(
+                    path_or_fileobj=op["local_path"],
+                    path_in_repo=op["path_in_repo"],
+                    repo_id=repo,
+                    repo_type="dataset",
+                    commit_message=commit_msg,
+                    token=token,
+                    create_pr=create_pr,
+                )
+                uploaded_paths.append(op["path_in_repo"])
+                # huggingface_hub returns a CommitInfo for direct uploads
+                # or a PR-related response when create_pr=True.
+                if create_pr and result["pr_url"] is None:
+                    pr_url = getattr(ci, "pr_url", None) or getattr(ci, "url", None)
+                    result["pr_url"] = pr_url
+                if not create_pr and result["commit_url"] is None:
+                    result["commit_url"] = getattr(ci, "commit_url", None) or getattr(ci, "oid", None)
+
+            result["file_path"]    = uploaded_paths[0]
+            result["rejected_path"] = uploaded_paths[1] if len(uploaded_paths) > 1 else None
+
+        return result
+
+    def fetch_vacua_from_hub(
+        self,
+        model: Any = None,
+        ks_id: Optional[int] = None,
+        triang_id: Optional[int] = None,
+        cicy_id: Optional[int] = None,
+        label: Optional[str] = None,
+        include_community: bool = False,
+        include_retracted: bool = False,
+        cache: bool = True,
+        repo_id: Optional[str] = None,
+        token: Optional[str] = None,
+    ) -> Any:
+        r"""
+        **Description:**
+        Download curated (and optionally community) vacuum solutions
+        for a given model from the HuggingFace vacua repo.
+
+        Args:
+            model: Optional ``flux_sector`` for identity extraction.
+            ks_id, triang_id, cicy_id: Explicit identity overrides.
+            label (str | None): If given, match only files whose name
+                starts with this label (before any ``_v{n}`` suffix).
+            include_community (bool): Also fetch files under
+                ``community/``.  Defaults to False.
+            include_retracted (bool): Include rows flagged
+                ``retracted=True`` in the returned DataFrame.
+            cache (bool): Keep downloads in the HF cache (reserved for
+                future use; ``hf_hub_download`` always caches).
+            repo_id (str | None): Target dataset repo.  Defaults to
+                :func:`_resolve_vault_repo`.
+            token (str | None): Optional HF access token.
+
+        Returns:
+            pandas.DataFrame: Concatenated rows from all matching
+            files, with an extra ``_source_path`` column identifying
+            the origin file.  Empty DataFrame if nothing matches.
+        """
+        if self.offline:
+            raise RuntimeError(
+                "fetch_vacua_from_hub requires network access "
+                "(self.offline=True)."
+            )
+        pd = _require_pandas()
+        hf_download = _require_hf_hub()
+        hf_api = _require_hf_api()
+        repo = repo_id or _resolve_vault_repo()
+
+        identity = _extract_model_identity(
+            model=model, ks_id=ks_id, triang_id=triang_id,
+            cicy_id=cicy_id,
+        )
+        model_dir = self._remote_model_dir(identity)
+        if model_dir is None:
+            raise ValueError(
+                "Could not derive a remote model directory from the "
+                "given model/identity."
+            )
+
+        # List remote files under the model directory
+        try:
+            all_files = hf_api.list_repo_files(
+                repo_id=repo, repo_type="dataset", token=token,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Could not list files in {repo}: {e}"
+            ) from e
+
+        def _matches(path: str) -> bool:
+            if not path.startswith(model_dir + "/"):
+                return False
+            if not path.endswith(".parquet"):
+                return False
+            # Curated files live directly in model_dir; community files
+            # live in model_dir/community/; _rejected/ always excluded.
+            rel = path[len(model_dir) + 1:]
+            if rel.startswith("_rejected/"):
+                return False
+            is_community = rel.startswith("community/")
+            if is_community and not include_community:
+                return False
+            if not is_community and "/" in rel:
+                return False  # nested file (shouldn't happen)
+            # Label filter
+            if label is not None:
+                name = os.path.splitext(os.path.basename(path))[0]
+                # Community files carry a "{hf_username}_" prefix; strip it
+                if is_community and "_" in name:
+                    # Find the first underscore; the rest is {label}[_v{n}]
+                    name = name.split("_", 1)[1]
+                # Accept exact label or label_v{n}
+                import re
+                if not re.match(rf"^{re.escape(label)}(_v\d+)?$", name):
+                    return False
+            return True
+
+        matching = sorted(p for p in all_files if _matches(p))
+        if not matching:
+            return pd.DataFrame()
+
+        dfs = []
+        for rp in matching:
+            try:
+                local = hf_download(
+                    repo_id=repo, filename=rp,
+                    repo_type="dataset", token=token,
+                )
+            except Exception as e:
+                print(f"[fetch_vacua_from_hub] failed to download {rp}: {e}")
+                continue
+            try:
+                df = pd.read_parquet(local)
+                df["_source_path"] = rp
+                dfs.append(df)
+            except Exception as e:
+                print(f"[fetch_vacua_from_hub] failed to parse {rp}: {e}")
+
+        if not dfs:
+            return pd.DataFrame()
+        out = _safe_concat(dfs, ignore_index=True)
+        if not include_retracted and "retracted" in out.columns:
+            out = out[~out["retracted"].fillna(False).astype(bool)].reset_index(drop=True)
+        return out
+
+    def list_hub_vacua(
+        self,
+        h11: Optional[int] = None,
+        h12: Optional[int] = None,
+        ks_id: Optional[int] = None,
+        triang_id: Optional[int] = None,
+        cicy_id: Optional[int] = None,
+        label: Optional[str] = None,
+        committed_by: Optional[str] = None,
+        include_retracted: bool = False,
+        limit: Optional[int] = None,
+        repo_id: Optional[str] = None,
+        token: Optional[str] = None,
+    ) -> Any:
+        r"""
+        **Description:**
+        Browse the remote vacua-vault catalogue.  Downloads
+        ``catalog.parquet`` from the target repo and applies boolean
+        masks following the same filter API as
+        :meth:`query_designated`.
+
+        Args:
+            h11, h12, ks_id, triang_id, cicy_id: Identity filters.
+            label (str | None): Filter by dataset label.
+            committed_by (str | None): Filter by contributor.
+            include_retracted (bool): Include retracted entries.
+            limit (int | None): Return at most this many rows.
+            repo_id (str | None): Target dataset repo.
+            token (str | None): Optional HF access token.
+
+        Returns:
+            pandas.DataFrame: Catalog rows matching the filters.
+            Empty DataFrame if the remote catalog is empty or missing.
+        """
+        if self.offline:
+            raise RuntimeError(
+                "list_hub_vacua requires network access (offline=True)."
+            )
+        pd = _require_pandas()
+        hf_download = _require_hf_hub()
+        repo = repo_id or _resolve_vault_repo()
+
+        try:
+            local = hf_download(
+                repo_id=repo, filename="catalog.parquet",
+                repo_type="dataset", token=token,
+            )
+        except Exception as e:
+            # Catalog may not exist yet on a fresh repo.
+            print(f"[list_hub_vacua] could not fetch remote catalog: {e}")
+            return pd.DataFrame()
+
+        cat = pd.read_parquet(local)
+        filters = {
+            "h11": h11, "h12": h12, "ks_id": ks_id,
+            "triang_id": triang_id, "cicy_id": cicy_id,
+            "label": label, "committed_by": committed_by,
+        }
+        for col, val in filters.items():
+            if val is not None and col in cat.columns:
+                cat = cat[cat[col] == val]
+
+        if not include_retracted and "retracted" in cat.columns:
+            cat = cat[~cat["retracted"].fillna(False).astype(bool)]
+
+        if limit is not None:
+            cat = cat.head(limit)
+
+        return cat.reset_index(drop=True)
+
+    @staticmethod
+    def _remote_model_dir(identity: Dict[str, Any]) -> Optional[str]:
+        r"""
+        Derive the per-model subdirectory on the remote vault repo from
+        an identity dict.  Returns ``None`` if the identity doesn't
+        provide enough information.
+        """
+        ks  = identity.get("ks_id", -1)
+        tr  = identity.get("triang_id", -1)
+        cic = identity.get("cicy_id", -1)
+        h12 = identity.get("h12")
+        if ks >= 0 and tr >= 0 and h12 is not None:
+            return f"tdf/h12_{h12}/ks_{ks}_tri_{tr}"
+        if cic >= 0:
+            return f"cicy/cicy_{cic}"
+        return None
+
+    @staticmethod
+    def _resolve_remote_filename(
+        hf_api: Any,
+        hf_download: Any,
+        repo: str,
+        target_rel: str,
+        if_exists: str,
+        token: Optional[str] = None,
+    ) -> str:
+        r"""
+        Implement the ``if_exists`` collision policy for a target remote
+        filename.  Returns the final ``path_in_repo`` to use.
+
+        - ``"error"``: raise if the file already exists.
+        - ``"append"``: return the existing path (caller is responsible
+          for appending — this helper just signals).
+        - ``"new_version"``: auto-suffix ``_v2``, ``_v3``, ... until a
+          free name is found.
+        """
+        # Probe existence by trying to download with a head-only call
+        # (hf_hub_download returns file path if exists).  List files
+        # via HfApi for a cleaner existence check.
+        try:
+            files = set(hf_api.list_repo_files(repo_id=repo, repo_type="dataset",
+                                                token=token))
+        except Exception:
+            # Could be empty / unreachable repo; treat as "no collision".
+            files = set()
+
+        if target_rel not in files:
+            return target_rel
+
+        if if_exists == "error":
+            raise FileExistsError(
+                f"{target_rel!r} already exists in {repo!r}. "
+                f"Pick a different label or use "
+                f"if_exists='new_version' (auto-suffix) or "
+                f"if_exists='append' (merge)."
+            )
+        if if_exists == "append":
+            return target_rel
+        # "new_version" → find the first free _vN suffix
+        import re
+        stem, ext = os.path.splitext(target_rel)
+        base_stem = re.sub(r"_v\d+$", "", stem)  # strip any existing _vN
+        n = 2
+        while f"{base_stem}_v{n}{ext}" in files:
+            n += 1
+        return f"{base_stem}_v{n}{ext}"
+
     def designate_vacua(
         self,
         vacua_df: Any,
@@ -3345,18 +4013,26 @@ class CYDatabase:
         self,
         designated_id: int,
         reason: str,
+        retracted_by: Optional[str] = None,
     ) -> None:
         r"""
         **Description:**
         Retract a designated solution.  The solution is **not** deleted —
-        it remains in the catalog and shard with ``retracted=True`` and
-        the given reason.  Retracted solutions are excluded from
-        :meth:`query_designated` by default.
+        it remains in the catalog and shard with ``retracted=True``,
+        ``retraction_reason``, and ``retracted_at`` (timestamp) set.
+        Retracted solutions are excluded from :meth:`query_designated` by
+        default.
+
+        A row is also appended to ``<vault>/retractions.parquet`` as a
+        permanent audit trail that survives any future catalog rebuild.
 
         Args:
             designated_id (int): The ID of the solution to retract.
             reason (str): Explanation for the retraction (e.g.
                 ``"Bug in jaxvacua v0.3.1 period computation"``).
+            retracted_by (str | None): Optional identifier of the
+                person/agent performing the retraction (ORCID, HF
+                username, email).  Recorded in the audit trail only.
 
         Raises:
             KeyError: If the designated_id is not found.
@@ -3375,12 +4051,156 @@ class CYDatabase:
         if not mask.any():
             raise KeyError(f"Designated ID {designated_id} not found in catalog.")
 
-        dcat.loc[mask, "retracted"] = True
+        now = pd.Timestamp.now(tz="UTC")
+        dcat.loc[mask, "retracted"]         = True
         dcat.loc[mask, "retraction_reason"] = reason
+        dcat.loc[mask, "retracted_at"]      = now
 
         catalog_path = self._designated_dir / "designated_vacua_catalog.parquet"
         dcat.to_parquet(catalog_path, index=False)
         self._designated_catalog = dcat
+
+        # Append to <vault>/retractions.parquet (audit trail)
+        audit_row = {
+            "designated_id": int(designated_id),
+            "reason":        reason,
+            "retracted_at":  now,
+            "retracted_by":  retracted_by or "",
+        }
+        audit_path = _resolve_vault_dir() / "retractions.parquet"
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        if audit_path.exists():
+            existing = pd.read_parquet(audit_path)
+            audit_df = _safe_concat([existing, pd.DataFrame([audit_row])],
+                                    ignore_index=True)
+        else:
+            audit_df = pd.DataFrame([audit_row])
+        audit_df.to_parquet(audit_path, index=False)
+
+    def purge_retracted(
+        self,
+        older_than: Optional[str] = "30d",
+        dry_run: bool = True,
+        confirm: bool = False,
+        archive: bool = False,
+    ) -> list:
+        r"""
+        **Description:**
+        Irreversibly delete retracted designated solutions.
+
+        Selects rows in the designated catalog with ``retracted=True``
+        and (if *older_than* is given) ``retracted_at`` older than the
+        threshold.  Prints a summary of what would be deleted; only acts
+        if both ``dry_run=False`` and ``confirm=True``.
+
+        Args:
+            older_than (str | None): Pandas timedelta string (e.g.
+                ``"30d"``, ``"90d"``, ``"6h"``) or ``None`` to ignore
+                age.  Defaults to ``"30d"``.
+            dry_run (bool): If True (default), print what would be
+                deleted and return the catalog subset — no files are
+                touched.
+            confirm (bool): Must be True alongside ``dry_run=False`` to
+                actually delete.  Guardrail against accidental data
+                loss.
+            archive (bool): If True, copy each shard to
+                ``<vault>/archive/`` before deletion.  Defaults to
+                False.
+
+        Returns:
+            list: List of ``designated_id`` values selected for (or,
+            actually, deleted in) the purge.
+        """
+        pd = _require_pandas()
+        import shutil
+
+        self._ensure_designated_catalog()
+        dcat = self._designated_catalog
+        if dcat is None or len(dcat) == 0:
+            print("[purge_retracted] No designated catalog entries.")
+            return []
+
+        if "retracted" not in dcat.columns:
+            print("[purge_retracted] Catalog has no 'retracted' column — nothing to purge.")
+            return []
+
+        mask = dcat["retracted"].fillna(False).astype(bool)
+        if older_than is not None and "retracted_at" in dcat.columns:
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(older_than)
+            ts = pd.to_datetime(dcat["retracted_at"], errors="coerce", utc=True)
+            mask = mask & (ts < cutoff)
+
+        selected = dcat[mask]
+        if len(selected) == 0:
+            print("[purge_retracted] No retracted entries match the criteria.")
+            return []
+
+        ids = [int(x) for x in selected["designated_id"].tolist()]
+        print(f"[purge_retracted] {len(selected)} entries selected for purge:")
+        for _, row in selected.iterrows():
+            print(f"  id={row.get('designated_id')} label={row.get('label')!r} "
+                  f"retracted_at={row.get('retracted_at')}")
+
+        if dry_run:
+            print("[purge_retracted] dry_run=True — no files touched. "
+                  "Pass dry_run=False, confirm=True to actually delete.")
+            return ids
+        if not confirm:
+            raise RuntimeError(
+                "purge_retracted refuses to run with dry_run=False "
+                "unless confirm=True is passed explicitly."
+            )
+
+        # Each shard may contain multiple designated rows; surgically
+        # remove just the purged rows and rewrite (or delete) each shard.
+        vault = _resolve_vault_dir()
+        archive_dir = vault / "archive"
+        if archive:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+
+        shard_to_ids: Dict[Path, List[int]] = {}
+        for _, row in selected.iterrows():
+            try:
+                shard_dir = self._resolve_vacua_dir(
+                    h11       = row.get("h11"),
+                    h12       = row.get("h12"),
+                    ks_id     = row.get("ks_id", -1),
+                    triang_id = row.get("triang_id", -1),
+                    cicy_id   = row.get("cicy_id", -1),
+                    model_name= row.get("model_name"),
+                )
+            except Exception as e:
+                print(f"[purge_retracted] could not resolve shard for id={row['designated_id']}: {e}")
+                continue
+            shard_path = shard_dir / "shard_0.parquet"
+            shard_to_ids.setdefault(shard_path, []).append(int(row["designated_id"]))
+
+        deleted = []
+        for shard_path, ids in shard_to_ids.items():
+            if not shard_path.exists():
+                continue
+            if archive:
+                rel = f"{shard_path.parent.name}__{shard_path.name}"
+                shutil.copy2(shard_path, archive_dir / rel)
+            shard_df = pd.read_parquet(shard_path)
+            keep = ~shard_df["designated_id"].isin(ids)
+            shard_df = shard_df[keep]
+            if len(shard_df) > 0:
+                shard_df.to_parquet(shard_path, index=False)
+            else:
+                shard_path.unlink()
+            deleted.extend(ids)
+
+        # Drop purged rows from catalog
+        dcat = dcat[~mask].reset_index(drop=True)
+        catalog_path = self._designated_dir / "designated_vacua_catalog.parquet"
+        dcat.to_parquet(catalog_path, index=False)
+        self._designated_catalog = dcat
+
+        print(f"[purge_retracted] Purged {len(deleted)} entry(ies) across "
+              f"{len(shard_to_ids)} shard(s). Audit trail remains in "
+              f"{vault}/retractions.parquet")
+        return deleted
 
 
 # ---------------------------------------------------------------------------
