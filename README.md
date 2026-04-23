@@ -39,17 +39,47 @@ Currently, the code supports Python versions `>= 3.12`, both with and without JA
 The required packages, which are listed in `setup.py`, are automatically installed with the above installation process. Otherwise, they have to be installed manually.
 
 
-> [!CAUTION]
-> JAXVacua requires `float64` support. For this reason, using [JAX Metal](https://developer.apple.com/metal/jax/) on Mac computers is currently not suitable to run JAXVacua.
+> [!NOTE]
+> JAXVacua defaults to `float64` (double precision) but also supports `float32` via `jvc.set_precision("float32")` or the `JAXVACUA_PRECISION=float32` environment variable. On Apple Silicon, [JAX Metal](https://developer.apple.com/metal/jax/) does not currently support complex-number operations, so `jaxvacua` detects a Metal backend on import and transparently falls back to the CPU backend for the complex-arithmetic code paths. A dedicated conda environment is provided in [environment_metal.yml](environment_metal.yml).
 
-
-> [!CAUTION]
-> When using the [CYTools](https://cy.tools) docker image, check support for different versions of numpy. 
 
 
 ## Documentation
 
-The documentation of this repository is generated with [sphinx](https://www.sphinx-doc.org/en/master/). Following the installation of the `jaxvacua` package, install the additional requirements in [documentation/requirements.txt](documentation/requirements.txt) by running `pip install -r requirements.txt`. Inside the [documentation](documentation) folder, run `make html` to generate the html version of the documentation, which can afterwards be found in [documentation/build/html](documentation/build/html).
+The documentation of this repository is generated with [sphinx](https://www.sphinx-doc.org/en/master/). Following the installation of the `jaxvacua` package, install the additional requirements in [documentation/requirements.txt](documentation/requirements.txt) by running `pip install -r documentation/requirements.txt` from the repository root. Then `cd documentation && make html` generates the html version, which is placed in [documentation/build/html](documentation/build/html).
+
+
+## Quick start
+
+A geometry can be loaded in several ways — pick whichever is most convenient:
+
+**1. Bundled local models.** A small selection of Kreuzer-Skarke (`KS`) and complete-intersection (`CICY`) models ships with the package under [jaxvacua/models/](jaxvacua/models/), indexed by $h^{1,2}$ and a `model_ID`:
+
+```python
+import jaxvacua as jvc
+model = jvc.FluxEFT(h12=2, model_ID=1)
+```
+
+**2. Directly from CYTools.** Given a [`cytools.CalabiYau`](https://cy.tools) object, the topological data at LCS is extracted automatically:
+
+```python
+# Assuming `cy` is a cytools.CalabiYau object
+tree = jvc.lcs_tree.from_cytools(cy, maximum_degree=1)
+model = jvc.FluxEFT(lcs_tree=tree)
+```
+
+**3. From the CY database (new).** The [`cy-database`](https://huggingface.co/datasets/aschachner/cy-database) HuggingFace dataset hosts precomputed topological data for millions of Calabi-Yau geometries. The `TDFDatabase` / `CICYDatabase` interface downloads only the catalog (~10 MB) upfront and pulls individual model shards on demand:
+
+```python
+from jaxvacua.database import TDFDatabase
+db = TDFDatabase()
+df = db.query(h12=2, has_conifolds=True)             # catalog-only filter
+model = db.load_model(ks_id=int(df.iloc[0]["ks_id"]),
+                      triang_id=int(df.iloc[0]["triang_id"]),
+                      include_gv=True, include_conifolds=True)
+```
+
+For offline / HPC use, pass `offline=True`; cached shards are then served locally. Flux-vacuum solutions can be stored in a local vacua vault and, optionally, pushed to the community [`vacua_vault`](https://huggingface.co/datasets/aschachner/vacua_vault) repository. See the tutorials under [`05_database_and_infrastructure/`](documentation/source/notebooks/05_database_and_infrastructure/) for a full walkthrough.
 
 
 ## Repository structure
