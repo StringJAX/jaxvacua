@@ -61,6 +61,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest chex "jaxpolylog>=0.1.0"
+          # platformdirs is a transitive dep of cytools not declared by the
+          # cytools PyPI wheel; install explicitly to avoid ModuleNotFoundError.
+          pip install platformdirs
           # setup.py picks up cytools, gurobipy, python-flint
           pip install -e .
 
