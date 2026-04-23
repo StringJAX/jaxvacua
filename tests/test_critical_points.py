@@ -21,6 +21,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import math
+import pytest
 from util import *
 
 jax.config.update("jax_enable_x64", True)
@@ -156,6 +157,7 @@ class TestCriticalPointFinder(TestCase):
     # Newton solver
     # ------------------------------------------------------------------
 
+    @pytest.mark.slow
     def test_newton_solver_converges(self):
         r"""
         **Description:**
@@ -207,6 +209,7 @@ class TestCriticalPointFinder(TestCase):
     # Classification
     # ------------------------------------------------------------------
 
+    @pytest.mark.slow
     def test_classify_solution_keys(self):
         r"""
         **Description:**
@@ -258,6 +261,7 @@ class TestCriticalPointFinder(TestCase):
             self.assertIn('is_susy', r)
             self.assertIn('is_minimum', r)
 
+    @pytest.mark.slow
     def test_sample_critical_points_scipy(self):
         r"""
         **Description:**
@@ -270,6 +274,7 @@ class TestCriticalPointFinder(TestCase):
 
         self.assertIsInstance(results, list)
 
+    @pytest.mark.slow
     def test_sample_critical_points_returns_non_susy(self):
         r"""
         **Description:**
@@ -327,6 +332,7 @@ class TestCriticalPointFinder(TestCase):
     # Vectorised optax solver
     # ------------------------------------------------------------------
 
+    @pytest.mark.slow
     def test_optax_batch_solver_output_shapes(self):
         r"""
         **Description:**
@@ -349,6 +355,7 @@ class TestCriticalPointFinder(TestCase):
             self.assertEqual(conv_out.shape, (n,))
             self.assertTrue(np.all(np.isfinite(x_out)))
 
+    @pytest.mark.slow
     def test_optax_batch_residuals_decrease(self):
         r"""
         **Description:**
@@ -371,6 +378,7 @@ class TestCriticalPointFinder(TestCase):
             # Median residual should decrease with more steps
             self.assertLessEqual(np.median(res_1000), np.median(res_100))
 
+    @pytest.mark.slow
     def test_sample_critical_points_adam_v(self):
         r"""
         **Description:**
@@ -384,6 +392,7 @@ class TestCriticalPointFinder(TestCase):
             optax_steps=500, verbose=False)
         self.assertIsInstance(results, list)
 
+    @pytest.mark.slow
     def test_sample_critical_points_hybrid(self):
         r"""
         **Description:**

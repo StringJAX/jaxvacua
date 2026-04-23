@@ -1063,6 +1063,7 @@ class TestDataSampler(TestCase):
             )
             chex.assert_shape(out_half, (self.model.n_fluxes,))
 
+    @pytest.mark.slow
     def test_ISD_sampling_FH_modes(self):
         r"""
         **Description:**

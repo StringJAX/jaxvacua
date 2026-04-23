@@ -54,6 +54,7 @@
 import sys, os, warnings
 import jax
 import chex
+import pytest
 from functools import partial
 from scipy.optimize import root
 from util import *
@@ -258,6 +259,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_W_gradients(self):
         r"""
         **Description:**
@@ -498,6 +500,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_DW(self):
         r"""
         **Description:**
@@ -606,6 +609,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_dDW(self):
         r"""
         **Description:**
@@ -888,6 +892,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_DDW(self):
         r"""
         **Description:**
@@ -1241,6 +1246,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_V(self):
         r"""
         **Description:**
@@ -1510,6 +1516,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_dV_complex(self):
         r"""
         **Description:**
@@ -1603,6 +1610,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_ddV_complex(self):
         r"""
         **Description:**
@@ -1674,6 +1682,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_DDW_matrix(self):
         r"""
         **Description:**
@@ -1735,6 +1744,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_mass_matrix(self):
         r"""
         **Description:**
@@ -1837,6 +1847,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_projection_fluxes(self):
         r"""
         **Description:**
@@ -2002,6 +2013,7 @@ class TestHessianSUGRA(TestCase):
     # ------------------------------------------------------------------
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_hessian_SUGRA_vs_general_noscale(self):
         r"""
         **Description:**
@@ -2022,6 +2034,7 @@ class TestHessianSUGRA(TestCase):
             self.assertAllClose(fn_ref(), fn_sugra(), atol=1e-10)
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_hessian_SUGRA_vs_general_full(self):
         r"""
         **Description:**
@@ -2059,6 +2072,7 @@ class TestHessianSUGRA(TestCase):
         chex.assert_shape(H, (2 * self.n, 2 * self.n))
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_hessian_SUGRA_hermitian_mixed_block(self):
         r"""
         **Description:**

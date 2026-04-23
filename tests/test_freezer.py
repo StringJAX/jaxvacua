@@ -16,7 +16,6 @@ import sys, os, warnings, unittest
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 from util import *
 
 jax.config.update("jax_enable_x64", True)
@@ -103,7 +102,6 @@ class TestFreezerAbstract(TestCase):
 #  TestConifoldFreezer
 # ==============================================================================
 
-@pytest.mark.requires_cytools
 @unittest.skipIf(
     _MODEL is None,
     f"Conifold model could not be loaded: {_MODEL_LOAD_ERROR}",

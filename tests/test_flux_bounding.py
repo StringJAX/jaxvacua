@@ -16,6 +16,7 @@ import sys, os, warnings
 import jax
 import numpy as np
 import jax.numpy as jnp
+import pytest
 from functools import partial
 from util import *
 
@@ -154,6 +155,7 @@ class TestFluxBounding(TestCase):
             msg="bounds_initialized should be False before any bound computation",
         )
 
+    @pytest.mark.slow
     def test_bounds_initialized_after_compute(self):
         r"""**Description:**
         After calling :func:`compute_eigenvalue_bounds`, the
@@ -335,6 +337,7 @@ class TestFluxBounding(TestCase):
     #  6. newton_refine_batch
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_newton_refine_batch_shapes(self):
         r"""**Description:**
         Verifies that :func:`newton_refine_batch` returns the correct
@@ -359,6 +362,7 @@ class TestFluxBounding(TestCase):
         chex.assert_shape(tau_out, (N,))
         chex.assert_shape(residuals, (N,))
 
+    @pytest.mark.slow
     def test_newton_refine_batch_convergence(self):
         r"""**Description:**
         Verifies convergence of :func:`newton_refine_batch` using the
@@ -445,6 +449,7 @@ class TestFluxBounding(TestCase):
     #  7. isd_refine_batch
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_isd_refine_batch_shapes(self):
         r"""**Description:**
         Verifies that :func:`isd_refine_batch` returns arrays with
@@ -704,6 +709,7 @@ class TestFluxBounding(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_precompute_isd_data(self):
         r"""
         **Description:**
@@ -771,6 +777,7 @@ class TestFluxBounding(TestCase):
     #  14. Bound checking — individual bounds
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_bound_checking_at_solution(self):
         r"""
         **Description:**
@@ -928,6 +935,7 @@ class TestFluxBounding(TestCase):
         # Must return a list (possibly empty for Nmax=2)
         self.assertIsInstance(results, list)
 
+    @pytest.mark.slow
     def test_enumerate_fluxes_return_moduli(self):
         r"""
         **Description:**
@@ -1055,6 +1063,7 @@ class TestClusterRoundTrip(TestCase):
         )
         return info, results
 
+    @pytest.mark.slow
     def test_enumerate_roundtrip(self):
         r"""
         **Description:**
@@ -1125,6 +1134,7 @@ class TestClusterRoundTrip(TestCase):
                     f"flux violates tadpole: {tad} > Nmax={self.bf.Nmax}",
                 )
 
+    @pytest.mark.slow
     def test_missing_chunks(self):
         r"""
         **Description:**
@@ -1153,6 +1163,7 @@ class TestClusterRoundTrip(TestCase):
             self.assertIsInstance(results, list)
             # Partial results should still be a list (possibly empty)
 
+    @pytest.mark.slow
     def test_merge_with_database_designate(self):
         r"""
         **Description:**

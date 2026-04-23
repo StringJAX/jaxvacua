@@ -29,12 +29,6 @@ from itertools import permutations
 from math import gcd
 from functools import reduce
 
-# `jaxvacua.conifold_utils` imports cytools + python-flint at module level, so
-# the entire test module requires those installed (even the pure-integer tests
-# below). Marker is consumed by .github/workflows/ci.yml — see
-# workflows/stringjax/jaxvacua_ci.md.
-pytestmark = pytest.mark.requires_cytools
-
 from util import *
 
 sys.path.append("./../")

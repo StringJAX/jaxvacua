@@ -14,6 +14,7 @@
 
 import sys, os, warnings
 import jax
+import pytest
 from functools import partial
 from util import *
 
@@ -144,6 +145,7 @@ class TestPeriodSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_ISD(self):
         r"""**Description:**
 
@@ -235,6 +237,7 @@ class TestPeriodSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_gauge_kinetic_matrix(self):
         r"""**Description:**
 
@@ -475,6 +478,7 @@ class TestPeriodSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_rest(self):
         r"""**Description:**
 

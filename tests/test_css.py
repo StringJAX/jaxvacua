@@ -14,6 +14,7 @@
 
 import sys, os, warnings
 import jax
+import pytest
 from functools import partial
 from scipy.optimize import root
 from util import *
@@ -571,6 +572,7 @@ class TestCSSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_ISD(self):
         r"""**Description:**
         Tests the imaginary self-dual (ISD) matrix :math:`\mathcal{M}` and
@@ -662,6 +664,7 @@ class TestCSSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_gauge_kinetic_matrix(self):
         r"""**Description:**
         Tests the gauge kinetic matrix :math:`\mathcal{N}` and its derivatives

@@ -7,6 +7,8 @@ os.environ.setdefault("JAX_ENABLE_X64", "1")
 import jax  # noqa: E402  (import after env-var set on purpose)
 jax.config.update("jax_enable_x64", True)
 
+import pytest  # noqa: E402
+
 _tests_dir = Path(__file__).resolve().parent
 if str(_tests_dir) not in sys.path:
     sys.path.insert(0, str(_tests_dir))
@@ -17,3 +19,13 @@ def pytest_configure(config):
     print(f"\n*** jaxpolylog: {jaxpolylog.__file__}")
     print(f"*** has jax_polylog_vmap: {hasattr(jaxpolylog, 'jax_polylog_vmap')}")
     print(f"*** sys.path[0:5]: {sys.path[:5]}")
+
+
+def pytest_collection_modifyitems(config, items):
+    # Tests following the "__with_jit" naming convention pay the full
+    # JAX tracing + XLA compile cost and are auto-routed to the slow
+    # suite. Covers both plain "test_foo__with_jit" and parametrized
+    # "test_foo__with_jit[case-1]". See workflows/stringjax/jaxvacua_ci.md.
+    for item in items:
+        if item.name.endswith("__with_jit") or "__with_jit[" in item.name:
+            item.add_marker(pytest.mark.slow)

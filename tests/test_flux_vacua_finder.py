@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import chex
+import pytest
 from functools import partial
 from util import *
 
@@ -153,6 +154,7 @@ class TestFluxVacuaFinder(TestCase):
         chex.assert_shape(flux_new, (4 * (self.h12 + 1),))
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_linearised_shifts_H_finiteness(self):
         r"""**Description:**
         The linearised shift must produce finite moduli.  If the linear
@@ -307,6 +309,7 @@ class TestFluxVacuaFinder(TestCase):
                             msg="dispatch ISD flux must match direct call")
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_linearised_shifts_dispatch_Hflux(self):
         r"""**Description:**
         The dispatch function with ``mode="Hflux"`` must produce the same
@@ -368,6 +371,7 @@ class TestFluxVacuaFinder(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_newton_method_shapes(self):
         r"""**Description:**
         Verifies the output shapes of :func:`newton_method_flux_vacua`.
@@ -394,6 +398,7 @@ class TestFluxVacuaFinder(TestCase):
         chex.assert_shape(res, ())
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_newton_method_convergence(self):
         r"""**Description:**
         Tests that Newton's method converges to a known SUSY vacuum.
