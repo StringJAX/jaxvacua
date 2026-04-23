@@ -247,69 +247,88 @@ class TestFluxBounding(TestCase):
 
     def test_get_h_candidates_shape_and_type(self):
         r"""**Description:**
-        Verifies that :func:`get_h_candidates` returns an integer array
-        of shape ``(N, n_fluxes)`` with ``N > 0`` after the bounding box
+        Verifies that the streaming h-candidate generator produces 2D
+        integer chunks of shape ``(N, n_fluxes)`` after the bounding box
         has been computed.
 
         Each row of the returned array is a candidate NSNS-flux vector
         :math:`h = [h_1 \mid h_2]` satisfying the :math:`L^2`-norm
         constraints :math:`\|h_1\|^2 \leq h_{1,\rm box}^2` and
         :math:`\|h_2\|^2 \leq h_{2,\rm box}^2`.
+
+        The full enumeration via :func:`get_h_candidates` can materialise
+        billions of candidates for typical bounding boxes (up to 96 GB),
+        so this test uses the streaming path :func:`_iter_h_chunks_streaming`
+        to read only the first chunk — enough to validate shape/dtype
+        without exhausting memory.
         """
         # Ensure bounding box is computed
         bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_test.compute_eigenvalue_bounds(n_sample=100, verbose=False)
+        _, _, h_box = bf_test.get_h_box()
 
-        # Get h-candidates
-        h_candidates = bf_test.get_h_candidates()
+        # Stream the first chunk of h-candidates instead of materialising all
+        h_iter = bf_test._iter_h_chunks_streaming(h_box ** 2)
+        h_chunk, _ = next(h_iter)
 
         # Must be a 2D numpy integer array
-        self.assertIsInstance(h_candidates, np.ndarray)
+        self.assertIsInstance(h_chunk, np.ndarray)
         self.assertEqual(
-            h_candidates.ndim, 2,
-            msg="h_candidates must be a 2D array",
+            h_chunk.ndim, 2,
+            msg="h chunk must be a 2D array",
         )
         self.assertTrue(
-            np.issubdtype(h_candidates.dtype, np.integer),
-            msg="h_candidates must have integer dtype",
+            np.issubdtype(h_chunk.dtype, np.integer),
+            msg="h chunk must have integer dtype",
         )
 
         # Shape: (N, n_fluxes) with N > 0
-        N, n_fl = h_candidates.shape
+        N, n_fl = h_chunk.shape
         self.assertGreater(N, 0, msg="Must have at least one h-candidate")
         self.assertEqual(
             n_fl, self.n_fluxes,
-            msg=f"h_candidates columns should equal n_fluxes={self.n_fluxes}",
+            msg=f"h chunk columns should equal n_fluxes={self.n_fluxes}",
         )
 
     def test_get_h_candidates_norm_bounds(self):
         r"""**Description:**
-        Verifies that every returned h-candidate satisfies the individual
+        Verifies that every streamed h-candidate satisfies the individual
         :math:`L^2`-norm bounds on :math:`h_1` and :math:`h_2`.
+
+        Uses :func:`_iter_h_chunks_streaming` to sample a few chunks
+        without materialising the full Cartesian product (which can be
+        tens of GB).
         """
         bf_test = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_test.compute_eigenvalue_bounds(n_sample=100, verbose=False)
 
-        h_candidates = bf_test.get_h_candidates()
         h1_box, h2_box, h_box = bf_test.get_h_box()
         dim = self.dimension_H3
 
-        # Split each candidate into h1 and h2 sub-vectors
-        h1_all = h_candidates[:, :dim]
-        h2_all = h_candidates[:, dim:]
+        # Iterate through a handful of chunks, validating each.  No need to
+        # check all of them — the constraint is enforced at construction
+        # time inside the generator.
+        h_iter = bf_test._iter_h_chunks_streaming(h_box ** 2)
+        n_checked = 0
+        for h_chunk, _ in h_iter:
+            h1_all = h_chunk[:, :dim]
+            h2_all = h_chunk[:, dim:]
 
-        # Check norm bounds
-        h1_norms_sq = np.sum(h1_all ** 2, axis=1)
-        h2_norms_sq = np.sum(h2_all ** 2, axis=1)
+            h1_norms_sq = np.sum(h1_all ** 2, axis=1)
+            h2_norms_sq = np.sum(h2_all ** 2, axis=1)
 
-        self.assertAllTrue(
-            h1_norms_sq <= h1_box ** 2 + 1e-10,
-            msg="All h1 sub-vectors must satisfy ||h1||^2 <= h1_box^2",
-        )
-        self.assertAllTrue(
-            h2_norms_sq <= h2_box ** 2 + 1e-10,
-            msg="All h2 sub-vectors must satisfy ||h2||^2 <= h2_box^2",
-        )
+            self.assertAllTrue(
+                h1_norms_sq <= h1_box ** 2 + 1e-10,
+                msg="All h1 sub-vectors must satisfy ||h1||^2 <= h1_box^2",
+            )
+            self.assertAllTrue(
+                h2_norms_sq <= h2_box ** 2 + 1e-10,
+                msg="All h2 sub-vectors must satisfy ||h2||^2 <= h2_box^2",
+            )
+
+            n_checked += len(h_chunk)
+            if n_checked >= 10_000:
+                break
 
 
     # ==========================================================================

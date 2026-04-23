@@ -2122,7 +2122,7 @@ class bounded_fluxes:
 
     def get_h_candidates(
         self,
-        max_candidates: int | None = None,
+        max_candidates: int | None = 1_000_000,
     ) -> np.ndarray:
         r"""
 
