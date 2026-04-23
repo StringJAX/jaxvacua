@@ -55,24 +55,55 @@ The documentation of this repository is generated with [sphinx](https://www.sphi
 ## Repository structure
 
     .
-    ├── data
-    │   └── models
-    │       └── CICY              
-    │       └── KS
-    ├── jaxvacua
-    │   └── complex_structure_sector.py
-    │   └── flux_sector.py
-    │   └── periods.py
-    │   └── util.py
-    ├── documentation
-    │   └── build
-    │   └── source
-    ├── notebooks
-    ├── tests
-    ├── LICENSE
-    ├── README.md
+    ├── jaxvacua/                       # main package
+    │   ├── __init__.py                 # backend detection, precision setup (float32/float64)
+    │   ├── periods.py                  # period vector, prepotential, Kähler potential
+    │   ├── css.py                      # complex structure sector (Kähler geometry, gauge kinetic matrix)
+    │   ├── flux_eft.py                 # FluxEFT: superpotential, F-terms, scalar potential, Hessian
+    │   ├── flux_vacua_finder.py        # FluxVacuaFinder: Newton solver, vacuum sampling
+    │   ├── flux_bounding.py            # bounded_fluxes: flux enumeration, cluster parallelisation
+    │   ├── flux_utils.py               # PFV algebra (flux ↔ PFV ↔ moduli)
+    │   ├── critical_points.py          # CriticalPointFinder
+    │   ├── sampling.py                 # moduli / flux sampling, ISD sampling
+    │   ├── freezer.py                  # Freezer / ConifoldFreezer: light-field EFT
+    │   ├── conifold_utils.py           # Conifold class, basis changes, find_conifolds
+    │   ├── one_modulus_models.py       # closed-form hypergeometric models
+    │   ├── lcs.py                      # lcs_tree: topological data container
+    │   ├── database.py                 # CYDatabase / TDFDatabase / CICYDatabase, vacua vault API
+    │   ├── cytools_interface.py        # CYTools interface
+    │   ├── util.py, utils_jaxvacua.py  # utilities
+    │   ├── vacua_vault/                # vacua vault subpackage + CLI (jaxvacua-vault)
+    │   └── models/                     # bundled pre-computed model data (grouped by h12)
+    ├── documentation/
+    │   ├── source/
+    │   │   ├── intro/                  # physics / maths background
+    │   │   ├── applications/           # papers using jaxvacua
+    │   │   ├── notebooks/              # tutorials (7 thematic subdirs, see below)
+    │   │   └── jaxvacua.*.rst          # API reference pages
+    │   ├── build/                      # generated html (gitignored)
+    │   └── requirements.txt
+    ├── tests/                          # pytest suite (test_periods, test_css, test_flux_eft, ...)
+    ├── src/jaxpolylog/                 # companion package (poly-logarithm / hypergeometric utilities)
     ├── setup.py
-    
+    ├── environment.yml                 # conda env (CPU)
+    ├── environment_metal.yml           # conda env (Apple Silicon, falls back to CPU for complex)
+    ├── pytest.ini
+    ├── CHANGELOG.md
+    ├── CITATION.cff
+    ├── LICENSE
+    └── README.md
+
+Tutorials are grouped by theme under [documentation/source/notebooks/](documentation/source/notebooks/):
+
+    notebooks/
+    ├── 01_basics/                      # JAX intro, jaxvacua overview, CYTools interface
+    ├── 02_vacuum_finding/              # flux vacua finder, ISD sampling
+    ├── 03_flux_bounding/               # bounded fluxes, cluster parallelisation
+    ├── 04_geometry_and_limits/         # CICY, sampling, moduli limits, conifolds, monodromy, PFV
+    ├── 05_database_and_infrastructure/ # database interface, vacua vault, performance benchmarks
+    ├── 06_analysis_and_tools/          # threshold ISD, freezer, visualisation, Hessian analysis
+    └── 07_physics_pipelines/           # hypergeometric models, landscape statistics, W0 scan
+
 
 
 ## Contact
