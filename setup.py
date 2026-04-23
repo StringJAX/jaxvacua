@@ -11,13 +11,8 @@ setup(
     author_email='as3475@cornell.edu',
     url='https://github.com/AndreasSchachner/jaxvacua',
     license='GPL-3.0-or-later',
-    packages=['jaxvacua', 'jaxvacua.vacua_vault'],
+    packages=['jaxvacua'],
     python_requires='>=3.12',
-    entry_points={
-        'console_scripts': [
-            'jaxvacua-vault = jaxvacua.vacua_vault.__main__:main',
-        ],
-    },
     install_requires=[
         'numpy',
         'jax',
