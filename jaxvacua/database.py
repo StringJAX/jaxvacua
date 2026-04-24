@@ -2254,9 +2254,10 @@ class CYDatabase:
 
         Path layout:
 
-        - Local KS / CICY models (no ks_id / cicy_id in metadata) →
-          ``<vault>/KS/h12_{h12}_model_{model_ID}/`` (analogous for
-          CICY).
+        - Local KS models (bundled; loaded via ``(h12, model_ID)``) →
+          ``<vault>/KS/h12_{h12}_model_{model_ID}/``.  Local CICY
+          support was removed — CICY geometries are now always fetched
+          from the HuggingFace database.
         - HF-downloaded TDF models → ``<vault>/tdf/ks_{ks_id}_tri_{triang_id}/``.
         - HF-downloaded CICY models → ``<vault>/cicy/cicy_{cicy_id}/``.
         - Fallback (custom model) → ``<vault>/custom/{model_hash}/``.
@@ -2288,8 +2289,10 @@ class CYDatabase:
         if cicy_id >= 0:
             return vault / "cicy" / f"cicy_{cicy_id}"
 
-        # Local models: extract model_ID from auto-generated name
-        # ("local_h12_{h12}_ID_{mid}")
+        # Local models are bundled KS models only (local CICY support
+        # was removed — CICY geometries are now always loaded from the
+        # HuggingFace database).  Extract the model_ID from the
+        # auto-generated name ("local_h12_{h12}_ID_{mid}").
         model_ID = None
         if name.startswith("local_h12_") and "_ID_" in name:
             try:
@@ -2298,11 +2301,7 @@ class CYDatabase:
                 model_ID = None
 
         if h12 is not None and model_ID is not None:
-            # Distinguish KS from CICY for local models via stored tree
-            # metadata if available; default to KS.
-            tree = getattr(getattr(model, "periods", None), "lcs_tree", model)
-            model_type = getattr(tree, "model_type", None) or "KS"
-            return vault / model_type / f"h12_{h12}_model_{model_ID}"
+            return vault / "KS" / f"h12_{h12}_model_{model_ID}"
 
         # Fallback: hash-keyed custom model
         return vault / "custom" / (mhash or "unknown")
