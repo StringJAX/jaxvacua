@@ -1872,21 +1872,22 @@ class bounded_fluxes:
         self.f1tilde      = self.f1 - self.c0 * self.h1
         self.f1tilde_norm = self.compute_norm(self.f1tilde)
 
-    def _dump_nan_eigenvalue_diagnostic(
+    def _dump_eigenvalue_diagnostic(
         self,
-        bad,
+        bad_arrays,
         moduli_batch,
         lm_np,
         mu_np,
         tmu_np,
     ) -> None:
-        r"""Print a platform/state summary when eigenvalue arrays are all-NaN.
+        r"""Print a platform/state summary when eigenvalues are NaN or non-positive.
 
         Intended for debugging a platform-specific divergence (e.g.
-        Linux GHA py3.12 producing NaN where macOS py3.13 produces
-        finite values). Dumps JAX config, backend/platform, the first
-        few offending moduli samples, and eigenvalue NaN counts. Does
-        not raise on its own — the caller raises after printing.
+        GHA Linux py3.12 producing NaN where macOS py3.13 produces
+        finite values). Dumps JAX config, backend/platform, per-array
+        NaN/non-positive counts, and the offending moduli + eigenvalue
+        values for the first ~5 bad samples. Does not raise on its own
+        — the caller decides whether to raise.
         """
         import sys
         try:
@@ -1894,8 +1895,10 @@ class bounded_fluxes:
             x64 = bool(jax.config.jax_enable_x64)
             backend = str(jax.default_backend())
             devices = [str(d) for d in jax.devices()]
+            jax_ver = jax.__version__
         except Exception as exc:
-            x64, backend, devices = f"(jax introspect failed: {exc})", "?", []
+            x64 = f"(jax introspect failed: {exc})"
+            backend, devices, jax_ver = "?", [], "?"
 
         try:
             import numpy as _np
@@ -1907,31 +1910,45 @@ class bounded_fluxes:
                 np_backend = f"blas={blas} lapack={lapack}"
             else:
                 np_backend = "(show_config unavailable)"
+            np_ver = _np.__version__
         except Exception as exc:
             np_backend = f"(numpy show_config failed: {exc})"
+            np_ver = "?"
 
         mb = np.asarray(moduli_batch)
-        nan_mask_any = np.isnan(lm_np) | np.isnan(mu_np) | np.isnan(tmu_np)
-        first_bad = np.where(nan_mask_any)[0][:5]
+        bad_mask = (
+            np.isnan(lm_np)  | (lm_np  <= 0)
+            | np.isnan(mu_np) | (mu_np <= 0)
+            | np.isnan(tmu_np) | (tmu_np <= 0)
+        )
+        bad_idx = np.where(bad_mask)[0]
+        first_bad = bad_idx[:5]
 
         print("=" * 72, flush=True)
-        print("[compute_bounding_box] NaN eigenvalue diagnostic", flush=True)
+        print("[compute_bounding_box] eigenvalue diagnostic", flush=True)
         print("-" * 72, flush=True)
         print(f"  python           : {sys.version.split()[0]} on {sys.platform}", flush=True)
-        print(f"  jax_enable_x64   : {x64}", flush=True)
-        print(f"  jax backend      : {backend}   devices: {devices}", flush=True)
+        print(f"  numpy            : {np_ver}", flush=True)
+        print(f"  jax              : {jax_ver}   x64={x64}   backend={backend}", flush=True)
+        print(f"  jax devices      : {devices}", flush=True)
         print(f"  numpy BLAS/LAPACK: {np_backend}", flush=True)
-        print(f"  n_samples        : {mb.shape[0]}", flush=True)
-        print(
-            f"  nan counts       : lambda_max={int(np.sum(np.isnan(lm_np)))}, "
-            f"mu_min={int(np.sum(np.isnan(mu_np)))}, "
-            f"tilde_mu_min={int(np.sum(np.isnan(tmu_np)))}",
-            flush=True,
-        )
-        print(f"  all-NaN arrays   : {[n for n, _ in bad]}", flush=True)
+        print(f"  n_samples        : {mb.shape[0]}    n_bad={len(bad_idx)}", flush=True)
+        for name, arr, n_nan, n_nonpos in bad_arrays:
+            finite_min = float(np.nanmin(arr)) if not np.all(np.isnan(arr)) else float("nan")
+            finite_max = float(np.nanmax(arr)) if not np.all(np.isnan(arr)) else float("nan")
+            print(
+                f"  {name:>14s}: #nan={n_nan:>3d}  #nonpos={n_nonpos:>3d}  "
+                f"finite_range=[{finite_min:.4e}, {finite_max:.4e}]",
+                flush=True,
+            )
         print(f"  first bad idx    : {list(map(int, first_bad))}", flush=True)
         for idx in first_bad:
-            print(f"    moduli[{int(idx):3d}] = {mb[idx]}", flush=True)
+            print(
+                f"    sample[{int(idx):3d}]: lambda={float(lm_np[idx]):+.6e}  "
+                f"mu={float(mu_np[idx]):+.6e}  tmu={float(tmu_np[idx]):+.6e}  "
+                f"z={mb[idx]}",
+                flush=True,
+            )
         print("=" * 72, flush=True)
 
     # =========================================================================
@@ -2024,30 +2041,52 @@ class bounded_fluxes:
         tmu_np   = np.asarray(tmu_min)
         tmumax_np = np.asarray(tmu_max)
 
-        # If any eigenvalue array is all-NaN the reductions below would
-        # propagate NaN into self.*_gl and then into the bounding box,
-        # manifesting downstream as "cannot convert float NaN to integer"
-        # in _build_h2_pool (see GHA py3.12 observation on 2026-04-23).
-        # Emit a detailed diagnostic and fail here instead so the root
-        # cause is visible in the CI log.
-        nan_arrays = [
-            ("lambda_max",   lm_np),
-            ("mu_min",       mu_np),
-            ("tilde_mu_min", tmu_np),
-        ]
-        bad = [(n, a) for n, a in nan_arrays if np.all(np.isnan(a))]
-        if bad:
-            self._dump_nan_eigenvalue_diagnostic(
-                bad, moduli_batch, lm_np, mu_np, tmu_np,
+        # The eigenvalue arrays must be strictly positive for the bounding-box
+        # formulas below to produce a real, finite box. Bad samples (NaN, or
+        # slightly negative due to numerical noise on near-singular gauge-kinetic
+        # matrices) propagate via nanmin → mu_min_gl → mu_safe → sqrt(negative)
+        # → NaN bounding box → "cannot convert float NaN to integer" downstream.
+        #
+        # GHA py3.12 (Linux x86_64, openblas) observed 2026-04-23: certain random
+        # moduli samples produce one near-zero negative eigenvalue that infects
+        # the global minimum. Local macOS arm64 (also openblas, same code) does
+        # not — moduli samples differ run-to-run because rns_key=None uses a
+        # non-deterministic JAX PRNG, so reproduction is rare locally.
+        #
+        # Detect the failure here and dump per-sample detail so the offending
+        # sample + its eigenvalue values are visible in the CI log.
+        bad_arrays = []
+        for name, arr in [("lambda_max", lm_np),
+                          ("mu_min",     mu_np),
+                          ("tilde_mu_min", tmu_np)]:
+            n_nan = int(np.sum(np.isnan(arr)))
+            n_nonpos = int(np.sum((~np.isnan(arr)) & (arr <= 0.0)))
+            if n_nan > 0 or n_nonpos > 0:
+                bad_arrays.append((name, arr, n_nan, n_nonpos))
+
+        if bad_arrays:
+            self._dump_eigenvalue_diagnostic(
+                bad_arrays, moduli_batch, lm_np, mu_np, tmu_np,
             )
-            names = ", ".join(n for n, _ in bad)
-            raise ValueError(
-                f"compute_bounding_box: all eigenvalue samples are NaN for "
-                f"[{names}]. Model/gauge-kinetic/ISD matrices are degenerate "
-                f"on every sampled moduli point, or the linear-algebra "
-                f"backend (BLAS/LAPACK) produced NaN. See the diagnostic "
-                f"block above for per-sample details."
+            # Only raise if the badness will actually break the box: i.e.
+            # the global min over this batch (combined with the running
+            # sentinel) would go non-positive or NaN. Pure NaNs that
+            # nanmin can ignore are fine if at least one sample is good.
+            mu_batch_min  = float(np.nanmin(mu_np))  if not np.all(np.isnan(mu_np))  else float("nan")
+            tmu_batch_min = float(np.nanmin(tmu_np)) if not np.all(np.isnan(tmu_np)) else float("nan")
+            box_will_break = (
+                np.isnan(mu_batch_min) or mu_batch_min <= 0.0
+                or np.isnan(tmu_batch_min) or tmu_batch_min <= 0.0
             )
+            if box_will_break:
+                raise ValueError(
+                    "compute_bounding_box: at least one moduli sample "
+                    "produced a non-positive or NaN eigenvalue, which "
+                    "would corrupt the bounding box. See the diagnostic "
+                    "block above for the offending samples and their "
+                    "eigenvalue values. Likely a numerically near-singular "
+                    "gauge-kinetic matrix at that moduli point."
+                )
 
         self.lambda_max_gl   = max(self.lambda_max_gl, float(np.nanmax(lm_np)))
         self.mu_min_gl       = min(self.mu_min_gl, float(np.nanmin(mu_np)))
