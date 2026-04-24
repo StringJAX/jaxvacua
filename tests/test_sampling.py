@@ -1269,6 +1269,165 @@ class TestDataSampler(TestCase):
         )
 
 
+# ==========================================================================
+#  TestBoundsParsing — direction-aware moduli_bounds + new knobs
+# ==========================================================================
+
+class TestBoundsParsing(TestCase):
+    r"""
+    **Description:**
+    Unit tests for :func:`jaxvacua.sampling._parse_box_bounds`,
+    :func:`jaxvacua.sampling._parse_exclude_walls`, and the new
+    constructor kwargs ``stretching``, ``exclude_walls``,
+    ``cone_cutoff``.  Covers the canonical forms described in the
+    vacua-storage plan §1.1-1.4.
+    """
+
+    def test_scalar_broadcast(self):
+        r"""**Description:** A ``(lo, hi)`` scalar pair broadcasts to
+        length-``h12`` arrays, every entry identical."""
+        from jaxvacua.sampling import _parse_box_bounds
+        lo, hi = _parse_box_bounds((1., 5.), 3)
+        chex.assert_shape(lo, (3,))
+        chex.assert_shape(hi, (3,))
+        self.assertTrue(bool(jnp.all(lo == 1.)))
+        self.assertTrue(bool(jnp.all(hi == 5.)))
+
+    def test_per_direction(self):
+        r"""**Description:** ``(lower_vec, upper_vec)`` passes through
+        unchanged."""
+        from jaxvacua.sampling import _parse_box_bounds
+        lo, hi = _parse_box_bounds(([1., 2.], [3., 5.]), 2)
+        self.assertEqual(lo.tolist(), [1., 2.])
+        self.assertEqual(hi.tolist(), [3., 5.])
+
+    def test_mixed(self):
+        r"""**Description:** Scalar + vector forms broadcast correctly
+        side-by-side (lower scalar broadcast, upper vector verbatim)."""
+        from jaxvacua.sampling import _parse_box_bounds
+        lo, hi = _parse_box_bounds((1., [3., 5.]), 2)
+        self.assertEqual(lo.tolist(), [1., 1.])
+        self.assertEqual(hi.tolist(), [3., 5.])
+
+    def test_ndarray_1d_scalar_pair(self):
+        r"""**Description:** A 1-D ``np.ndarray`` of length 2 is a valid
+        scalar pair and broadcasts."""
+        from jaxvacua.sampling import _parse_box_bounds
+        lo, hi = _parse_box_bounds(np.array([1., 5.]), 2)
+        self.assertEqual(lo.tolist(), [1., 1.])
+        self.assertEqual(hi.tolist(), [5., 5.])
+
+    def test_length_mismatch_raises(self):
+        r"""**Description:** Length-3 vectors passed with ``h12=2`` raise
+        :class:`ValueError`."""
+        from jaxvacua.sampling import _parse_box_bounds
+        with self.assertRaises(ValueError):
+            _parse_box_bounds(([1., 2., 3.], [4., 5., 6.]), 2)
+
+    def test_lo_greater_than_hi_raises(self):
+        r"""**Description:** ``lower > upper`` in any direction raises
+        :class:`ValueError` with offending indices."""
+        from jaxvacua.sampling import _parse_box_bounds
+        with self.assertRaises(ValueError):
+            _parse_box_bounds((5., 1.), 2)
+
+    def test_2d_ndarray_rejected(self):
+        r"""**Description:** Explicit 2-D ndarrays are rejected to avoid
+        axis-ordering ambiguity; users must pass ``(arr[:, 0], arr[:, 1])``
+        or ``(arr[0], arr[1])``."""
+        from jaxvacua.sampling import _parse_box_bounds
+        with self.assertRaises(ValueError):
+            _parse_box_bounds(np.array([[1., 3.], [2., 5.]]), 2)
+
+    def test_none_rejected(self):
+        r"""**Description:** ``moduli_bounds=None`` is not a valid form."""
+        from jaxvacua.sampling import _parse_box_bounds
+        with self.assertRaises(ValueError):
+            _parse_box_bounds(None, 2)
+
+    def test_exclude_walls_none(self):
+        r"""**Description:** ``exclude_walls=None`` yields an all-False
+        mask of length ``n_hyperplanes``."""
+        from jaxvacua.sampling import _parse_exclude_walls
+        H = np.array([[1., 0.], [0., 1.], [1., 1.]])
+        mask = _parse_exclude_walls(None, H)
+        chex.assert_shape(mask, (3,))
+        self.assertFalse(bool(mask.any()))
+
+    def test_exclude_walls_indices(self):
+        r"""**Description:** Integer-index entries set the corresponding
+        mask positions to ``True``."""
+        from jaxvacua.sampling import _parse_exclude_walls
+        H = np.array([[1., 0.], [0., 1.], [1., 1.]])
+        mask = _parse_exclude_walls([0, 2], H)
+        self.assertEqual(mask.tolist(), [True, False, True])
+
+    def test_exclude_walls_row_vectors(self):
+        r"""**Description:** Explicit hyperplane-row vectors are matched
+        against ``hyperplanes`` and the corresponding row is marked."""
+        from jaxvacua.sampling import _parse_exclude_walls
+        H = np.array([[1., 0.], [0., 1.], [1., 1.]])
+        mask = _parse_exclude_walls([[0., 1.]], H)
+        self.assertEqual(mask.tolist(), [False, True, False])
+
+    def test_exclude_walls_out_of_range_raises(self):
+        r"""**Description:** Out-of-range indices raise
+        :class:`ValueError`."""
+        from jaxvacua.sampling import _parse_exclude_walls
+        H = np.array([[1., 0.]])
+        with self.assertRaises(ValueError):
+            _parse_exclude_walls([5], H)
+
+    def test_cone_cutoff_auto(self):
+        r"""**Description:** ``cone_cutoff=None`` resolves to
+        ``float(max(moduli_upper))``; an explicit scalar wins."""
+        model = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+        )
+        s_auto = jaxvacua.data_sampler(model, moduli_bounds=([1., 2.], [3., 7.]))
+        self.assertEqual(s_auto.cone_cutoff, 7.)
+        s_exp = jaxvacua.data_sampler(
+            model, moduli_bounds=(1., 5.), cone_cutoff=42.,
+        )
+        self.assertEqual(s_exp.cone_cutoff, 42.)
+
+    def test_constructor_stores_arrays(self):
+        r"""**Description:** After construction, ``moduli_lower`` /
+        ``moduli_upper`` are length-``h12`` arrays and
+        ``exclude_walls`` is a boolean mask whose length matches
+        ``n_hyperplanes``."""
+        model = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+        )
+        s = jaxvacua.data_sampler(
+            model, moduli_bounds=([1., 2.], [3., 5.]),
+            stretching=0.1, exclude_walls=[0],
+        )
+        chex.assert_shape(s.moduli_lower, (2,))
+        chex.assert_shape(s.moduli_upper, (2,))
+        self.assertEqual(s.stretching, 0.1)
+        self.assertEqual(s.exclude_walls.dtype, bool)
+        self.assertTrue(bool(s.exclude_walls[0]))
+
+    def test_get_moduli_box_per_direction(self):
+        r"""**Description:** In ``"box"`` mode with per-direction bounds,
+        each column of the output respects its own ``[lo_i, hi_i]``
+        range (h12=2: col 0 ∈ [1,3], col 1 ∈ [2,5])."""
+        model = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+        )
+        s = jaxvacua.data_sampler(
+            model, moduli_bounds=([1., 2.], [3., 5.]),
+        )
+        pts = np.asarray(s.get_moduli(
+            100, sampling_mode="box", minval=None, maxval=None,
+        ))
+        self.assertTrue((pts[:, 0] >= 1.).all() and (pts[:, 0] <= 3.).all(),
+                        f"col 0 out of [1, 3]: {pts[:, 0].min()}..{pts[:, 0].max()}")
+        self.assertTrue((pts[:, 1] >= 2.).all() and (pts[:, 1] <= 5.).all(),
+                        f"col 1 out of [2, 5]: {pts[:, 1].min()}..{pts[:, 1].max()}")
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

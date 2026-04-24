@@ -32,6 +32,185 @@ from .util import random_integer, random_uniform, vmapping_func, vmapping_func_c
 home_dir=os.path.dirname(os.path.realpath(__file__))+"/.."
 
 
+# ----------------------------------------------------------------------
+# Bounds parsing helpers (module-level so they can be unit-tested
+# independently of a full ``data_sampler`` instance).
+# ----------------------------------------------------------------------
+
+def _parse_box_bounds(
+    moduli_bounds: Any,
+    h12: int,
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    r"""
+    **Description:**
+    Normalise the ``moduli_bounds`` kwarg to a pair of length-``h12``
+    ``jnp.ndarray`` (``lower``, ``upper``).
+
+    Accepted input forms:
+
+    * 2-tuple / list of floats ``(lo, hi)`` → broadcast to every
+      direction.
+    * 2-tuple ``(lower_vec, upper_vec)`` with each element a
+      length-``h12`` sequence → element-wise per-direction bounds.
+
+    Any other shape raises :class:`ValueError` with a clear message.
+    2-D ndarrays are rejected to avoid the axis-ordering ambiguity —
+    callers should unstack explicitly (``(arr[:, 0], arr[:, 1])`` or
+    ``(arr[0], arr[1])`` depending on layout).
+
+    Args:
+        moduli_bounds: Input in any of the accepted forms above.
+        h12 (int): Number of complex-structure moduli directions.
+
+    Returns:
+        Tuple[jnp.ndarray, jnp.ndarray]: ``(lower, upper)`` with both
+        arrays of shape ``(h12,)`` and strictly ``lower <= upper``
+        elementwise.
+
+    Raises:
+        ValueError: On unrecognised shape or when ``lower > upper`` in
+            some direction.
+    """
+    if moduli_bounds is None:
+        raise ValueError(
+            "moduli_bounds=None is not supported; pass a (lo, hi) pair "
+            "or a (lower_vec, upper_vec) tuple."
+        )
+
+    # Step 1 — reject raw ndarrays that we cannot disambiguate (2-D
+    # layouts).  Everything else must support ``len(...) == 2`` and
+    # item access ``[0]``, ``[1]`` so we can split into lower / upper
+    # specs.
+    if isinstance(moduli_bounds, np.ndarray) and moduli_bounds.ndim >= 2:
+        raise ValueError(
+            f"moduli_bounds: 2-D arrays are not accepted to avoid axis-"
+            f"ordering ambiguity.  Got shape {moduli_bounds.shape}.  "
+            f"Pass as `(lower_vec, upper_vec)` instead."
+        )
+    try:
+        n_top = len(moduli_bounds)
+    except TypeError:
+        raise ValueError(
+            f"moduli_bounds must be a length-2 sequence, got "
+            f"{type(moduli_bounds).__name__}."
+        ) from None
+    if n_top != 2:
+        raise ValueError(
+            f"moduli_bounds must be a length-2 sequence (lo, hi) or "
+            f"(lower_vec, upper_vec); got length {n_top}."
+        )
+    lo_raw, hi_raw = moduli_bounds[0], moduli_bounds[1]
+
+    # Step 2 — coerce each side to length-h12 array, broadcasting scalars.
+    def _to_vec(x, side_name):
+        try:
+            x_arr = np.asarray(x, dtype=float)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"moduli_bounds {side_name!r} side: could not coerce "
+                f"{x!r} to a float array ({e})."
+            ) from None
+        if x_arr.ndim == 0:
+            return jnp.full((h12,), float(x_arr))
+        if x_arr.ndim == 1 and x_arr.shape[0] == h12:
+            return jnp.asarray(x_arr, dtype=float)
+        raise ValueError(
+            f"moduli_bounds {side_name!r} side: expected a scalar or "
+            f"length-{h12} sequence, got shape {x_arr.shape}."
+        )
+
+    lower = _to_vec(lo_raw, "lower")
+    upper = _to_vec(hi_raw, "upper")
+
+    if bool(jnp.any(lower > upper)):
+        bad = np.asarray(lower > upper)
+        raise ValueError(
+            f"moduli_bounds: lower > upper in directions "
+            f"{np.where(bad)[0].tolist()}."
+        )
+    return lower, upper
+
+
+def _parse_exclude_walls(
+    exclude_walls: Any,
+    hyperplanes: Any,
+) -> jnp.ndarray:
+    r"""
+    **Description:**
+    Normalise the ``exclude_walls`` kwarg to a boolean mask of shape
+    ``(n_hyperplanes,)``.
+
+    Accepted input forms:
+
+    * ``None``             → all-``False`` mask (no walls exempt).
+    * List of ints         → mask indices mark ``True``.
+    * List of row vectors  → each vector matched against the rows of
+      ``hyperplanes``; the matched row gets ``True``.
+
+    Args:
+        exclude_walls: The user input (or ``None``).
+        hyperplanes: Array of shape ``(n_hyperplanes, h12)``, or
+            ``None`` when the model has no Kähler-cone data.
+
+    Returns:
+        jnp.ndarray: Boolean mask of shape ``(n_hyperplanes,)``.  When
+        *hyperplanes* is ``None`` the returned array has shape ``(0,)``.
+
+    Raises:
+        ValueError: On out-of-range indices, unmatched row vectors, or
+            mixed-type inputs.
+    """
+    if hyperplanes is None:
+        return jnp.zeros((0,), dtype=bool)
+
+    H = np.asarray(hyperplanes)
+    n_hp = H.shape[0]
+
+    if exclude_walls is None:
+        return jnp.zeros((n_hp,), dtype=bool)
+
+    entries = list(exclude_walls)
+    if not entries:
+        return jnp.zeros((n_hp,), dtype=bool)
+
+    mask = np.zeros((n_hp,), dtype=bool)
+    first = entries[0]
+
+    # Case A: list of integer indices
+    if np.isscalar(first) and np.issubdtype(type(first), np.integer):
+        for idx in entries:
+            if not np.isscalar(idx) or not np.issubdtype(type(idx), np.integer):
+                raise ValueError(
+                    "exclude_walls: mixed int / sequence entries are "
+                    "not allowed; pick one form."
+                )
+            i = int(idx)
+            if i < 0 or i >= n_hp:
+                raise ValueError(
+                    f"exclude_walls index {i} is out of range "
+                    f"[0, {n_hp})."
+                )
+            mask[i] = True
+        return jnp.asarray(mask)
+
+    # Case B: list of hyperplane row vectors
+    for v in entries:
+        v_arr = np.asarray(v, dtype=float)
+        if v_arr.shape != (H.shape[1],):
+            raise ValueError(
+                f"exclude_walls entry has shape {v_arr.shape}, "
+                f"expected ({H.shape[1]},) to match hyperplane rows."
+            )
+        match = np.where(np.all(np.isclose(H, v_arr[None, :]), axis=1))[0]
+        if len(match) == 0:
+            raise ValueError(
+                f"exclude_walls: vector {v!r} does not match any row "
+                f"of lcs_tree.hyperplanes."
+            )
+        mask[match[0]] = True
+    return jnp.asarray(mask)
+
+
 class data_sampler():
 
     def __init__(self,
@@ -39,7 +218,10 @@ class data_sampler():
         flux_bounds: Tuple[float, float] = (-10, 10),
         axion_bounds: Tuple[float, float] = (-0.5, 0.5),
         dilaton_bounds: Tuple[float, float] = (2., 10.),
-        moduli_bounds: Tuple[float, float] = (1., 5.),
+        moduli_bounds: Any = (1., 5.),
+        stretching: float = 0.0,
+        exclude_walls: Any = None,
+        cone_cutoff: Any = None,
         use_jax: bool = False,
         seed: int = 42
         ):
@@ -52,11 +234,37 @@ class data_sampler():
             flux_bounds (Tuple[float, float]): Bounds for fluxes.
             axion_bounds (Tuple[float, float]): Bounds for axions.
             dilaton_bounds (Tuple[float, float]): Bounds for dilaton.
-            moduli_bounds (Tuple[float, float]): Bounds for moduli.
+            moduli_bounds: Per-direction box bounds on :math:`\operatorname{Im}(z_i)`.
+                Accepted forms:
+
+                * Scalar pair ``(lo, hi)`` or ``[lo, hi]`` — broadcast to all
+                  :math:`h^{1,2}` directions.
+                * ``(lower_vec, upper_vec)`` with each element a length-:math:`h^{1,2}`
+                  sequence — per-direction bounds.
+
+                Example: ``moduli_bounds=([1., 2.], [3., 5.])`` at
+                :math:`h^{1,2}=2` gives :math:`\operatorname{Im}(z_1) \in [1,3]`,
+                :math:`\operatorname{Im}(z_2) \in [2,5]`.  Defaults to
+                ``(1., 5.)``.
+            stretching (float): Distance from each Kähler-cone hyperplane used
+                by cone-mode sampling; points with
+                :math:`(H_k \cdot \operatorname{Im}(z)) < \texttt{stretching}`
+                are rejected, except for walls listed in *exclude_walls*.
+                Defaults to ``0.0``.
+            exclude_walls: Optional sequence identifying hyperplanes to
+                exempt from the *stretching* threshold.  Accepts a list of
+                integer indices into ``lcs_tree.hyperplanes``, a list of
+                explicit hyperplane-row vectors (matched against that array),
+                or ``None`` (no exemption).  Excluded walls get a soft check
+                ``(H_k \cdot Im(z)) > 0`` — points arbitrarily close to those
+                walls are allowed (useful for coniLCS limits).
+            cone_cutoff: Scalar upper cap on the :math:`L^2` norm of sampled
+                moduli points in cone / ray modes.  ``None`` (default) auto-
+                resolves to ``float(max(moduli_upper))`` — preserving the
+                legacy behaviour of using the scalar ``moduli_bounds[1]``.
             use_jax (bool, optional): Use JAX environment for random number generation.
             seed (int, optional): Seed for the internal PRNG used when ``rns_key`` is not
                 passed explicitly to sampling methods. Defaults to 42.
-            **kwargs: Additional keyword arguments.
 
 
         Attributes:
@@ -66,8 +274,15 @@ class data_sampler():
             axions_upper (float): Upper bound complex structure axions.
             flux_lower (int): Lower bound fluxes.
             flux_upper (int): Upper bound fluxes.
-            moduli_lower (float): Lower bound complex structure moduli.
-            moduli_upper (float): Upper bound complex structure moduli.
+            moduli_lower (jnp.ndarray): Per-direction lower bounds on
+                :math:`\operatorname{Im}(z_i)`, shape ``(h12,)``.
+            moduli_upper (jnp.ndarray): Per-direction upper bounds on
+                :math:`\operatorname{Im}(z_i)`, shape ``(h12,)``.
+            stretching (float): Stored hyperplane-distance threshold.
+            exclude_walls (jnp.ndarray): Boolean mask of shape
+                ``(n_hyperplanes,)``; ``True`` entries are exempt from the
+                ``stretching`` threshold.
+            cone_cutoff (float): Resolved cone L² cap.
             s_lower (float): Lower bound dilaton.
             s_upper (float): Lower bound dilaton.
             _n_fluxes (int): Number of fluxes.
@@ -115,8 +330,27 @@ class data_sampler():
         self.axion_lower = axion_bounds[0]
         self.axion_upper = axion_bounds[1]
 
-        self.moduli_lower = moduli_bounds[0]
-        self.moduli_upper = moduli_bounds[1]
+        lo_arr, hi_arr = _parse_box_bounds(moduli_bounds, self._h12)
+        self.moduli_lower = lo_arr
+        self.moduli_upper = hi_arr
+
+        self.stretching = float(stretching)
+        self.exclude_walls = _parse_exclude_walls(exclude_walls, self._hyperplanes)
+        # Precompute a static Python bool flag — used by consumers
+        # (e.g. ``bounded_fluxes._in_patch``) to decide whether to
+        # apply the cone/cutoff checks.  Can't be derived inside a JAX
+        # trace because ``bool(jnp.any(...))`` on a traced array raises
+        # TracerBoolConversionError, so we cache it here where the
+        # sampler attributes are still concrete.
+        self.cone_opted_in = bool(
+            self.stretching != 0.0
+            or (self.exclude_walls.size > 0 and bool(np.asarray(self.exclude_walls).any()))
+        )
+
+        if cone_cutoff is None:
+            self.cone_cutoff = float(jnp.max(self.moduli_upper))
+        else:
+            self.cone_cutoff = float(cone_cutoff)
 
         self.s_lower = dilaton_bounds[0]
         self.s_upper = dilaton_bounds[1]
@@ -489,17 +723,29 @@ class data_sampler():
     def rescale_points(self,pts,norm="l2",maxval=None,rns_key: Any | None = None):
         r"""
         **Description:**
-        Rescales points to ensure they lie within a specified norm bound.
-        
+        Rescales points to ensure they lie within a specified norm
+        bound.
+
+        When ``maxval is None`` (default), the cap is read from
+        :attr:`cone_cutoff` — the dedicated scalar cone cut-off set at
+        construction time.  This is the one knob that decouples cone
+        sampling from the per-direction box bounds
+        (``moduli_lower`` / ``moduli_upper``); before the direction-
+        aware refactor both concepts shared a single scalar upper
+        bound, which led to confusing semantics when per-direction
+        bounds were introduced.
+
         Args:
             pts (np.ndarray): Points to be rescaled.
             norm (str, optional): Norm type for rescaling ("l2", "l1", or "inf"). Default is "l2".
-            maxval (float, optional): Maximum value for the norm. Default is None.
+            maxval (float, optional): Maximum value for the norm.
+                ``None`` (default) → uses :attr:`cone_cutoff`.  Pass a
+                scalar to override for a single call.
             rns_key (Any | None, optional): PRNG random key for reproducibility. Default is None.
-            
+
         Returns:
             np.ndarray or Array: Rescaled points.
-            
+
         Raises:
             ValueError: If `norm` is not one of the supported types.
         """
@@ -509,7 +755,10 @@ class data_sampler():
             raise ValueError(f"Norm for rescaling should be one of {norms}, but is {norm}.")
 
         if maxval is None:
-            maxval = self.moduli_upper
+            # Use the dedicated cone cut-off (scalar), not the per-direction
+            # box upper bounds.  For legacy scalar callers of the constructor
+            # these values coincide (cone_cutoff defaults to max(moduli_upper)).
+            maxval = self.cone_cutoff
 
         # Use jnp for all deterministic math — works correctly on both NumPy and JAX arrays
         pts_arr = jnp.asarray(pts)
@@ -529,35 +778,66 @@ class data_sampler():
     def filter_points(self,
                       x: np.ndarray,
                       filter: Callable | None = None,
-                      stretching: float = 0.0
+                      stretching: float = 0.0,
+                      exclude_walls: Any = None,
                       ) -> np.ndarray | Array:
         r"""
         **Description:**
-        Filters points to ensure they lie within the Kähler cone and applies an optional custom filter.
-        
+        Filters points to ensure they lie within the Kähler cone and
+        applies an optional custom filter.
+
+        For each hyperplane row :math:`H_k`, a point :math:`x` is kept
+        when :math:`(H_k \cdot x) \geq \texttt{threshold}_k`.  The
+        threshold is ``stretching`` for all walls except those flagged
+        by *exclude_walls*, which use threshold ``0`` — i.e. bare cone
+        membership.  This lets users sample arbitrarily close to one
+        specific wall (e.g. the conifold wall in coniLCS limits) while
+        keeping a non-zero distance from all others.
+
         Args:
             x (np.ndarray): Points to be filtered.
             filter (callable, optional): Custom filter function. Defaults to None.
-            stretching (float, optional): Stretching parameter for the Kähler cone. Default is 0.
-            
+            stretching (float, optional): Distance from each Kähler-cone
+                wall for non-excluded walls. Default is 0.
+            exclude_walls: Optional per-wall exemption mask.  When
+                ``None``, defaults to ``self.exclude_walls`` (set at
+                construction time).  Accepts the same forms as the
+                constructor kwarg: boolean mask, list of ints, or list
+                of hyperplane row vectors.
+
         Returns:
             np.ndarray or Array: Filtered points.
-            
+
         """
-        
         H = self._hyperplanes
-        flag = jnp.all(jnp.asarray(x) @ H.T >= stretching, axis=1)
+        if H is None:
+            return filter(x) if filter is not None else x
+        # Resolve the per-wall threshold.  Accept an already-parsed bool
+        # mask (from `self.exclude_walls`) without re-parsing.
+        if exclude_walls is None:
+            mask = getattr(self, "exclude_walls", None)
+        else:
+            ew_arr = np.asarray(exclude_walls)
+            if ew_arr.dtype == bool and ew_arr.shape == (H.shape[0],):
+                mask = jnp.asarray(ew_arr)
+            else:
+                mask = _parse_exclude_walls(exclude_walls, H)
+        thresholds = jnp.zeros((H.shape[0],), dtype=float) if stretching == 0.0 \
+                     else jnp.full((H.shape[0],), float(stretching))
+        if mask is not None and mask.shape == (H.shape[0],):
+            thresholds = jnp.where(mask, 0.0, thresholds)
+        flag = jnp.all(jnp.asarray(x) @ H.T >= thresholds[None, :], axis=1)
         x = x[flag]
         if filter is not None:
             x = filter(x)
         return x
 
     def get_moduli(
-                self, 
-                num_pts: int, 
-                rns_key: Any | None = None, 
-                minval: float | None = None, 
-                maxval: float | None = None, 
+                self,
+                num_pts: int,
+                rns_key: Any | None = None,
+                minval: Any = None,
+                maxval: Any = None,
                 sampling_mode: str = "cone",
                 stretching: float = 0.0,
                 filter: Callable | None = None,
@@ -569,39 +849,73 @@ class data_sampler():
             ) -> np.ndarray | Array:
         r"""
         **Description:**
-        Samples moduli values within specified bounds using the selected sampling mode.
+        Samples moduli values within specified bounds using the
+        selected sampling mode.
+
+        The ``minval`` / ``maxval`` kwargs carry **different meanings**
+        depending on *sampling_mode*:
+
+        * ``"box"`` — per-direction bounds on ``Im(z_i)``.  Accepts
+          scalars (broadcast to all directions) or length-``h12``
+          sequences.  Default ``None`` → falls back to
+          :attr:`moduli_lower` / :attr:`moduli_upper`.
+        * ``"cone"`` / ``"stretched_cone"`` / ``"random_rays"`` —
+          scalar bounds on the ray-coefficient used to build a
+          positive combination of the cone generators.  Default
+          ``None`` → ``0.0`` / :attr:`cone_cutoff`.
+        * ``"tip_ray"`` / ``"random_ray"`` — scalar range for the
+          single-ray coefficient.  Default ``None`` → ``0.0`` /
+          :attr:`cone_cutoff`.
+
+        When *stretching* is positive and / or the sampler has any
+        :attr:`exclude_walls` flagged, a rejection-sampling loop is
+        used to enforce the per-wall distance constraints.  The fast
+        path (one-shot matmul, no filtering) is taken only for
+        ``stretching == 0`` with no excluded walls.
 
         Args:
-            num_pts (int): 
+            num_pts (int):
                 Number of points to sample.
-            rns_key (Any | None): 
+            rns_key (Any | None):
                 PRNG random key for reproducibility. Defaults to None.
-            minval (float | None): 
-                Minimum value for sampling. Default is None.
-            maxval (float | None): 
-                Maximum value for sampling. Default is None.
-            sampling_mode (str): 
-                Mode of sampling ("box", "sphere", "cone", "stretched_cone", "tip_ray"). Default is "box".
-            stretching (float): 
-                Stretching parameter for the Kähler cone. Default is 0.
-            n_rays (int): 
+            minval:
+                Minimum value for sampling.  See per-mode notes above.
+                Default ``None``.
+            maxval:
+                Maximum value for sampling.  See per-mode notes above.
+                Default ``None``.
+            sampling_mode (str):
+                Mode of sampling (``"box"``, ``"sphere"``, ``"cone"``,
+                ``"stretched_cone"``, ``"tip_ray"``, ``"random_ray"``,
+                ``"random_rays"``).  Default ``"cone"``.
+            stretching (float):
+                Distance from each Kähler-cone hyperplane used by cone
+                modes.  Default 0 (bare cone membership only).  Method
+                argument; if left at 0 while :attr:`stretching` on the
+                sampler is non-zero, the sampler attribute is used
+                instead.
+            n_rays (int):
                 Number of rays to use if `use_rays` is True. Default is 2.
-            perturbation (float): 
+            perturbation (float):
                 Perturbation applied to interior points. Default is 1e-1.
-            use_rays (bool): 
+            use_rays (bool):
                 Whether to use rays for sampling. Default is False.
-            time_out (float): 
-                Time-out duration in seconds. Default is 60.
-            verbosity (int): 
+            time_out (float):
+                Time-out duration in seconds (raised if the rejection
+                loop cannot meet the target count). Default is 60.
+            verbosity (int):
                 Verbosity level for logging. Default is 0.
 
         Returns:
-            np.ndarray or Array: 
-                Array of sampled moduli.
+            np.ndarray or Array: Array of sampled moduli, shape
+            ``(num_pts, h12)``.
 
         Raises:
-            ValueError: 
+            ValueError:
                 If `sampling_mode` is not recognized or required data is missing.
+            RuntimeError:
+                If the rejection-sampling loop times out (reduce
+                ``stretching`` or loosen ``exclude_walls``).
         """
         
         # Define supported sampling modes
@@ -637,10 +951,34 @@ class data_sampler():
         if sampling_mode == "random_ray":
             ray = self.sample_ray(rns_key=rns_key)
 
-        if maxval is None:
-            maxval = self.moduli_upper
-        if minval is None:
-            minval = self.moduli_lower
+        # ------------------------------------------------------------------
+        # Resolve minval/maxval defaults per sampling-mode semantics:
+        # * "box" uses the per-direction arrays (moduli_lower/moduli_upper).
+        # * cone / ray modes use the scalar cone_cutoff (a single L²/ray cap).
+        # ------------------------------------------------------------------
+        if sampling_mode == "box":
+            if minval is None:
+                minval = self.moduli_lower
+            if maxval is None:
+                maxval = self.moduli_upper
+        else:
+            if minval is None:
+                minval = 0.0
+            if maxval is None:
+                maxval = self.cone_cutoff
+
+        # Resolve sampler-level stretching / exclude_walls (method args
+        # override the sampler defaults when explicitly passed).
+        if stretching == 0.0 and self.stretching != 0.0:
+            stretching = self.stretching
+        _exclude_walls = getattr(self, "exclude_walls", None)
+
+        # Determine whether a post-sampling rejection filter is needed
+        # (see plan §1.5): any non-zero stretching or any excluded wall.
+        _need_filter = (
+            float(stretching) != 0.0
+            or (_exclude_walls is not None and bool(jnp.any(_exclude_walls)))
+        )
 
         # ------------------------------------------------------------------
         # "box": one-shot sampling — no loop needed
@@ -653,12 +991,41 @@ class data_sampler():
         # ------------------------------------------------------------------
         elif sampling_mode in ["cone", "stretched_cone", "random_rays"]:
             if use_rays:
-                u = self._rand_uniform(0., maxval, (num_pts, n_rays), rns_key)
-                cone_point = jnp.matmul(u, jnp.asarray(self._rays)) if self.use_jax \
-                    else np.matmul(np.asarray(u), self._rays)
-                if sampling_mode == "stretched_cone":
-                    cone_point = cone_point + stretching * self._tip
-                return cone_point[:num_pts]
+                # Fast path: positive combination of cone generators is
+                # automatically inside the cone.  Only apply the
+                # rejection filter when stretching > 0 or some wall is
+                # excluded.
+                if not _need_filter:
+                    u = self._rand_uniform(0., maxval, (num_pts, n_rays), rns_key)
+                    cone_point = jnp.matmul(u, jnp.asarray(self._rays)) if self.use_jax \
+                        else np.matmul(np.asarray(u), self._rays)
+                    if sampling_mode == "stretched_cone":
+                        cone_point = cone_point + stretching * self._tip
+                    return cone_point[:num_pts]
+                # Rejection-sampling path (stretching > 0 or exclusions).
+                chunks: list = []
+                n_collected: int = 0
+                tic = time.time()
+                while n_collected < num_pts:
+                    u = self._rand_uniform(0., maxval, (num_pts, n_rays), rns_key)
+                    cone_point = jnp.matmul(u, jnp.asarray(self._rays)) if self.use_jax \
+                        else np.matmul(np.asarray(u), self._rays)
+                    if sampling_mode == "stretched_cone":
+                        cone_point = cone_point + stretching * self._tip
+                    cone_point = self.filter_points(
+                        cone_point, filter=filter,
+                        stretching=stretching, exclude_walls=_exclude_walls,
+                    )
+                    if cone_point.shape[0] > 0:
+                        chunks.append(jnp.asarray(cone_point) if self.use_jax
+                                      else np.asarray(cone_point))
+                        n_collected += cone_point.shape[0]
+                    if time.time() - tic > time_out:
+                        raise RuntimeError(
+                            "Failed to sample points in cone "
+                            "(stretching/exclude_walls rejection rate too high)!"
+                        )
+                return self._collect_batches(chunks, num_pts)
 
             # Interior-point perturbation loop
             pts = self._rand_permutation(self._cone_points, rns_key)
@@ -781,8 +1148,8 @@ class data_sampler():
             rns_key: Any | None = None,
             minval_axions: float = None,
             maxval_axions: float = None,
-            minval_moduli: float = None,
-            maxval_moduli: float = None,
+            minval_moduli: Any = None,
+            maxval_moduli: Any = None,
             axion_sampling_mode: str = "box",
             moduli_sampling_mode: str = "cone"
         ) -> np.ndarray | Array:
@@ -791,21 +1158,25 @@ class data_sampler():
         Generates complex samples for moduli, combining axion and moduli values.
 
         Args:
-            N (int): 
+            N (int):
                 Number of complex moduli values to generate.
-            rns_key (Any | None): 
+            rns_key (Any | None):
                 Random number seed key used for reproducibility. Default is None.
-            minval_axions (float): 
+            minval_axions (float):
                 Minimum value for axion part of the moduli. Default is None.
-            maxval_axions (float): 
+            maxval_axions (float):
                 Maximum value for axion part of the moduli. Default is None.
-            minval_moduli (float): 
-                Minimum value for the real part of the moduli. Default is None.
-            maxval_moduli (float): 
-                Maximum value for the real part of the moduli. Default is None.
-            axion_sampling_mode (str): 
+            minval_moduli: Minimum value for the imaginary part of the
+                moduli.  Scalar or length-``h12`` sequence (per-direction).
+                ``None`` (default) → falls back to the sampler's
+                ``moduli_lower`` (box mode) or ``0`` (cone / ray modes).
+            maxval_moduli: Maximum value for the imaginary part of the
+                moduli.  Scalar or length-``h12`` sequence.  ``None``
+                (default) → falls back to ``moduli_upper`` (box mode)
+                or ``cone_cutoff`` (cone / ray modes).
+            axion_sampling_mode (str):
                 Sampling mode for axion values. Default is "box".
-            moduli_sampling_mode (str): 
+            moduli_sampling_mode (str):
                 Sampling mode for moduli values. Default is "box".
 
         Returns:
@@ -1076,8 +1447,8 @@ class data_sampler():
         maxval_dilaton: float | None = None,
         minval_axions: float | None = None,
         maxval_axions: float | None = None,
-        minval_moduli: float | None = None,
-        maxval_moduli: float | None = None,
+        minval_moduli: Any = None,
+        maxval_moduli: Any = None,
         moduli_sampling_mode: str = "cone",
         minval_fluxes: float | None = None,
         maxval_fluxes: float | None = None,
@@ -1117,11 +1488,18 @@ class data_sampler():
                 Minimum value for axion sampling. Default is None.
             maxval_axions (float | None): 
                 Maximum value for axion sampling. Default is None.
-            minval_moduli (float | None): 
-                Minimum value for moduli sampling. Default is None.
-            maxval_moduli (float | None): 
-                Maximum value for moduli sampling. Default is None.
-            moduli_sampling_mode (str): 
+            minval_moduli:
+                Minimum value for moduli sampling.  Scalar or
+                length-``h12`` sequence (per-direction, only used by
+                ``moduli_sampling_mode="box"``).  Default ``None`` →
+                routes to the sampler's ``moduli_lower`` (box mode) or
+                ``0.0`` (cone / ray modes).
+            maxval_moduli:
+                Maximum value for moduli sampling.  Scalar or
+                length-``h12`` sequence.  Default ``None`` →
+                ``moduli_upper`` (box mode) or ``cone_cutoff``
+                (cone / ray modes).
+            moduli_sampling_mode (str):
                 Sampling mode for moduli ("box", "cone", "stretched_cone", etc.). Default is "box".
             minval_fluxes (float | None): 
                 Minimum value for flux sampling. Default is None.
@@ -1591,8 +1969,8 @@ class data_sampler():
         maxval_dilaton: float | None = None,
         minval_axions: float | None = None,
         maxval_axions: float | None = None,
-        minval_moduli: float | None = None,
-        maxval_moduli: float | None = None,
+        minval_moduli: Any = None,
+        maxval_moduli: Any = None,
         moduli_sampling_mode: str = "cone",
         minval_fluxes: float | None = None,
         maxval_fluxes: float | None = None,
