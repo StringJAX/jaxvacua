@@ -1872,6 +1872,68 @@ class bounded_fluxes:
         self.f1tilde      = self.f1 - self.c0 * self.h1
         self.f1tilde_norm = self.compute_norm(self.f1tilde)
 
+    def _dump_nan_eigenvalue_diagnostic(
+        self,
+        bad,
+        moduli_batch,
+        lm_np,
+        mu_np,
+        tmu_np,
+    ) -> None:
+        r"""Print a platform/state summary when eigenvalue arrays are all-NaN.
+
+        Intended for debugging a platform-specific divergence (e.g.
+        Linux GHA py3.12 producing NaN where macOS py3.13 produces
+        finite values). Dumps JAX config, backend/platform, the first
+        few offending moduli samples, and eigenvalue NaN counts. Does
+        not raise on its own — the caller raises after printing.
+        """
+        import sys
+        try:
+            import jax
+            x64 = bool(jax.config.jax_enable_x64)
+            backend = str(jax.default_backend())
+            devices = [str(d) for d in jax.devices()]
+        except Exception as exc:
+            x64, backend, devices = f"(jax introspect failed: {exc})", "?", []
+
+        try:
+            import numpy as _np
+            np_cfg = _np.show_config(mode="dicts") if hasattr(_np, "show_config") else None
+            if isinstance(np_cfg, dict):
+                bd = np_cfg.get("Build Dependencies", {})
+                blas = bd.get("blas", {}).get("name", "?")
+                lapack = bd.get("lapack", {}).get("name", "?")
+                np_backend = f"blas={blas} lapack={lapack}"
+            else:
+                np_backend = "(show_config unavailable)"
+        except Exception as exc:
+            np_backend = f"(numpy show_config failed: {exc})"
+
+        mb = np.asarray(moduli_batch)
+        nan_mask_any = np.isnan(lm_np) | np.isnan(mu_np) | np.isnan(tmu_np)
+        first_bad = np.where(nan_mask_any)[0][:5]
+
+        print("=" * 72, flush=True)
+        print("[compute_bounding_box] NaN eigenvalue diagnostic", flush=True)
+        print("-" * 72, flush=True)
+        print(f"  python           : {sys.version.split()[0]} on {sys.platform}", flush=True)
+        print(f"  jax_enable_x64   : {x64}", flush=True)
+        print(f"  jax backend      : {backend}   devices: {devices}", flush=True)
+        print(f"  numpy BLAS/LAPACK: {np_backend}", flush=True)
+        print(f"  n_samples        : {mb.shape[0]}", flush=True)
+        print(
+            f"  nan counts       : lambda_max={int(np.sum(np.isnan(lm_np)))}, "
+            f"mu_min={int(np.sum(np.isnan(mu_np)))}, "
+            f"tilde_mu_min={int(np.sum(np.isnan(tmu_np)))}",
+            flush=True,
+        )
+        print(f"  all-NaN arrays   : {[n for n, _ in bad]}", flush=True)
+        print(f"  first bad idx    : {list(map(int, first_bad))}", flush=True)
+        for idx in first_bad:
+            print(f"    moduli[{int(idx):3d}] = {mb[idx]}", flush=True)
+        print("=" * 72, flush=True)
+
     # =========================================================================
     #  Bounding box computation
     # =========================================================================
@@ -1962,11 +2024,29 @@ class bounded_fluxes:
         tmu_np   = np.asarray(tmu_min)
         tmumax_np = np.asarray(tmu_max)
 
-        if np.all(np.isnan(lm_np)):
+        # If any eigenvalue array is all-NaN the reductions below would
+        # propagate NaN into self.*_gl and then into the bounding box,
+        # manifesting downstream as "cannot convert float NaN to integer"
+        # in _build_h2_pool (see GHA py3.12 observation on 2026-04-23).
+        # Emit a detailed diagnostic and fail here instead so the root
+        # cause is visible in the CI log.
+        nan_arrays = [
+            ("lambda_max",   lm_np),
+            ("mu_min",       mu_np),
+            ("tilde_mu_min", tmu_np),
+        ]
+        bad = [(n, a) for n, a in nan_arrays if np.all(np.isnan(a))]
+        if bad:
+            self._dump_nan_eigenvalue_diagnostic(
+                bad, moduli_batch, lm_np, mu_np, tmu_np,
+            )
+            names = ", ".join(n for n, _ in bad)
             raise ValueError(
-                "compute_bounding_box: all eigenvalue samples are NaN. "
-                "Check that the model's gauge_kinetic_matrix and ISD_matrix "
-                "are implemented for the chosen limit/prepotential."
+                f"compute_bounding_box: all eigenvalue samples are NaN for "
+                f"[{names}]. Model/gauge-kinetic/ISD matrices are degenerate "
+                f"on every sampled moduli point, or the linear-algebra "
+                f"backend (BLAS/LAPACK) produced NaN. See the diagnostic "
+                f"block above for per-sample details."
             )
 
         self.lambda_max_gl   = max(self.lambda_max_gl, float(np.nanmax(lm_np)))
