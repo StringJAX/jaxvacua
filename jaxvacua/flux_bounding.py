@@ -2043,56 +2043,59 @@ class bounded_fluxes:
 
         # The eigenvalue arrays must be strictly positive for the bounding-box
         # formulas below to produce a real, finite box. Bad samples (NaN, or
-        # slightly negative due to numerical noise on near-singular gauge-kinetic
-        # matrices) propagate via nanmin → mu_min_gl → mu_safe → sqrt(negative)
-        # → NaN bounding box → "cannot convert float NaN to integer" downstream.
+        # slightly-negative due to numerical noise on near-singular gauge-
+        # kinetic matrices near the Kähler-cone boundary) otherwise propagate
+        # via nanmin → mu_min_gl → sqrt(negative) → NaN bounding box →
+        # "cannot convert float NaN to integer" downstream.
         #
-        # GHA py3.12 (Linux x86_64, openblas) observed 2026-04-23: certain random
-        # moduli samples produce one near-zero negative eigenvalue that infects
-        # the global minimum. Local macOS arm64 (also openblas, same code) does
-        # not — moduli samples differ run-to-run because rns_key=None uses a
-        # non-deterministic JAX PRNG, so reproduction is rare locally.
-        #
-        # Detect the failure here and dump per-sample detail so the offending
-        # sample + its eigenvalue values are visible in the CI log.
-        bad_arrays = []
-        for name, arr in [("lambda_max", lm_np),
-                          ("mu_min",     mu_np),
-                          ("tilde_mu_min", tmu_np)]:
-            n_nan = int(np.sum(np.isnan(arr)))
-            n_nonpos = int(np.sum((~np.isnan(arr)) & (arr <= 0.0)))
-            if n_nan > 0 or n_nonpos > 0:
-                bad_arrays.append((name, arr, n_nan, n_nonpos))
+        # Strategy: build a per-sample validity mask, filter the eigenvalue
+        # arrays to the valid subset, then compute min/max on the clean
+        # subset. Only raise when every sample in the batch is bad (the
+        # sampler is producing nothing physical); a handful of bad samples
+        # in an otherwise healthy batch is just numerical noise and gets
+        # silently dropped — but still dumped via the diagnostic helper so
+        # the CI log records them.
+        valid = (
+            np.isfinite(lm_np)   & (lm_np   > 0.0) &
+            np.isfinite(mu_np)   & (mu_np   > 0.0) &
+            np.isfinite(tmu_np)  & (tmu_np  > 0.0)
+        )
+        n_bad = int((~valid).sum())
 
-        if bad_arrays:
+        if n_bad > 0:
+            bad_arrays = []
+            for name, arr in [("lambda_max", lm_np),
+                              ("mu_min",     mu_np),
+                              ("tilde_mu_min", tmu_np)]:
+                n_nan    = int(np.sum(np.isnan(arr)))
+                n_nonpos = int(np.sum((~np.isnan(arr)) & (arr <= 0.0)))
+                if n_nan > 0 or n_nonpos > 0:
+                    bad_arrays.append((name, arr, n_nan, n_nonpos))
             self._dump_eigenvalue_diagnostic(
                 bad_arrays, moduli_batch, lm_np, mu_np, tmu_np,
             )
-            # Only raise if the badness will actually break the box: i.e.
-            # the global min over this batch (combined with the running
-            # sentinel) would go non-positive or NaN. Pure NaNs that
-            # nanmin can ignore are fine if at least one sample is good.
-            mu_batch_min  = float(np.nanmin(mu_np))  if not np.all(np.isnan(mu_np))  else float("nan")
-            tmu_batch_min = float(np.nanmin(tmu_np)) if not np.all(np.isnan(tmu_np)) else float("nan")
-            box_will_break = (
-                np.isnan(mu_batch_min) or mu_batch_min <= 0.0
-                or np.isnan(tmu_batch_min) or tmu_batch_min <= 0.0
-            )
-            if box_will_break:
+            if not valid.any():
                 raise ValueError(
-                    "compute_bounding_box: at least one moduli sample "
-                    "produced a non-positive or NaN eigenvalue, which "
-                    "would corrupt the bounding box. See the diagnostic "
-                    "block above for the offending samples and their "
-                    "eigenvalue values. Likely a numerically near-singular "
-                    "gauge-kinetic matrix at that moduli point."
+                    "compute_bounding_box: every moduli sample in this "
+                    "batch produced a non-positive or NaN eigenvalue. "
+                    "The sampler is likely producing points outside the "
+                    "Kähler cone or the gauge-kinetic matrix is singular "
+                    "throughout the sampled region. See the diagnostic "
+                    "block above for per-sample values."
                 )
 
-        self.lambda_max_gl   = max(self.lambda_max_gl, float(np.nanmax(lm_np)))
-        self.mu_min_gl       = min(self.mu_min_gl, float(np.nanmin(mu_np)))
-        self.mu_max_gl       = max(self.mu_max_gl, float(np.nanmax(mumax_np)))
-        self.tilde_mu_min_gl = min(self.tilde_mu_min_gl, float(np.nanmin(tmu_np)))
-        self.tilde_mu_max_gl = max(self.tilde_mu_max_gl, float(np.nanmax(tmumax_np)))
+        # Update global extrema from the valid subset only.
+        lm_ok     = lm_np[valid]
+        mu_ok     = mu_np[valid]
+        mumax_ok  = mumax_np[valid]
+        tmu_ok    = tmu_np[valid]
+        tmumax_ok = tmumax_np[valid]
+
+        self.lambda_max_gl   = max(self.lambda_max_gl,   float(lm_ok.max()))
+        self.mu_min_gl       = min(self.mu_min_gl,       float(mu_ok.min()))
+        self.mu_max_gl       = max(self.mu_max_gl,       float(mumax_ok.max()))
+        self.tilde_mu_min_gl = min(self.tilde_mu_min_gl, float(tmu_ok.min()))
+        self.tilde_mu_max_gl = max(self.tilde_mu_max_gl, float(tmumax_ok.max()))
 
         # Apply optional safety margins to avoid missing flux vectors near
         # the boundary due to finite moduli sampling.  The margins ensure
