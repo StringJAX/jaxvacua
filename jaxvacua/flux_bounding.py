@@ -1286,16 +1286,37 @@ class bounded_fluxes:
         im_mod = mod_out.imag  # (n_h, n_pts, h12)
         # hyperplanes: (n_hyp, h12), im_mod: (n_h, n_pts, h12)
         hp_dist = np.einsum('ij,klj->kli', hyperplanes, im_mod)  # (n_h, n_pts, n_hyp)
-        hp_ok = np.all(hp_dist >= 0.0, axis=2)  # (n_h, n_pts)
+        _stretch = float(getattr(self.sampler, "stretching", 0.0)) if self.sampler is not None else 0.0
+        _excl    = getattr(self.sampler, "exclude_walls", None) if self.sampler is not None else None
+        _cone_opted_in = bool(getattr(self.sampler, "cone_opted_in", False)) \
+                         if self.sampler is not None else False
+        # Bare cone membership (hp_dist >= 0) is always required — the
+        # refined moduli must at least be inside the Kähler cone.
+        hp_ok = np.all(hp_dist >= 0.0, axis=2)
+        # Additional per-wall stretching check only when the user opted
+        # into cone constraints.
+        if _cone_opted_in:
+            if _excl is not None and _excl.shape == (hp_dist.shape[-1],):
+                _thr = np.where(np.asarray(_excl), 0.0, _stretch)
+                hp_ok &= np.all(hp_dist >= _thr[None, None, :], axis=2)
+            else:
+                hp_ok &= np.all(hp_dist >= _stretch, axis=2)
         valid_mat &= hp_ok
-        # Moduli patch check (sampler bounds on Im(z))
+        # Moduli patch check (sampler bounds on Im(z)).  Broadcasts for
+        # both scalar (legacy) and length-`h12` array forms.
         if self.sampler is not None:
             _mod_lo = getattr(self.sampler, 'moduli_lower', None)
             _mod_hi = getattr(self.sampler, 'moduli_upper', None)
             if _mod_lo is not None:
-                valid_mat &= np.all(im_mod >= _mod_lo, axis=2)
+                valid_mat &= np.all(im_mod >= np.asarray(_mod_lo), axis=2)
             if _mod_hi is not None:
-                valid_mat &= np.all(im_mod <= _mod_hi, axis=2)
+                valid_mat &= np.all(im_mod <= np.asarray(_mod_hi), axis=2)
+            # Cut-off only applies when cone constraints are active.
+            if _cone_opted_in:
+                _cutoff = float(getattr(self.sampler, "cone_cutoff", np.inf))
+                if np.isfinite(_cutoff):
+                    norms = np.linalg.norm(im_mod, axis=2)  # (n_h, n_pts)
+                    valid_mat &= (norms <= _cutoff)
         any_valid = np.any(valid_mat, axis=1)       # (n_h,)
         first_pt  = np.argmax(valid_mat, axis=1)    # (n_h,)
 
@@ -1317,47 +1338,84 @@ class bounded_fluxes:
         if flux_out.ndim < 2 or len(flux_out) == 0:
             return [], [], []
 
-        sigma_np = np.asarray(self.model.periods.sigma)
-        flux_r = flux_out.real
+        # ------------------------------------------------------------------
+        # All downstream math uses ``jnp.*`` primitives so this function
+        # runs on GPU when the inputs live on-device.  Only the final
+        # ``device_get`` + ``.extend(...)`` step crosses back to CPU (to
+        # produce the Python-list return contract callers expect).
+        # ------------------------------------------------------------------
+        sigma_j = jnp.asarray(self.model.periods.sigma)
+        flux_j  = jnp.asarray(flux_out)
+        mod_j   = jnp.asarray(mod_out)
+        tau_j   = jnp.asarray(tau_out)
+
+        flux_r = flux_j.real
         f_part = flux_r[:, :self.n_fluxes]
         h_part = flux_r[:, self.n_fluxes:]
-        sigma_h = np.einsum('ij,lj->li', sigma_np, h_part)
-        tad_np = np.abs(np.einsum('li,li->l', f_part, sigma_h))
-        s_np = tau_out.imag
+        sigma_h = jnp.einsum('ij,lj->li', sigma_j, h_part)
+        tad     = jnp.abs(jnp.einsum('li,li->l', f_part, sigma_h))
+        s       = tau_j.imag
 
         valid_mat = (
-            (tad_np > 0)
-            & (tad_np <= float(self.Nmax))
-            & (s_np >= self.dil_min)
+            (tad > 0)
+            & (tad <= float(self.Nmax))
+            & (s   >= self.dil_min)
         )
 
         # Hyperplane / Kähler-cone check on Im(moduli)
-        hyperplanes = np.asarray(self.model.lcs_tree.hyperplanes)
-        im_mod = mod_out.imag  # (n_pts, h12)
-        # hyperplanes: (h12), im_mod: (n_pts, h12)
-        hp_dist = np.einsum('ij,lj->li', hyperplanes, im_mod)  # ( n_pts, n_hyp)
-        hp_ok = np.all(hp_dist >= 0.0, axis=1)  # (n_pts)
-        valid_mat &= hp_ok
-        
+        hyperplanes = jnp.asarray(self.model.lcs_tree.hyperplanes)
+        im_mod = mod_j.imag  # (n_pts, h12)
+        hp_dist = jnp.einsum('ij,lj->li', hyperplanes, im_mod)  # (n_pts, n_hyp)
+        _stretch = float(getattr(self.sampler, "stretching", 0.0)) if self.sampler is not None else 0.0
+        _excl    = getattr(self.sampler, "exclude_walls", None)    if self.sampler is not None else None
+        _cone_opted_in = bool(getattr(self.sampler, "cone_opted_in", False)) \
+                         if self.sampler is not None else False
+        # Bare cone membership is always required — the refined moduli
+        # must at least be inside the Kähler cone.
+        hp_ok = jnp.all(hp_dist >= 0.0, axis=1)
+        if _cone_opted_in:
+            if _excl is not None and _excl.shape == (hp_dist.shape[-1],):
+                _thr  = jnp.where(jnp.asarray(_excl), 0.0, _stretch)
+                hp_ok = hp_ok & jnp.all(hp_dist >= _thr[None, :], axis=1)
+            else:
+                hp_ok = hp_ok & jnp.all(hp_dist >= _stretch, axis=1)
+        valid_mat = valid_mat & hp_ok
+
         # Moduli patch check (sampler bounds on Im(z))
         if self.sampler is not None:
             _mod_lo = getattr(self.sampler, 'moduli_lower', None)
             _mod_hi = getattr(self.sampler, 'moduli_upper', None)
             if _mod_lo is not None:
-                valid_mat &= np.all(im_mod >= _mod_lo, axis=1)
+                valid_mat = valid_mat & jnp.all(
+                    im_mod >= jnp.asarray(_mod_lo), axis=1,
+                )
             if _mod_hi is not None:
-                valid_mat &= np.all(im_mod <= _mod_hi, axis=1)
-        any_valid = np.any(valid_mat)
-        
+                valid_mat = valid_mat & jnp.all(
+                    im_mod <= jnp.asarray(_mod_hi), axis=1,
+                )
+            if _cone_opted_in:
+                _cutoff = float(getattr(self.sampler, "cone_cutoff", jnp.inf))
+                if jnp.isfinite(_cutoff):
+                    valid_mat = valid_mat & (
+                        jnp.linalg.norm(im_mod, axis=1) <= _cutoff
+                    )
 
+        # Boundary to Python-lists.  Pull the boolean mask back to the
+        # host exactly once; from there `.extend` on small ranked arrays
+        # is cheap.
+        valid_host = np.asarray(valid_mat)
         out_fluxes: list = []
         out_moduli: list = []
         out_taus:   list = []
-        if any_valid:
-            out_fluxes.extend(flux_r[valid_mat])
-            out_moduli.extend(mod_out[valid_mat])
-            out_taus.extend(tau_out[valid_mat])
-            
+        if valid_host.any():
+            # Boolean indexing is supported on jnp arrays via host mask.
+            flux_sel = jnp.asarray(flux_r)[valid_host]
+            mod_sel  = mod_j[valid_host]
+            tau_sel  = tau_j[valid_host]
+            out_fluxes.extend(flux_sel)
+            out_moduli.extend(mod_sel)
+            out_taus.extend(tau_sel)
+
         return out_fluxes, out_moduli, out_taus
 
     def _check_bounds_jax_raw(
@@ -1738,15 +1796,33 @@ class bounded_fluxes:
         r"""
 
         **Description:**
-        Checks whether converged ``(moduli, tau)`` lie inside the sampler's
-        moduli patch.  Pure JAX, vmappable.
+        Checks whether converged ``(moduli, tau)`` lie inside the
+        sampler's moduli patch.  Pure JAX, vmappable.
 
-        The patch is the Cartesian product of the sampler's individual
-        component bounds:
-        :math:`\operatorname{Im}(z_i) \in [\texttt{moduli\_lower},
-        \texttt{moduli\_upper}]` for each modulus, and
-        :math:`s \in [s_{\min}, s_{\max}]`,
-        :math:`c_0 \in [c_{0,\min}, c_{0,\max}]` for the axio-dilaton.
+        The patch is the **intersection** of three constraints (any
+        one of which may be trivial depending on the sampler's
+        configuration):
+
+        * Per-component box:
+          :math:`\operatorname{Im}(z_i) \in
+          [\texttt{moduli\_lower}[i], \texttt{moduli\_upper}[i]]`.
+        * Stretched Kähler cone: for every hyperplane row
+          :math:`H_k`, :math:`(H_k \cdot \operatorname{Im}(z)) \geq
+          \tau_k`, where :math:`\tau_k = 0` for excluded walls
+          (:attr:`sampler.exclude_walls`) and
+          :math:`\tau_k = \texttt{stretching}` otherwise.
+        * Scalar L² cut-off:
+          :math:`\|\operatorname{Im}(z)\|_2 \leq
+          \texttt{cone\_cutoff}`.
+
+        For a pure box-mode user (default ``stretching=0``,
+        ``exclude_walls=None``, ``cone_cutoff`` auto-resolved from
+        ``moduli_upper``), the cone and cut-off checks pass trivially
+        for any point inside the Kähler cone — so behaviour is
+        identical to the pre-refactor per-component check.  For a
+        coniLCS user with ``exclude_walls=[conifold_hp_idx]``, the
+        check permits moduli arbitrarily close to the conifold wall
+        while still enforcing distance from all others.
 
         Args:
             moduli (Array): Complex structure moduli, shape ``(h^{1,2},)``.
@@ -1754,25 +1830,53 @@ class bounded_fluxes:
                 (complex scalar).
 
         Returns:
-            Array: Scalar boolean; ``True`` if ``(moduli, tau)`` lies inside
-            the sampler's patch.
+            Array: Scalar boolean; ``True`` if ``(moduli, tau)`` lies
+            inside the sampler's patch.
         """
         s = jnp.imag(tau)
         c0 = jnp.real(tau)
 
         in_s = (s >= self.sampler.s_lower) & (s <= self.sampler.s_upper)
         in_c0 = (c0 >= self.sampler.axion_lower) & (c0 <= self.sampler.axion_upper)
-        # Check per-component Im(z_i) bounds.  The sampler generates each
-        # Im(z_i) independently in [moduli_lower, moduli_upper] (box mode), so
-        # using the L2 norm of the full moduli vector against these same bounds
-        # is incorrect for h^{1,2} > 1 — it would require ||z||_2 ≤ moduli_upper,
-        # which is almost never satisfied when sqrt(h12) * moduli_lower > moduli_upper.
+
         im_moduli = jnp.imag(moduli)
-        in_mod = jnp.all(
+        # Per-component box check — works for both scalar (broadcast)
+        # and per-direction array forms of moduli_lower / moduli_upper.
+        in_box = jnp.all(
             (im_moduli >= self.sampler.moduli_lower)
             & (im_moduli <= self.sampler.moduli_upper)
         )
-        return in_s & in_c0 & in_mod
+
+        # Stretched-cone and L² cut-off checks fire **only** when the
+        # user explicitly opted into cone constraints (non-zero
+        # stretching or any excluded wall).  Pure box-mode sampling
+        # does not guarantee Kähler-cone membership, so applying those
+        # checks unconditionally would reject valid box-mode samples.
+        #
+        # ``cone_opted_in`` is a static Python bool cached on the
+        # sampler at construction time, so reading it inside this
+        # vmapped/jitted function does not trigger
+        # ``TracerBoolConversionError``.
+        _cone_opted_in = bool(getattr(self.sampler, "cone_opted_in", False))
+
+        if _cone_opted_in and self.sampler._hyperplanes is not None:
+            stretching = float(getattr(self.sampler, "stretching", 0.0))
+            mask = getattr(self.sampler, "exclude_walls", None)
+            H = jnp.asarray(self.sampler._hyperplanes)
+            Hdot = H @ im_moduli                               # (n_hp,)
+            if mask is not None and mask.shape == (Hdot.shape[0],):
+                in_cone = jnp.all(
+                    jnp.where(mask, Hdot > 0.0, Hdot >= stretching)
+                )
+            else:
+                in_cone = jnp.all(Hdot >= stretching)
+            cutoff = float(getattr(self.sampler, "cone_cutoff", jnp.inf))
+            in_radius = jnp.linalg.norm(im_moduli) <= cutoff
+        else:
+            in_cone = jnp.asarray(True)
+            in_radius = jnp.asarray(True)
+
+        return in_s & in_c0 & in_box & in_cone & in_radius
 
     @partial(jit, static_argnums=(0,))
     def in_patch_batch(
@@ -5243,10 +5347,36 @@ class bounded_fluxes:
             'chunk_size': chunk_size,
             'use_linearised_shifts': use_linearised_shifts,
             'n_isd_iters': n_isd_iters,
-            'version': 1,
+            'version': 2,        # bumped: sampler-bounds serialisation added
             'h12': int(self.model.h12),
             'model_type': getattr(self.model, 'model_type', 'KS'),
         }
+        # --- Sampler bounds (direction-aware box + cone specs) ---
+        # Serialised so a cluster worker can reconstruct an identical
+        # data_sampler without having to guess the parameters.  All
+        # entries are written as JSON-friendly values (lists + scalars).
+        if self.sampler is not None:
+            _lo = np.asarray(getattr(self.sampler, 'moduli_lower', []),
+                             dtype=float).ravel().tolist()
+            _hi = np.asarray(getattr(self.sampler, 'moduli_upper', []),
+                             dtype=float).ravel().tolist()
+            _excl = np.asarray(getattr(self.sampler, 'exclude_walls', []),
+                               dtype=bool).ravel().tolist()
+            config['sampler_moduli_lower']  = _lo
+            config['sampler_moduli_upper']  = _hi
+            config['sampler_stretching']    = float(
+                getattr(self.sampler, 'stretching', 0.0))
+            config['sampler_exclude_walls'] = _excl
+            config['sampler_cone_cutoff']   = float(
+                getattr(self.sampler, 'cone_cutoff', 0.0))
+            config['sampler_axion_lower']   = float(
+                getattr(self.sampler, 'axion_lower', -0.5))
+            config['sampler_axion_upper']   = float(
+                getattr(self.sampler, 'axion_upper',  0.5))
+            config['sampler_s_lower']       = float(
+                getattr(self.sampler, 's_lower', 2.0))
+            config['sampler_s_upper']       = float(
+                getattr(self.sampler, 's_upper', 10.0))
 
         # --- Step 3: Generate and save h-chunks ---
         n_chunks = 0
@@ -5321,7 +5451,7 @@ class bounded_fluxes:
 """Auto-generated cluster worker for jaxvacua flux search.
 Edit the MODEL SETUP section below for your model.
 """
-import sys, os
+import sys, os, json
 import jax; jax.config.update("jax_enable_x64", True)
 
 # ---- MODEL SETUP (edit this!) ----
@@ -5331,7 +5461,34 @@ model = jvc.FluxVacuaFinder(
     model_ID=1,  # <-- set your model_ID
     model_type="{config['model_type']}",
 )
-# sampler = jvc.data_sampler(model, ...)  # only for linearised_shifts
+
+# ---- SAMPLER RECONSTRUCTION (auto-restored from config.json) ----
+# The exporter's data_sampler bounds were serialised alongside the
+# pipeline so cluster workers apply the same in-patch / stretched-cone
+# / cutoff filtering during ISD refinement.  Edit if you want to widen
+# or narrow the patch on the worker side.
+with open(os.path.join(os.path.dirname(__file__), "config.json")) as _f:
+    _cfg = json.load(_f)
+
+def _bounds(lo_key, hi_key, h12):
+    lo = _cfg.get(lo_key, [1.0] * h12)
+    hi = _cfg.get(hi_key, [5.0] * h12)
+    return (lo, hi)
+
+sampler = jvc.data_sampler(
+    model,
+    moduli_bounds=_bounds("sampler_moduli_lower",
+                          "sampler_moduli_upper",
+                          int(_cfg.get("h12", {config['h12']}))),
+    axion_bounds=(_cfg.get("sampler_axion_lower", -0.5),
+                  _cfg.get("sampler_axion_upper",  0.5)),
+    dilaton_bounds=(_cfg.get("sampler_s_lower", 2.0),
+                    _cfg.get("sampler_s_upper", 10.0)),
+    stretching=_cfg.get("sampler_stretching", 0.0),
+    exclude_walls=[i for i, b in enumerate(_cfg.get("sampler_exclude_walls", []))
+                   if b] or None,
+    cone_cutoff=_cfg.get("sampler_cone_cutoff", None),
+)
 # ----------------------------------
 
 from jaxvacua.flux_bounding import bounded_fluxes
@@ -5343,6 +5500,7 @@ bounded_fluxes.process_chunk_from_disk(
     output_dir=output_dir,
     chunk_id=chunk_id,
     model=model,
+    sampler=sampler,
 )
 ''')
 
@@ -5476,13 +5634,13 @@ bounded_fluxes.process_chunk_from_disk(
 
         1. ``database=<CYDatabase>``: write the merged results as a
            **session-tier** batch via
-           :meth:`jaxvacua.database.CYDatabase.vacua_writer`.  The
+           :meth:`jaxvacua.lcs_database.LCSDatabase.vacua_writer`.  The
            results are queryable via :meth:`query_vacua` but not yet
            permanent.
         2. ``designate=True`` (requires ``database``, ``label``,
            ``committed_by``): additionally promote the merged results to
            the **permanent vault** via
-           :meth:`jaxvacua.database.CYDatabase.designate_vacua`.  The
+           :meth:`jaxvacua.lcs_database.LCSDatabase.designate_vacua`.  The
            results are retrievable via :meth:`load_local_vacua`.
 
         Args:

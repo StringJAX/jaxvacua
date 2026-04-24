@@ -94,7 +94,7 @@ def set_data_dir(path):
     Set the global data directory for all jaxvacua database operations
     (HuggingFace cache, vacua storage, designated solutions).
 
-    New :class:`~jaxvacua.database.CYDatabase` instances created after
+    New :class:`~jaxvacua.lcs_database.LCSDatabase` instances created after
     this call will use the specified directory unless overridden by an
     explicit ``cache_dir`` argument.
 
@@ -123,7 +123,7 @@ def set_vault_dir(path):
     **Description:**
     Set the vault directory for designated vacuum solutions by
     exporting ``JAXVACUA_VAULT`` into the environment.  Takes effect
-    for all subsequent :class:`~jaxvacua.database.CYDatabase` calls.
+    for all subsequent :class:`~jaxvacua.lcs_database.LCSDatabase` calls.
 
     Args:
         path (str | Path): Absolute or relative path to the vault

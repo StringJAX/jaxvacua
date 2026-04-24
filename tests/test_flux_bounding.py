@@ -1182,7 +1182,7 @@ class TestClusterRoundTrip(TestCase):
         with the expected rows loadable via ``load_local_vacua``.
         """
         import os, tempfile
-        from jaxvacua.database import CYDatabase
+        from jaxvacua.lcs_database import LCSDatabase as CYDatabase
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(

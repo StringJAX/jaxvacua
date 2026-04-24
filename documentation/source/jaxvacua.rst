@@ -23,6 +23,8 @@ Subpackages
     jaxvacua.conifold_utils
     jaxvacua.one_modulus_models
     jaxvacua.sampling
-    jaxvacua.database
+    jaxvacua.cy_io
+    jaxvacua.lcs_database
+    jaxvacua.vacua_writer
     jaxvacua.util
     jaxvacua.cytools_interface

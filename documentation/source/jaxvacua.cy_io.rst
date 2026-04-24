@@ -1,13 +1,19 @@
-jaxvacua.database
+jaxvacua.cy_io
 ==================
 
-.. currentmodule:: jaxvacua.database
+.. currentmodule:: jaxvacua.cy_io
 
-.. automodule:: jaxvacua.database
+.. automodule:: jaxvacua.cy_io
 
 
 Database classes
 -----------------------------------
+
+Pure-I/O classes for reading the HuggingFace-hosted ``cy-database``.  These
+classes have **no jaxvacua dependencies** and are intended to be extractable
+into a standalone PyPI package later.  For model construction (``lcs_tree`` /
+``FluxVacuaFinder``) and vacua persistence, see
+:doc:`jaxvacua.lcs_database` and :doc:`jaxvacua.vacua_writer`.
 
 .. autosummary::
     :toctree: _autosummary
@@ -26,18 +32,7 @@ Discovery
 
     CYDatabase.info
     CYDatabase.query
-
-
-Loading models
------------------------------------
-
-.. autosummary::
-    :toctree: _autosummary
-
-    CYDatabase.load
-    CYDatabase.load_model
-    CYDatabase.load_batch
-    CYDatabase.sample
+    CYDatabase.query_conifolds
 
 
 Module-level convenience functions
@@ -46,6 +41,5 @@ Module-level convenience functions
 .. autosummary::
     :toctree: _autosummary
 
-    load_tdf_model
-    load_cicy_model
+    load_catalog
     query_models
