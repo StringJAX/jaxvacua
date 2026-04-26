@@ -1333,7 +1333,12 @@ class CYDatabase:
             poly_row = poly_shard.iloc[int(prid)]
         else:
             poly_row = self._fetch_row("polytope", int(psid), int(prid))
-        return _parse_polytope_row(poly_row)
+            
+        poly_data = _parse_polytope_row(poly_row)
+        points    = poly_data["polytope_points"]            # np.ndarray
+        points    = np.array([list(x) for x in points])
+        poly_data["polytope_points"] = points
+        return poly_data
 
     def _validate_key(
         self,
