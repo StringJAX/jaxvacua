@@ -28,7 +28,7 @@ from jax.scipy.special import zeta
 from jax.numpy import pi as Pi
 from jax.tree_util import register_pytree_node
 
-# Enable 64 bit precision
+
 #Polylog imports
 from jaxpolylog import jax_polylog_vmap
 
