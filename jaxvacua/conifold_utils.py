@@ -42,10 +42,12 @@ import gzip
 from flint import fmpz, fmpz_mat
 
 
+#Polylog imports
+from jaxpolylog import jax_polylog_vmap
+
 from cytools import Polytope
 from cytools.triangulation import Triangulation
 from jax import Array
-
 
 
 #################### FROM PERIODS ####################
@@ -477,7 +479,7 @@ def F_coniLCS_exp_per(self,
         val = val / jax.scipy.special.gamma(n + 1)
         
     if self.include_mirror_wsi:
-        val = val + self.F_inst_per_coni(X0,XConi,XPerBulk,conj=conj,n=n)
+        val = val + self.F_inst_per_coni(X0,XPerBulk,conj=conj,n=n)
 
     if n>0:
         val = val*(XConi)**(n)
@@ -1646,7 +1648,7 @@ def compute_zcf(self,x,flux,mode=None,conj=False):
 
 
 
-#@partial(jax.jit,static_argnums = (3,))
+@partial(jax.jit,static_argnums = (3,))
 def zcf_handling(self,x,flux,mode=None):
     r"""
     **Description:**
@@ -1662,18 +1664,18 @@ def zcf_handling(self,x,flux,mode=None):
     
     """
     
+    # TODO: this only works for conifold_basis=True
+    
     if mode is None:
         xcz=jnp.zeros(2)
     else:
         zcf = self.compute_zcf(x,flux,mode=mode)
         xcz = jnp.array([zcf.real,zcf.imag])
-        #if mode != "pfv":
-        #    x = x[2:]
         
     return jnp.append(xcz,x)
 
-#@partial(jax.jit,static_argnums = (3,))
-def DW_x_bulk(self,x,flux,mode=None):
+@partial(jax.jit,static_argnums = (3,))
+def DWbulk_x(self,x,flux,mode=None):
     r"""
     **Description:**
     Computes the gradient of the flux superpotential with respect to the bulk moduli.
@@ -1691,8 +1693,8 @@ def DW_x_bulk(self,x,flux,mode=None):
 
     return self.DW_x(X,flux)[2:]
 
-#@partial(jax.jit,static_argnums = (3,))
-def dDW_x_bulk(self,x,flux,mode=None):
+@partial(jax.jit,static_argnums = (3,))
+def dDWbulk_x(self,x,flux,mode=None):
     r"""
     **Description:**
     Computes the Hessian of the flux superpotential with respect to the bulk moduli.
@@ -1710,3 +1712,30 @@ def dDW_x_bulk(self,x,flux,mode=None):
     X = self.zcf_handling(x,flux,mode=mode)
 
     return self.dDW_x(X,flux)[2:,2:]
+
+@partial(jax.jit,static_argnums = (6,))
+def DWbulk(self,z,cz,tau,ctau,flux,mode=None):
+    
+    x = self._convert_complex_to_real(z,cz,tau,ctau)
+    
+    X = self.zcf_handling(x,flux,mode=mode)
+    
+    # TODO: this only works for conifold_basis=True
+    z0 = jnp.append(X[0]+1j*X[1],z)
+    cz0 = jnp.append(X[0]-1j*X[1],cz)
+    
+    return self.DW(z0,cz0,tau,ctau,flux)[1:]
+
+@partial(jax.jit,static_argnums = (6,))
+def dDWbulk(self,z,cz,tau,ctau,flux,mode=None):
+    
+    x = self._convert_complex_to_real(z,cz,tau,ctau)
+    
+    X = self.zcf_handling(x,flux,mode=mode)
+    
+    # TODO: this only works for conifold_basis=True
+    z0 = jnp.append(X[0]+1j*X[1],z)
+    cz0 = jnp.append(X[0]-1j*X[1],cz)
+    
+    return self.dDW(z0,cz0,tau,ctau,flux)[1:,1:]
+

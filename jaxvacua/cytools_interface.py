@@ -334,7 +334,7 @@ def cytools_model_data_init(
     
     # Save to file if requested
     if save_file:
-        save_model_data(model_data, "model_data.p", model_ID, mirror_cy.h11())
+        save_model_data(model_data, f"model_{model_ID}.p", model_ID, mirror_cy.h11())
 
     return model_data
 
