@@ -1254,6 +1254,87 @@ class CYDatabase:
 
         return self._catalog[mask].reset_index(drop=True)
 
+    def get_polytope(
+        self,
+        ks_id: int,
+        h11: int,
+        h12: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        r"""
+        **Description:**
+        Fetch the polytope data for a model identified by ``(h11, ks_id)``,
+        optionally disambiguated by ``h12``.
+
+        Polytope data is stored per-polytope (not per-triangulation), so
+        ``triang_id`` is not required: every triangulation of the same
+        polytope shares one row in the ``polytope`` parquet split.  When
+        multiple polytopes share the same ``(h11, ks_id)`` (which is rare),
+        pass ``h12`` to disambiguate.
+
+        Args:
+            ks_id (int): Kreuzer-Skarke polytope index.
+            h11 (int): Hodge number :math:`h^{1,1}`.
+            h12 (int | None): Hodge number :math:`h^{1,2}`.  Optional.
+
+        Returns:
+            Dict[str, Any]: Contains ``"polytope_points"`` (an ``np.ndarray``
+            of lattice points) and optionally ``"polytope_data"`` with any
+            extra polytope-level fields stored by ``process_polytope`` such
+            as ``is_favorable``, ``volume``, ``glsm_charge_matrix``.
+
+        Raises:
+            ValueError: If this database is not the ``tdf`` dataset, or the
+                catalog has no ``polytope`` split, or the matching row has
+                no polytope shard pointer.
+            KeyError: If no row matches the supplied filters.
+        """
+        if self.dataset != "tdf":
+            raise ValueError(
+                f"get_polytope is only available for the 'tdf' dataset; "
+                f"got dataset='{self.dataset}'."
+            )
+
+        self._ensure_catalog()
+        cat = self._catalog
+        mask = (cat["ks_id"] == ks_id) & (cat["h11"] == h11)
+        if h12 is not None:
+            mask = mask & (cat["h12"] == h12)
+        matches = cat[mask]
+        if len(matches) == 0:
+            key = f"ks_id={ks_id}, h11={h11}"
+            if h12 is not None:
+                key += f", h12={h12}"
+            raise KeyError(
+                f"No polytope found for {key} in the '{self.dataset}' dataset."
+            )
+
+        if "polytope_shard_id" not in matches.columns:
+            raise ValueError(
+                "Catalog has no 'polytope_shard_id' column — this dataset does "
+                "not provide a polytope split."
+            )
+
+        row = matches.iloc[0]
+        psid = row["polytope_shard_id"]
+        try:
+            import pandas as pd
+            _has_poly = psid is not None and not pd.isna(psid)
+        except (TypeError, ValueError):
+            _has_poly = psid is not None
+        if not _has_poly:
+            key = f"ks_id={ks_id}, h11={h11}"
+            if h12 is not None:
+                key += f", h12={h12}"
+            raise ValueError(f"No polytope data available for {key}.")
+
+        prid = row["polytope_row_index"]
+        if self.cache_mode == "persistent":
+            poly_shard = self._fetch_shard("polytope", int(psid))
+            poly_row = poly_shard.iloc[int(prid)]
+        else:
+            poly_row = self._fetch_row("polytope", int(psid), int(prid))
+        return _parse_polytope_row(poly_row)
+
     def _validate_key(
         self,
         ks_id: Optional[int],
