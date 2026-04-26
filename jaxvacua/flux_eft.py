@@ -128,6 +128,8 @@ class FluxEFT(css):
 
         self.n_fluxes = self._dimension_H3_tot
         self.axion_FD = kwargs.get("axion_FD", (-0.5, 0.5))
+        
+        
 
     def __repr__(self) -> str:
         r"""
@@ -4141,16 +4143,23 @@ from .conifold_utils import (
     W1_tilde as _W1_tilde_func,
     compute_zcf as _compute_zcf_func,
     zcf_handling as _zcf_handling_func,
-    DW_x_bulk as _DW_x_bulk_func,
-    dDW_x_bulk as _dDW_x_bulk_func,
+    #DW_x_bulk as _DW_x_bulk_func,
+    #dDW_x_bulk as _dDW_x_bulk_func,
+    DWbulk_x as _DWbulk_x_func,
+    dDWbulk_x as _dDWbulk_x_func,
+    DWbulk as _DWbulk_func,
+    dDWbulk as _dDWbulk_func
 )
 FluxEFT.W1_tilde = _W1_tilde_func
 FluxEFT.compute_zcf = _compute_zcf_func
 FluxEFT.zcf_handling = _zcf_handling_func
-FluxEFT.DW_x_bulk = _DW_x_bulk_func
-FluxEFT.dDW_x_bulk = _dDW_x_bulk_func
-
-
+#FluxEFT.DW_x_bulk = _DW_x_bulk_func
+#FluxEFT.dDW_x_bulk = _dDW_x_bulk_func
+FluxEFT.DWbulk_x = _DWbulk_x_func
+FluxEFT.dDWbulk_x = _dDWbulk_x_func
+FluxEFT.DWbulk = _DWbulk_func
+FluxEFT.dDWbulk = _dDWbulk_func
+        
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 
