@@ -47,20 +47,15 @@ def save_model_data(data,fname,model_ID,h12):
     if model_ID is None:
         raise ValueError("Please provide `model_ID` to save model data!")
 
-    dir_h12 = files_dir+'/KS/h12_'+str(h12)+'/'
+    dir_h12 = files_dir+'/h12_'+str(h12)+'/'
 
     if not os.path.isdir(dir_h12):
-        directory = files_dir+'/KS/'
+        directory = files_dir+'/'
         if not os.path.exists(directory):
             os.makedirs(directory)
         os.mkdir(dir_h12)
-
-    file= dir_h12+'Model_'+str(model_ID)+'/'
-
-    if not os.path.isdir(file):
-        os.mkdir(file)
         
-    filename = file+fname
+    filename = dir_h12+fname
 
     if os.path.isfile(filename):
         print(f"Model ID already exists! File `{fname}` might be overwritten!")
