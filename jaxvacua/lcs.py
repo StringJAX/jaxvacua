@@ -266,6 +266,8 @@ class lcs_tree(object):
         
         self.rays_mori_cone = mori_rays
         
+        
+        
         # ---------- Conifold container ----------
         # Resolve self.conifolds, self.conifold, self._active_conifold_idx by
         # priority order: conifolds=, conifold=, legacy conifold_limits=,
@@ -279,14 +281,6 @@ class lcs_tree(object):
             self.conifolds = None
             self._active_conifold_idx = None
             self.conifold = conifold
-        elif conifold_limits is not None:
-            # Legacy path 1: list of conifold charges.
-            self.conifolds = None
-            self._active_conifold_idx = None
-            self.conifold = Conifold.from_data(
-                ncf=ncf if ncf is not None else 0,
-                conifold_curve=jnp.asarray(conifold_limits[0]),
-            )
         elif conifold_curve is not None and ncf is not None:
             # Legacy path 2: single (conifold_curve, ncf) pair (lcs_database.py
             # and other callers that don't materialise a full conifold list).
@@ -335,6 +329,7 @@ class lcs_tree(object):
                     and self.conifold.conifold_curve is not None
                     and bc_curr is not None):
                 self.conifold.conifold_curve0 = self.conifold.conifold_curve @ bc_curr.T
+                
 
             # Validate: conifold_curve @ basis_change.T must equal (1,0,...,0).
             if (self.conifold.conifold_curve is not None and bc_curr is not None):

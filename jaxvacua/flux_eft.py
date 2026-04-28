@@ -4128,15 +4128,7 @@ class FluxEFT(css):
 
 
 
-# Bind flux utility methods (defined in flux_utils.py with explicit self) to FluxEFT
-from .flux_utils import (
-    pfv_to_flux as _pfv_to_flux_func,
-    pfv_to_moduli as _pfv_to_moduli_func,
-    flux_to_pfv as _flux_to_pfv_func,
-)
-FluxEFT.pfv_to_flux = _pfv_to_flux_func
-FluxEFT.pfv_to_moduli = _pfv_to_moduli_func
-FluxEFT.flux_to_pfv = _flux_to_pfv_func
+"""
 
 # Bind conifold utility methods (defined in conifold_utils.py with explicit self) to FluxEFT
 from .conifold_utils import (
@@ -4169,6 +4161,32 @@ FluxEFT.conifold_fluxes = _conifold_fluxes_func
 FluxEFT.compute_zcf_correction = _compute_zcf_correction_func
 FluxEFT.compute_zcf_explicit = _compute_zcf_explicit_func
 FluxEFT.compute_zcf_compact = _compute_zcf_compact_func
+"""
+
+
+# Bind flux utility methods (defined in flux_utils.py with explicit self) to FluxEFT
+from .flux_utils import (
+    pfv_to_flux as _pfv_to_flux_func,
+    pfv_to_moduli as _pfv_to_moduli_func,
+    flux_to_pfv as _flux_to_pfv_func,
+)
+FluxEFT.pfv_to_flux = _pfv_to_flux_func
+FluxEFT.pfv_to_moduli = _pfv_to_moduli_func
+FluxEFT.flux_to_pfv = _flux_to_pfv_func
+
+
+from types import MethodType
+from . import conifold_utils as _cu
+
+_CONIFOLD_METHODS = (
+    "W1_tilde", "compute_zcf", "zcf_handling",
+    "DWbulk_x", "dDWbulk_x", "DWbulk", "dDWbulk",
+    "W_bulk", "conifold_fluxes",
+    "compute_zcf_correction", "compute_zcf_explicit", "compute_zcf_compact",
+)
+
+for _name in _CONIFOLD_METHODS:
+    setattr(FluxEFT, _name, _cu._ConifoldGated(getattr(_cu, _name)))
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 

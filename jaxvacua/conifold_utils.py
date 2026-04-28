@@ -50,6 +50,32 @@ from cytools import Polytope
 from cytools.triangulation import Triangulation
 from jax import Array
 
+from types import MethodType
+
+class _ConifoldGated:
+    r"""
+    **Description:**
+    Class-level descriptor: surfaces a method only when periods.limit ∈
+    {coniLCS, coniLCS_series, coniLCS_bulk}; otherwise raises AttributeError
+    so hasattr() returns False.
+    
+    This is used to gate conifold-specific methods in FluxVacuaFinder, so they only appear when the appropriate limit is set. The descriptor checks the periods.limit attribute of the instance to determine whether to allow access to the method or not. If the limit is not in the coniLCS family, an AttributeError is raised, effectively hiding the method from users of the class when it's not applicable.
+     
+    """
+    def __init__(self, fn): self.fn = fn
+    def __set_name__(self, owner, name): self.__name__ = name
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        periods = instance.__dict__.get("periods")
+        limit   = getattr(periods, "limit", None) if periods is not None else None
+        if limit is None or "coniLCS" not in str(limit):
+            raise AttributeError(
+                f"{self.__name__!r} requires periods.limit ∈ coniLCS family "
+                f"(got {limit!r})"
+            )
+        return MethodType(self.fn, instance)
+
 
 #################### FROM PERIODS ####################
 
@@ -1839,6 +1865,7 @@ def compute_zcf_correction(self, z, cz, tau, ctau, flux, conj=False):
     
     return zcf1
 
+@partial(jit, static_argnames=["conj"])
 def compute_zcf_explicit(self, z, tau, flux, conj=False):
     """Notebook-local: conifold modulus solver for ``conifold_basis=False``.
 
@@ -2032,6 +2059,13 @@ def compute_zcf(self,x,flux,mode=None,conj=False):
     
     """
     
+    z,_,tau,_ = self._convert_real_to_complex(x)
+
+    zbulk = z[1:]
+    
+    zcf = self.compute_zcf_explicit(zbulk,tau,flux,conj=conj)
+    """
+    
     if mode not in [None,"pfv","analytic"]:
         raise ValueError('Mode must be one of [None,"pfv"]!')
     
@@ -2084,6 +2118,7 @@ def compute_zcf(self,x,flux,mode=None,conj=False):
         exponent = -coeff*(W1)/ncf/(M1-tau*H1)
         
     zcf = (-1)/coeff * jnp.exp(exponent)
+    """
     
     return zcf
 
@@ -2111,7 +2146,10 @@ def zcf_handling(self,x,flux,mode=None):
     if mode is None:
         xcz=jnp.zeros(2)
     else:
-        zcf = self.compute_zcf(x,flux,mode=mode)
+        
+        #zcf = self.compute_zcf(x,flux,mode=mode)
+        # CAREFUL: CHANGE WAS MADE!!!
+        zcf = self.compute_zcf(jnp.append(jnp.zeros(2), x), flux, mode=mode)
         xcz = jnp.array([zcf.real,zcf.imag])
         
     return jnp.append(xcz,x)
