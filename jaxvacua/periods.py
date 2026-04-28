@@ -133,7 +133,7 @@ class periods:
         
         # Testing inputs...
         ## Check correct model types
-        model_types=[None,"KS","CICY"]
+        model_types=[None,"KS","CICY","hypergeometric"]
         if model_type not in model_types:
             raise ValueError(f"Model type must be one of {model_types}!")
             
@@ -145,6 +145,35 @@ class periods:
         self.model_ID = model_ID
         self.maximum_degree = maximum_degree
         self.prange = prange
+
+        # Recognised moduli-space limits.
+        _LCS_FAMILY_LIMITS = ("LCS", "coniLCS", "coniLCS_series", "coniLCS_bulk")
+        _NON_LCS_LIMITS    = ("Kpoint", "Cpoint")
+        _RECOGNISED_LIMITS = _LCS_FAMILY_LIMITS + _NON_LCS_LIMITS
+
+        if limit is not None and limit not in _RECOGNISED_LIMITS:
+            raise ValueError(
+                f"Unknown limit {limit!r}; expected one of "
+                f"{_RECOGNISED_LIMITS} or None."
+            )
+
+        # Hypergeometric model auto-detection: if the user passes a non-LCS
+        # limit + a known label, resolve the closed-form prepotential from
+        # the registry and tag the model_type. Registry lookup logic lives in
+        # HypergeometricModels.resolve_prepotential to keep this constructor
+        # simple; periods owns the h12 invariant locally.
+        if limit in _NON_LCS_LIMITS:
+            if h12 != 1:
+                raise ValueError(
+                    f"limit={limit!r} is only defined for one-modulus (h12=1) "
+                    f"hypergeometric models; got h12={h12}."
+                )
+            from .hypergeometric_models import HypergeometricModels
+            self.model_type = "hypergeometric"
+            if prepotential_input is None:
+                prepotential_input = HypergeometricModels.resolve_prepotential(
+                    model_ID=model_ID, limit=limit
+                )
         
         # Set whether to use GV invariants for the instanton sum
         self.use_gvs = use_gvs
@@ -255,12 +284,16 @@ class periods:
         
         
         
-        limits = ["LCS","coniLCS","coniLCS_series","coniLCS_bulk"]
-        if limit not in limits or self._lcs_tree is None:
+        LCS_FAMILY_LIMITS = ("LCS", "coniLCS", "coniLCS_series", "coniLCS_bulk")
+        NON_LCS_LIMITS    = ("Kpoint", "Cpoint")
+
+        # Custom-input dispatch: K/Cpoint always use it; LCS-family fall back to
+        # it only when no lcs_tree was supplied.
+        if (limit in NON_LCS_LIMITS) or (limit not in LCS_FAMILY_LIMITS) or (self._lcs_tree is None):
             self._setup_custom_input(period_input, prepotential_input)
             
             
-        if self.limit in ["coniLCS_series","coniLCS_bulk"]:
+        if "coniLCS" in self.limit:
             # Number of terms in the conifold expansion to be included. Only relevant for the "coniLCS_series" limit.
             # Setting default to 2 in order to get linear expansion at the level of the superpotential.
             self.nmax = kwargs.get("nmax", 2) 
@@ -269,24 +302,31 @@ class periods:
             gv_invariants = self._lcs_tree.gv_invariants
             
             if conifold_basis:
-                coninop0 = self._lcs_tree.conifold_curve0
+                coninop0 = self._lcs_tree.conifold.conifold_curve0
             else:
-                coninop0 = self._lcs_tree.conifold_curve
+                coninop0 = self._lcs_tree.conifold.conifold_curve
                 if coninop0 is None:
                     raise ValueError("Conifold curve data not found in lcs_tree! Please check conifold curve input and basis choice!")
                 
             # Find index of conifold curve in GV charge data 
             flag = jnp.any(gv_charges!=coninop0,axis=1)
             # Test if conifold curve is found in GV charge data
-            coni_index = jnp.where(flag==False)[0]
-            if len(coni_index)==0:
+            self.coni_index = jnp.where(flag==False)[0]
+            if len(self.coni_index)==0:
                 raise ValueError("Could not find conifold curve in GV charge data! Please check conifold curve input and basis choice!")
             
+            if len(self.coni_index)>1:
+                raise ValueError("Found multiple matches for conifold curve in GV charge data! Please check conifold curve input and basis choice!")
+            
+            self.coni_index = int(self.coni_index[0])
+            
             # Remove conifold curve from gvs!
-            gv_charges = gv_charges[flag]
-            gv_invariants = gv_invariants[flag]
-            self._lcs_tree.gv_charges = gv_charges
-            self._lcs_tree.gv_invariants = gv_invariants
+            if self.limit in ["coniLCS_series","coniLCS_bulk"]:
+                gv_charges = gv_charges[flag]
+                gv_invariants = gv_invariants[flag]
+                self._lcs_tree.gv_charges = gv_charges
+                self._lcs_tree.gv_invariants = gv_invariants
+                
 
         # DONE
         # -----------------------------------------------------------------------------------
@@ -1482,7 +1522,7 @@ class periods:
 
     
 
-from .conifold_utils import F_coniLCS_series_per,F_coniLCS_exp_per, F_inst_per_coni,F_coniLCS_poly_split_per,dF_coniLCS_poly_per,ddF_coniLCS_poly_per,dddF_coniLCS_poly_per, ddddF_coniLCS_poly_per,F_coniLCS_bulk_per,F_coni_per
+from .conifold_utils import F_coniLCS_series_per,F_coniLCS_exp_per, F_inst_per_coni,F_coniLCS_poly_split_per,dF_coniLCS_poly_per,ddF_coniLCS_poly_per,dddF_coniLCS_poly_per, ddddF_coniLCS_poly_per,F_coniLCS_bulk_per,F_coni_per,delete_coni_index
 
 periods.F_coniLCS_series_per = F_coniLCS_series_per
 periods.F_coniLCS_exp_per = F_coniLCS_exp_per
@@ -1494,6 +1534,7 @@ periods.ddF_coniLCS_poly_per = ddF_coniLCS_poly_per
 periods.dddF_coniLCS_poly_per = dddF_coniLCS_poly_per 
 periods.ddddF_coniLCS_poly_per = ddddF_coniLCS_poly_per 
 periods.F_coniLCS_bulk_per = F_coniLCS_bulk_per 
+periods.delete_coni_index = delete_coni_index
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, periods)
 

@@ -1,30 +1,30 @@
 # ==============================================================================
-# one_modulus_models.py
+# hypergeometric_models.py
 #
-# Standalone module for loading period data of one-modulus Calabi-Yau models
-# from arXiv:2306.01059 (Bastian, van de Heisteeg, Schlechter).
-#
-# Provides model databases and prepotential/period functions near each singularity:
+# Hardcoded registry of one-modulus Calabi-Yau models from arXiv:2306.01059
+# (Bastian, van de Heisteeg, Schlechter). Provides closed-form prepotentials
+# at each of three moduli-space points:
 #   - LCS    (Large Complex Structure / MUM, at z → 0)
 #   - Kpoint (finite-order monodromy, at z → ∞ for K-type models)
 #   - Cpoint (conifold singularity)
 #
-# No dependency on other jaxvacua modules. All constants are computed from
-# closed-form expressions involving Γ-function values (from arXiv:2306.01059,
-# Tables 3–4).
+# Public API
+# ----------
+# >>> import jaxvacua as jvc
+# >>> jvc.HypergeometricModels.list()              # available labels
+# >>> m = jvc.HypergeometricModels.build("X33", limit="LCS")    # standard FluxVacuaFinder
+# >>> m = jvc.HypergeometricModels.build("X33", limit="Kpoint") # at K-point
+# >>> m.DW_x(x0, flux); m.dDW_x(x0, flux)          # standard Newton-solve API
 #
-# Prepotential conventions follow the companion notebook 14_period_input.ipynb.
-# The K-point formula reproduces eqs. (1060–1063) of [1] exactly.
-# The C-point formula reproduces eqs. (846–849) of [1] in a convention where
+# Or, going through FluxVacuaFinder directly (periods auto-detects the model):
+# >>> m = jvc.FluxVacuaFinder(h12=1, model_ID="X33", limit="Kpoint")
+#
+# Low-level escape hatches for users defining custom one-modulus models:
+# >>> from jaxvacua import make_prepot_LCS, make_prepot_Kpoint, make_prepot_Cpoint
+#
+# Conventions: the K-point formula reproduces eqs. (1060–1063) of [1] exactly;
+# the C-point formula reproduces eqs. (846–849) of [1] in a convention where
 # the instanton normalization absorbs a factor of (8π)⁻¹ into A₁.
-#
-# Usage
-# -----
-# >>> from jaxvacua.one_modulus_models import get_model, list_models
-# >>> list_models()
-# >>> model = get_model("X33", "Kpoint")
-# >>> model.prepotential(X)          # callable F(X, conj=False)
-# >>> model.period_vector(X)         # Π(X) = (∂F/∂X^I, X^I)
 #
 # References
 # ----------
@@ -32,13 +32,25 @@
 # [2] AESZ database: Almkvist, Enckevort, van Straten, Zudilin
 # ==============================================================================
 
-import functools
-
+from functools import partial
 import numpy as np
 import jax
 import jax.numpy as jnp
 from scipy.special import gamma as gamma_func
 from scipy.special import zeta as scipy_zeta
+
+__all__ = [
+    "HypergeometricModels",
+    "list_hypergeometric_models",
+    "make_prepot_LCS",
+    "make_prepot_Kpoint",
+    "make_prepot_Cpoint",
+    "HYPERGEOMETRIC_MODELS",
+    "NON_HYPERGEOMETRIC_MODELS",
+    "ALL_MODELS",
+    "KPOINT_DATA",
+    "CPOINT_DATA",
+]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # L-function values (closed-form Γ-function expressions, Table 3–4 of [1])
@@ -431,13 +443,19 @@ def make_prepot_LCS(kappa, c2, chi):
     """
     sigma = (kappa / 2) % 1
     K0 = scipy_zeta(3) * chi / (2.0 * (2j * np.pi)**3)
+    K0_conj = np.conj(K0)
 
+    @partial(jax.jit, static_argnames=("conj",))
     def F(X, conj=False):
-        """Evaluate the LCS prepotential for periods X."""
-        if conj:
-            X = jnp.conj(X)
+        """Evaluate the LCS prepotential for periods X.
+
+        Caller convention: at conj=True the user passes X̄ and the function
+        returns conj(F(X)). Since kappa, sigma, c2 are real, the only piece
+        that needs conjugation is K0 (which is purely imaginary).
+        """
         z = X[1] / X[0]
-        F_inh = (kappa/6) * z**3 - (sigma/2) * z**2 - (c2/24) * z - K0
+        K0_use = K0_conj if conj else K0
+        F_inh = (kappa/6) * z**3 - (sigma/2) * z**2 - (c2/24) * z - K0_use
         return X[0]**2 * F_inh
 
     return F
@@ -499,6 +517,7 @@ def make_prepot_Kpoint(tau, gamma, delta, c, B1, B2, B3):
     """
     tau2 = float(tau.imag)
 
+    @partial(jax.jit, static_argnames=("conj",))
     def F(X, conj=False):
         """Evaluate the K-point prepotential for periods X."""
         tau_use = jnp.conj(jnp.array(tau)) if conj else jnp.array(tau)
@@ -548,6 +567,11 @@ def make_prepot_Cpoint(tau, gamma, delta, k, A1, A2):
     Returns:
         callable: ``F(X, conj=False)`` where ``X`` has shape ``(2,)``. Returns the homogeneous degree-2 prepotential (scalar).
     """
+    A1_arr = jnp.array(A1) + 0j   # ensure complex dtype so jnp.log handles negative reals
+    log_A1 = jnp.log(A1_arr)
+    log_A1_conj = jnp.conj(log_A1)
+
+    @partial(jax.jit, static_argnames=("conj",))
     def F(X, conj=False):
         """Evaluate the C-point prepotential for periods X."""
         tau_use = jnp.conj(jnp.array(tau)) if conj else jnp.array(tau)
@@ -555,10 +579,13 @@ def make_prepot_Cpoint(tau, gamma, delta, k, A1, A2):
         F0 = tau_use / 2
         F1 = delta - gamma * tau_use
         if conj:
-            F2 = -1j * k * (3 - 2 * jnp.log(s) + 2 * jnp.log(A1)) - gamma * F1
+            # log(A1) on the conjugate branch must equal conj(log(A1_orig)) for
+            # the prepotential to satisfy F(conj(z), conj=True) = conj(F(z)).
+            # For complex or negative-real A1, that's NOT the same as log(A1).
+            F2 = -1j * k * (3 - 2 * jnp.log(s) + 2 * log_A1_conj) - gamma * F1
             F3 =  1j * k * (3 * A1**2 * gamma - A2) / (12 * jnp.pi * A1**2)
         else:
-            F2 =  1j * k * (3 - 2 * jnp.log(s) + 2 * jnp.log(A1)) - gamma * F1
+            F2 =  1j * k * (3 - 2 * jnp.log(s) + 2 * log_A1) - gamma * F1
             F3 = -1j * k * (3 * A1**2 * gamma - A2) / (12 * jnp.pi * A1**2)
         return F0 + s * F1 + s**2 * F2 + s**3 * F3
 
@@ -566,185 +593,260 @@ def make_prepot_Cpoint(tau, gamma, delta, k, A1, A2):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Model container
-# ─────────────────────────────────────────────────────────────────────────────
-
-class OneModulusModel:
-    r"""**Description:** Container for a one-modulus CY model at a specific singularity.
-
-    Attributes:
-        label (str): Model identifier (e.g. ``"X33"``).
-        singularity (str): Singularity type (``"LCS"``, ``"Kpoint"``, or ``"Cpoint"``).
-        lcs_data (dict): LCS topological data (:math:`\kappa`, :math:`c_2`, :math:`\chi`, …).
-        boundary (dict): Boundary data for the singularity (:math:`\tau`, :math:`\gamma`, …).
-        prepotential (callable): ``F(X, conj=False)``, homogeneous degree-2 in :math:`X=(X_0,X_1)`.
-    """
-
-    def __init__(self, label, singularity, lcs_data, boundary, prepotential):
-        """Initialise a OneModulusModel from its components."""
-        self.label       = label
-        self.singularity = singularity
-        self.lcs_data    = lcs_data
-        self.boundary    = boundary
-        self.prepotential = prepotential
-
-    def __repr__(self):
-        r"""**Description:** Return a string representation of the model."""
-        name = ALL_MODELS.get(self.label, {}).get("name", self.label)
-        return (f"OneModulusModel(label='{self.label}', "
-                f"singularity='{self.singularity}', "
-                f"name='{name}')")
-
-    @functools.lru_cache(maxsize=4)
-    def _period_vector_jit(self, conj):
-        r"""
-        **Description:**
-        Return a JIT-compiled period-vector function for a fixed ``conj`` flag.
-
-        Args:
-            conj (bool): If ``True``, return the function for the conjugate conventions.
-
-        Returns:
-            callable: JIT-compiled function ``_pv(X)`` returning the period vector of shape ``(4,)``.
-        """
-        F = self.prepotential
-
-        @jax.jit
-        def _pv(X):
-            """Compute the period vector for a fixed conjugation flag."""
-            # F is holomorphic in X (conj=False) or in X̄ (conj=True).
-            # Use jax.grad with holomorphic=True for a single gradient call.
-            grad_F = jax.grad(lambda x: F(x, conj=conj), holomorphic=True)(X)
-            return jnp.concatenate([grad_F, X])
-        return _pv
-
-    def period_vector(self, X, conj=False):
-        r"""
-        **Description:**
-        Compute :math:`\Pi = (\partial F/\partial X^0,\, \partial F/\partial X^1,\, X^0,\, X^1)`
-        via JAX autodiff (JIT-compiled).
-
-        Args:
-            X (Array): Homogeneous coordinates, shape ``(2,)``.
-            conj (bool, optional): If ``True``, use conjugate conventions. Defaults to ``False``.
-
-        Returns:
-            Array: Period vector of shape ``(4,)``.
-        """
-        return self._period_vector_jit(conj)(X)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def list_models():
-    r"""**Description:** Print a summary of all available models and singularity types."""
+class HypergeometricModels:
+    r"""
+    **Description:**
+    Static registry + factory for the hardcoded one-modulus CY models from
+    arXiv:2306.01059 (quintics, hypergeometrics, etc.).  Construct ready-to-use
+    :class:`~jaxvacua.flux_vacua_finder.FluxVacuaFinder` instances at LCS,
+    K-point, or C-point boundaries via :meth:`build`.
+
+    The class itself is never instantiated; all methods are classmethods.
+
+    Examples
+    --------
+    >>> import jaxvacua as jvc
+    >>> jvc.HypergeometricModels.list()           # discover available labels
+    ['447', 'X10', 'X33', ...]
+    >>> m = jvc.HypergeometricModels.build("X33", limit="LCS")
+    >>> m.DW_x(x0, flux)                          # standard FluxVacuaFinder API
+    """
+
+    @classmethod
+    def list(cls):
+        r"""
+        **Description:**
+        Return all registered model labels (hypergeometric + additional).
+
+        Returns:
+            list[str]: Sorted labels.
+        """
+        return sorted(ALL_MODELS.keys())
+
+    @classmethod
+    def available_limits(cls, label):
+        r"""
+        **Description:**
+        Return the moduli-space points at which this model has closed-form data.
+
+        Args:
+            label (str): Model label, e.g. ``"X33"``.
+
+        Returns:
+            list[str]: Subset of ``["LCS", "Kpoint", "Cpoint"]``.
+        """
+        out = ["LCS"] if label in ALL_MODELS else []
+        if label in KPOINT_DATA and label != "X66":
+            out.append("Kpoint")
+        if label in CPOINT_DATA:
+            out.append("Cpoint")
+        return out
+
+    @classmethod
+    def lcs_data(cls, label):
+        r"""
+        **Description:**
+        Return the raw LCS-side topological data for a model.
+
+        Args:
+            label (str): Model label.
+
+        Returns:
+            dict: Contains ``kappa``, ``c2``, ``chi``, ``alpha``, ``mu`` etc.
+
+        Raises:
+            KeyError: If ``label`` is not in the registry.
+        """
+        if label not in ALL_MODELS:
+            raise KeyError(f"Unknown hypergeometric model: {label!r}")
+        return dict(ALL_MODELS[label])
+
+    @classmethod
+    def boundary_data(cls, label, limit):
+        r"""
+        **Description:**
+        Return the raw K- or C-point boundary parameters for a model
+        (:math:`\tau`, :math:`\gamma`, :math:`\delta`, instanton coefficients,
+        etc.).
+
+        Args:
+            label (str): Model label.
+            limit (str): ``"Kpoint"`` or ``"Cpoint"``.
+
+        Returns:
+            dict: Boundary-data fields.
+
+        Raises:
+            KeyError: If no boundary data is registered for ``(label, limit)``.
+            ValueError: If ``limit`` is not ``"Kpoint"`` or ``"Cpoint"``.
+        """
+        if limit == "Kpoint":
+            if label not in KPOINT_DATA:
+                raise KeyError(f"No K-point data for {label!r}")
+            return dict(KPOINT_DATA[label])
+        if limit == "Cpoint":
+            if label not in CPOINT_DATA:
+                raise KeyError(f"No C-point data for {label!r}")
+            return dict(CPOINT_DATA[label])
+        raise ValueError(f"limit must be 'Kpoint' or 'Cpoint'; got {limit!r}")
+
+    @classmethod
+    def resolve_prepotential(cls, model_ID, limit):
+        r"""
+        **Description:**
+        Validate ``(model_ID, limit)`` against the hypergeometric registry and
+        return the closed-form prepotential callable for the requested
+        boundary.  Used by :class:`~jaxvacua.periods.periods` to auto-detect
+        and resolve registered models without the user having to pass an
+        explicit ``prepotential_input``.
+
+        The ``h12 != 1`` invariant is checked by the caller.
+
+        Args:
+            model_ID (str): Hypergeometric model label (e.g. ``"X33"``).
+            limit (str): ``"Kpoint"`` or ``"Cpoint"``.
+
+        Returns:
+            callable: ``F(X, conj=False)`` — the closed-form prepotential.
+
+        Raises:
+            ValueError: If ``model_ID`` is not in the registry, or if
+                ``limit`` is not one of ``{"Kpoint", "Cpoint"}``.
+            KeyError: If no boundary data is registered for ``(model_ID, limit)``.
+            NotImplementedError: For ``X66`` at K-point.
+        """
+        if model_ID not in ALL_MODELS:
+            raise ValueError(
+                f"limit={limit!r} requires `model_ID=` to be one of the "
+                f"registered one-modulus model labels (e.g. 'X33', 'X42', "
+                f"'2.62'); got {model_ID!r}. For custom one-modulus models, "
+                f"pass `prepotential_input=` directly."
+            )
+        if limit == "Kpoint":
+            if model_ID == "X66":
+                raise NotImplementedError(
+                    "X66 K-point requires the degenerate B1=0 formula "
+                    "(see arXiv:2306.01059 §5); not implemented yet."
+                )
+            if model_ID not in KPOINT_DATA:
+                raise KeyError(f"No K-point data for {model_ID!r}.")
+            bd = KPOINT_DATA[model_ID]
+            return make_prepot_Kpoint(
+                tau=bd["tau"], gamma=bd["gamma"], delta=bd["delta"],
+                c=bd["c"], B1=bd["B1"], B2=bd["B2"], B3=bd["B3"],
+            )
+        if limit == "Cpoint":
+            if model_ID not in CPOINT_DATA:
+                raise KeyError(f"No C-point data for {model_ID!r}.")
+            bd = CPOINT_DATA[model_ID]
+            return make_prepot_Cpoint(
+                tau=bd["tau"], gamma=bd["gamma"], delta=bd["delta"],
+                k=bd["k"], A1=bd["A1"], A2=bd["A2"],
+            )
+        raise ValueError(f"limit must be 'Kpoint' or 'Cpoint'; got {limit!r}")
+
+    @classmethod
+    def build(cls, label, limit="LCS", **kwargs):
+        r"""
+        **Description:**
+        Construct a :class:`~jaxvacua.flux_vacua_finder.FluxVacuaFinder` for the
+        named model at the given moduli-space point.
+
+        For ``limit="LCS"`` the factory builds a standard ``lcs_tree`` from
+        ``(kappa, c2, chi)`` with no GV invariants — the closed-form LCS
+        prepotential of arXiv:2306.01059 already includes the instanton sum
+        resummed into modular forms.
+
+        For ``limit="Kpoint"`` or ``"Cpoint"`` the factory just forwards
+        ``model_ID=label`` and ``limit=`` to :class:`FluxVacuaFinder`; the
+        ``periods``/``css`` constructors auto-detect the registry entry and
+        resolve the closed-form prepotential.
+
+        Extra ``**kwargs`` are forwarded to :class:`FluxVacuaFinder`
+        (e.g. ``Q=``, ``gauge_choice=``, ``D3_tadpole=``).
+
+        Args:
+            label (str): Model label, e.g. ``"X33"``, ``"X42"``, ``"X5"``.
+            limit (str, optional): ``"LCS"``, ``"Kpoint"``, or ``"Cpoint"``.
+                Defaults to ``"LCS"``.
+            **kwargs: Forwarded to :class:`FluxVacuaFinder`.
+
+        Returns:
+            FluxVacuaFinder: A standard finder instance.
+
+        Raises:
+            KeyError: If ``label`` is not registered.
+            ValueError: If ``limit`` is not one of the three supported values.
+            NotImplementedError: For X66 at K-point (degenerate :math:`B_1=0`).
+        """
+        from .flux_vacua_finder import FluxVacuaFinder
+        if label not in ALL_MODELS:
+            raise KeyError(
+                f"Unknown hypergeometric model {label!r}. "
+                f"Available: {cls.list()}"
+            )
+
+        if limit == "LCS":
+            data = ALL_MODELS[label]
+            # Build a minimal model_data dict carrying the closed-form LCS
+            # topological data; no GV invariants — the LCS prepotential is
+            # complete as the polynomial-only F_poly(z).
+            model_data = {
+                "h11":          1,
+                "h12":          1,
+                "intnums":      jnp.array([[[data["kappa"]]]], dtype=jnp.int_),
+                "c2":           jnp.array([data["c2"]], dtype=jnp.int_),
+                "chi":          int(data["chi"]),
+                "model_type":   "hypergeometric",
+                "model_ID":     label,
+                "limit":        "LCS",
+            }
+            return FluxVacuaFinder(
+                h12=1, model_type="hypergeometric", model_ID=label,
+                model_data=model_data,
+                limit="LCS",
+                **kwargs,
+            )
+
+        if limit in ("Kpoint", "Cpoint"):
+            # periods/css auto-detect model_ID + limit and resolve the
+            # closed-form prepotential from the registry. We just forward.
+            return FluxVacuaFinder(
+                h12=1, model_ID=label,
+                limit=limit,
+                **kwargs,
+            )
+
+        raise ValueError(
+            f"Unknown limit: {limit!r}. "
+            f"Available for {label}: {cls.available_limits(label)}."
+        )
+
+
+def list_hypergeometric_models():
+    r"""
+    **Description:**
+    Print a summary table of all available models and the moduli-space points
+    at which each has closed-form data.  For programmatic use, prefer
+    :meth:`HypergeometricModels.list`.
+    """
     print("=" * 70)
     print("Hypergeometric one-modulus models (Table 1 of arXiv:2306.01059)")
     print("=" * 70)
     for label, d in HYPERGEOMETRIC_MODELS.items():
-        kpoints  = "Kpoint " if label in KPOINT_DATA else ""
-        cpoints  = "Cpoint " if label in CPOINT_DATA else ""
-        avail = f"[LCS {kpoints}{cpoints}]"
+        avail = HypergeometricModels.available_limits(label)
         print(f"  {label:8s}  κ={d['kappa']:3d}  χ={d['chi']:6d}  "
               f"∞-type={d['singularity_at_inf']}  {avail}")
         print(f"           {d['name']}")
     print()
-    print("Non-hypergeometric models (additional examples in [1])")
+    print("Additional non-hypergeometric models")
     print("-" * 70)
     for label, d in NON_HYPERGEOMETRIC_MODELS.items():
-        kpoints = "Kpoint " if label in KPOINT_DATA else ""
-        cpoints = "Cpoint " if label in CPOINT_DATA else ""
-        avail = f"[LCS {kpoints}{cpoints}]"
+        avail = HypergeometricModels.available_limits(label)
         print(f"  {label:8s}  {avail}  {d['name']}")
     print()
     print("K-point data available for:", list(KPOINT_DATA.keys()))
     print("C-point data available for:", list(CPOINT_DATA.keys()))
-
-
-def get_model(label, singularity="LCS"):
-    r"""
-    **Description:**
-    Load a one-modulus model at a given singularity type.
-
-    Args:
-        label (str): Model label, e.g. ``"X33"``, ``"X44"``, ``"X42"``, ``"X5"``, …
-        singularity (str, optional): One of ``"LCS"``, ``"Kpoint"``, ``"Cpoint"``.
-            Defaults to ``"LCS"``.
-
-    Returns:
-        OneModulusModel: Model container with ``prepotential`` and ``period_vector`` attributes.
-
-    Examples:
-        >>> model = get_model("X33", "Kpoint")
-        >>> model.prepotential(jnp.array([1.0+0j, 0.5+0.5j]))
-        >>> model.period_vector(jnp.array([1.0+0j, 0.5+0.5j]))
-
-        Using with jaxvacua ``flux_sector``::
-
-            import jaxvacua as jvc
-            fs = jvc.flux_sector(h12=1, moduli_space_limit=None,
-                                 model_type=None,
-                                 prepotential_input=model.prepotential)
-    """
-    if label not in ALL_MODELS:
-        raise ValueError(
-            f"Unknown model '{label}'. "
-            f"Available: {list(ALL_MODELS.keys())}"
-        )
-
-    lcs_data = ALL_MODELS[label]
-    kappa = lcs_data.get("kappa")
-    c2    = lcs_data.get("c2")
-    chi   = lcs_data.get("chi")
-
-    if singularity == "LCS":
-        if kappa is None:
-            raise ValueError(f"Model '{label}' has no fixed LCS data (parameter family).")
-        prepot = make_prepot_LCS(kappa, c2, chi)
-        boundary = {"kappa": kappa, "c2": c2, "chi": chi,
-                    "sigma": (kappa / 2) % 1,
-                    "K0": scipy_zeta(3) * chi / (2.0 * (2j * np.pi)**3)}
-        return OneModulusModel(label, "LCS", lcs_data, boundary, prepot)
-
-    elif singularity == "Kpoint":
-        if label not in KPOINT_DATA:
-            available = list(KPOINT_DATA.keys())
-            raise ValueError(
-                f"No K-point data for '{label}'. "
-                f"Available: {available}"
-            )
-        bd = KPOINT_DATA[label]
-        if bd.get("B1", 1.0) == 0.0:
-            raise ValueError(
-                f"Model '{label}' has B₁=0 (leading instanton at k≥2). "
-                f"The standard prepotential formula requires B₁≠0. "
-                f"Use KPOINT_DATA['{label}'] directly and implement a "
-                f"modified prepotential."
-            )
-        prepot = make_prepot_Kpoint(
-            tau=bd["tau"], gamma=bd["gamma"], delta=bd["delta"],
-            c=bd["c"], B1=bd["B1"], B2=bd["B2"], B3=bd["B3"],
-        )
-        return OneModulusModel(label, "Kpoint", lcs_data, bd, prepot)
-
-    elif singularity == "Cpoint":
-        if label not in CPOINT_DATA:
-            available = list(CPOINT_DATA.keys())
-            raise ValueError(
-                f"No C-point data for '{label}'. "
-                f"Available: {available}"
-            )
-        bd = CPOINT_DATA[label]
-        prepot = make_prepot_Cpoint(
-            tau=bd["tau"], gamma=bd["gamma"], delta=bd["delta"],
-            k=bd["k"], A1=bd["A1"], A2=bd["A2"],
-        )
-        return OneModulusModel(label, "Cpoint", lcs_data, bd, prepot)
-
-    else:
-        raise ValueError(
-            f"Unknown singularity '{singularity}'. "
-            "Choose from 'LCS', 'Kpoint', 'Cpoint'."
-        )

@@ -170,6 +170,7 @@ from .css import *
 from .flux_eft import *
 from .flux_vacua_finder import *
 from .sampling import *
+from .hypergeometric_models import *
 
 # ── Re-apply precision setting ────────────────────────────────────────────
 # Some dependencies (e.g. jaxpolylog) re-enable x64 at import time.

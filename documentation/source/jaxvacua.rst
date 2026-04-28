@@ -21,7 +21,7 @@ Subpackages
     jaxvacua.flux_utils
     jaxvacua.freezer
     jaxvacua.conifold_utils
-    jaxvacua.one_modulus_models
+    jaxvacua.hypergeometric_models
     jaxvacua.sampling
     jaxvacua.cy_io
     jaxvacua.lcs_database
