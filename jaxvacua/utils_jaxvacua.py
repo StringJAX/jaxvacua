@@ -87,7 +87,7 @@ def flatten_func(obj):
     # Using aux_data to store model attribtues
     aux_data = tuple(list(obj.__dict__.keys()))  # aux_data must contain static, hashable data.
     
-    static_keys = ["h11","h12","model_ID","dimension_H3","_dimension_H3_tot","model_type","n_fluxes","gauge_choice","prange","maximum_degree","D3_tadpole","conifold_limits","n_conifolds","ncf","nmax"]
+    static_keys = ["h11","h12","model_ID","dimension_H3","_dimension_H3_tot","model_type","n_fluxes","gauge_choice","prange","maximum_degree","D3_tadpole","nmax","_active_conifold_idx","prepotential_input","period_input"]
     
     children = []
     aux_data = []
