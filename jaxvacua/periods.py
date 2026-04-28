@@ -1521,7 +1521,7 @@ class periods:
         return jax.jacrev(self.M,holomorphic=True,argnums=1)(XPer,cXPer)
 
     
-
+"""
 from .conifold_utils import F_coniLCS_series_per,F_coniLCS_exp_per, F_inst_per_coni,F_coniLCS_poly_split_per,dF_coniLCS_poly_per,ddF_coniLCS_poly_per,dddF_coniLCS_poly_per, ddddF_coniLCS_poly_per,F_coniLCS_bulk_per,F_coni_per,delete_coni_index
 
 periods.F_coniLCS_series_per = F_coniLCS_series_per
@@ -1535,6 +1535,19 @@ periods.dddF_coniLCS_poly_per = dddF_coniLCS_poly_per
 periods.ddddF_coniLCS_poly_per = ddddF_coniLCS_poly_per 
 periods.F_coniLCS_bulk_per = F_coniLCS_bulk_per 
 periods.delete_coni_index = delete_coni_index
+"""
+
+from . import conifold_utils as _cu
+
+_CONIFOLD_PERIODS_METHODS = (
+    "F_coniLCS_series_per", "F_coniLCS_exp_per", "F_coni_per",
+    "F_inst_per_coni", "F_coniLCS_poly_split_per",
+    "dF_coniLCS_poly_per", "ddF_coniLCS_poly_per",
+    "dddF_coniLCS_poly_per", "ddddF_coniLCS_poly_per",
+    "F_coniLCS_bulk_per", "delete_coni_index",
+)
+for _name in _CONIFOLD_PERIODS_METHODS:
+    setattr(periods, _name, _cu._ConifoldGated(getattr(_cu, _name)))
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, periods)
 

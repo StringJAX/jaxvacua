@@ -55,23 +55,27 @@ from types import MethodType
 class _ConifoldGated:
     r"""
     **Description:**
-    Class-level descriptor: surfaces a method only when periods.limit ∈
-    {coniLCS, coniLCS_series, coniLCS_bulk}; otherwise raises AttributeError
-    so hasattr() returns False.
-    
-    This is used to gate conifold-specific methods in FluxVacuaFinder, so they only appear when the appropriate limit is set. The descriptor checks the periods.limit attribute of the instance to determine whether to allow access to the method or not. If the limit is not in the coniLCS family, an AttributeError is raised, effectively hiding the method from users of the class when it's not applicable.
-     
+    Class-level descriptor: surfaces a method only when the instance's limit
+    is in the coniLCS family. Otherwise raises AttributeError so hasattr()
+    returns False.
+
+    Works for `periods` (reads `instance.limit` directly) and for `css` /
+    `FluxEFT` (which delegate to `instance.periods.limit`).
     """
     def __init__(self, fn): self.fn = fn
     def __set_name__(self, owner, name): self.__name__ = name
     def __get__(self, instance, owner=None):
         if instance is None:
             return self
-        periods = instance.__dict__.get("periods")
-        limit   = getattr(periods, "limit", None) if periods is not None else None
+        # Try direct (periods sets self.limit); fall back to nested periods.
+        limit = instance.__dict__.get("limit")
+        if limit is None:
+            periods = instance.__dict__.get("periods")
+            if periods is not None:
+                limit = getattr(periods, "limit", None)
         if limit is None or "coniLCS" not in str(limit):
             raise AttributeError(
-                f"{self.__name__!r} requires periods.limit ∈ coniLCS family "
+                f"{self.__name__!r} requires limit ∈ coniLCS family "
                 f"(got {limit!r})"
             )
         return MethodType(self.fn, instance)

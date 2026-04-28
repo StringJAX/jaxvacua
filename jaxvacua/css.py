@@ -2493,12 +2493,25 @@ class css:
         }
 
 
+
+"""
 from .conifold_utils import F_coniLCS_bulk,F_coniLCS_series, dK_cf_bulk, F_coniLCS_exp, dF_coniLCS_exp
 css.F_coniLCS_bulk = F_coniLCS_bulk 
 css.F_coniLCS_series = F_coniLCS_series 
 css.dK_cf_bulk = dK_cf_bulk
 css.F_coniLCS_exp = F_coniLCS_exp
 css.dF_coniLCS_exp = dF_coniLCS_exp
+"""
+
+
+from . import conifold_utils as _cu
+
+_CONIFOLD_CSS_METHODS = (
+    "F_coniLCS_bulk", "F_coniLCS_series",
+    "dK_cf_bulk", "F_coniLCS_exp", "dF_coniLCS_exp",
+)
+for _name in _CONIFOLD_CSS_METHODS:
+    setattr(css, _name, _cu._ConifoldGated(getattr(_cu, _name)))
 
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, css)
