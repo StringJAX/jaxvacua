@@ -4148,7 +4148,12 @@ from .conifold_utils import (
     DWbulk_x as _DWbulk_x_func,
     dDWbulk_x as _dDWbulk_x_func,
     DWbulk as _DWbulk_func,
-    dDWbulk as _dDWbulk_func
+    dDWbulk as _dDWbulk_func,
+    W_bulk as _W_bulk_func,
+    conifold_fluxes as _conifold_fluxes_func,
+    compute_zcf_correction as _compute_zcf_correction_func,
+    compute_zcf_explicit as _compute_zcf_explicit_func,
+    compute_zcf_compact as _compute_zcf_compact_func,
 )
 FluxEFT.W1_tilde = _W1_tilde_func
 FluxEFT.compute_zcf = _compute_zcf_func
@@ -4159,7 +4164,11 @@ FluxEFT.DWbulk_x = _DWbulk_x_func
 FluxEFT.dDWbulk_x = _dDWbulk_x_func
 FluxEFT.DWbulk = _DWbulk_func
 FluxEFT.dDWbulk = _dDWbulk_func
-        
+FluxEFT.W_bulk = _W_bulk_func
+FluxEFT.conifold_fluxes = _conifold_fluxes_func
+FluxEFT.compute_zcf_correction = _compute_zcf_correction_func
+FluxEFT.compute_zcf_explicit = _compute_zcf_explicit_func
+FluxEFT.compute_zcf_compact = _compute_zcf_compact_func
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 

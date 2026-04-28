@@ -802,7 +802,7 @@ class css:
             elif self.periods.limit == "coniLCS_bulk":
                 return self.F_coniLCS_bulk(moduli,conj=conj)
             else:
-                return ValueError("Could not identify mode for computing the prepotential in complex structure class!")
+                raise ValueError("Could not identify mode for computing the prepotential in complex structure class!")
         else:
                 
             mod = self.moduli_to_periods(moduli,conj=conj)
@@ -2411,8 +2411,8 @@ class css:
             conifold_curve (array-like, optional): Charge vector
                 :math:`c = (c_1, \dots, c_{h^{2,1}})` of the vanishing
                 cycle.  The vanishing period is :math:`w = c^T z`.
-                If ``None``, uses ``self.lcs_tree.conifold_curve`` when
-                available.
+                If ``None``, uses ``self.lcs_tree.conifold.conifold_curve``
+                when available.
             conifold_index (int, optional): Index (0-based among
                 :math:`z^1 \dots z^h`) of the conifold modulus,
                 equivalent to ``conifold_curve = e_{index}``.
@@ -2423,7 +2423,7 @@ class css:
         Raises:
             ValueError: If both ``conifold_curve`` and ``conifold_index``
                 are provided, or if neither is given and
-                ``lcs_tree.conifold_curve`` is unavailable.
+                ``lcs_tree.conifold.conifold_curve`` is unavailable.
         """
         h = self.h12
 
@@ -2433,12 +2433,13 @@ class css:
             )
 
         if conifold_curve is None and conifold_index is None:
-            if hasattr(self.lcs_tree, 'conifold_curve'):
-                conifold_curve = np.asarray(self.lcs_tree.conifold_curve)
+            cf = getattr(self.lcs_tree, 'conifold', None)
+            if cf is not None and cf.conifold_curve is not None:
+                conifold_curve = np.asarray(cf.conifold_curve)
             else:
                 raise ValueError(
                     "No conifold_curve or conifold_index given and "
-                    "lcs_tree.conifold_curve is not available."
+                    "lcs_tree.conifold.conifold_curve is not available."
                 )
 
         if conifold_index is not None:
@@ -2492,9 +2493,12 @@ class css:
         }
 
 
-from .conifold_utils import F_coniLCS_bulk,F_coniLCS_series
+from .conifold_utils import F_coniLCS_bulk,F_coniLCS_series, dK_cf_bulk, F_coniLCS_exp, dF_coniLCS_exp
 css.F_coniLCS_bulk = F_coniLCS_bulk 
 css.F_coniLCS_series = F_coniLCS_series 
+css.dK_cf_bulk = dK_cf_bulk
+css.F_coniLCS_exp = F_coniLCS_exp
+css.dF_coniLCS_exp = dF_coniLCS_exp
 
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, css)

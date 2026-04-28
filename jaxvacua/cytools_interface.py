@@ -312,25 +312,23 @@ def cytools_model_data_init(
     
     try:
         conifolds = compute_conifolds(mirror_cy)
-    except:
-        warnings.warn("Computation for conifolds took too long. Increase value of `time_out` if necessary.")
+    except Exception as e:
+        print(f"Computation for conifolds failed or timed out: {e!r}")
         conifolds = []
-        
+
     if len(conifolds) > 0:
-            
-        #conifold_data = [[c.conifold_charge(),c.basis_change()] for c in conifolds]
-        conifold_limits = [c.conifold_charge() for c in conifolds] # stores information about all existing conifold limits of the model
-        conifold_curve = conifold_limits[0] # stores information about the conifold curve if there is a unique conifold limit and/or if a specific limit is chosen. Otherwise, this is None.
-        ncf = 2 # number of conifolds
-        
+        # find_conifolds returns geometric Conifolds whose hot-path arrays
+        # (conifold_curve, conifold_curve0, basis_change) are eagerly populated
+        # by from_geometry. to_data() drops cytools refs so the result can be
+        # carried through JIT.
+        conifolds_data = tuple(c.to_data() for c in conifolds)
+        active = conifolds_data[0]
     else:
-        conifold_limits = None 
-        conifold_curve= None 
-        ncf= None
-        
-    model_data["conifold_limits"] = conifold_limits
-    model_data["conifold_curve"] = conifold_curve
-    model_data["n_cf"] = ncf
+        conifolds_data = None
+        active = None
+
+    model_data["conifold"]  = active             # singular, the active conifold
+    model_data["conifolds"] = conifolds_data     # plural, full enumeration (optional)
     
     # Save to file if requested
     if save_file:
@@ -482,7 +480,9 @@ def eft_to_coninop(fluxeft):
     Returns:
         tuple: A tuple containing the basis transformation and conifold curve.
     """
-    return fluxeft.lcs_tree.basis_change, fluxeft.lcs_tree.conifold_curve
+    cf = fluxeft.lcs_tree.conifold
+    conifold_curve = cf.conifold_curve if cf is not None else None
+    return fluxeft.lcs_tree.basis_change, conifold_curve
 
 
 def eft_to_cone(fluxeft,timeout: int = 60, generators: Array | None = None):

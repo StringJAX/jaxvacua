@@ -24,7 +24,7 @@
 # Important standard libraries
 import os, sys, warnings
 import numpy as np
-from typing import Any, List
+from typing import Any, List, Optional
 from functools import partial
 
 # Import jax modules
@@ -34,6 +34,7 @@ from jax import jit
 from jax import Array
 from jax.scipy.special import zeta
 from jax.numpy import pi as Pi
+from jax.tree_util import register_pytree_node
 
 
 # To load pickle files
@@ -72,7 +73,7 @@ def F_coniLCS_bulk_per(self, XPer: Array, conj: bool = False) -> complex:
                 + \frac{n_{\mathrm{cf}}}{24}\,(q^{\mathrm{cf}}_i\, X^i)\, X^0 \,,
 
         where :math:`q^{\mathrm{cf}}_i` is the charge vector of the conifold curve
-        (stored in ``lcs_tree.conifold_curve0``) and :math:`n_{\mathrm{cf}}` is its GV invariant.
+        (stored in ``lcs_tree.conifold.conifold_curve0``) and :math:`n_{\mathrm{cf}}` is its GV invariant.
         This is the same shift applied to ``b_vector[0]`` in :func:`jaxvacua.flux_utils.pfv_to_flux`
         for the ``coniLCS`` limit.
 
@@ -86,7 +87,7 @@ def F_coniLCS_bulk_per(self, XPer: Array, conj: bool = False) -> complex:
     See also: :func:`F_LCS_per`, :func:`F_coniLCS_series_per`
     """
     
-    return self.F_LCS_per(XPer,conj=conj)+self.lcs_tree.ncf*(self.lcs_tree.conifold_curve0@XPer[1:])*XPer[0]/24.
+    return self.F_LCS_per(XPer,conj=conj)+self.lcs_tree.conifold.ncf*(self.lcs_tree.conifold.conifold_curve0@XPer[1:])*XPer[0]/24.
 
 
 
@@ -275,6 +276,14 @@ def F_inst_per_coni(self,X0: complex ,XPerBulk: Array, conj: bool = False, n: in
     See also: :func:`F_coniLCS_series_per`
 
     """
+    
+    if self.include_mirror_wsi:
+        if self.limit in ["coniLCS_series","coniLCS_bulk"]:
+            bulk_invs = self.lcs_tree.gv_invariants
+            bulk_charges = self.lcs_tree.gv_charges
+        else:
+            bulk_invs = self.delete_coni_index(self.lcs_tree.gv_invariants, self.coni_index)
+            bulk_charges = self.delete_coni_index(self.lcs_tree.gv_charges, self.coni_index)
 
     XPer = jnp.append(X0,jnp.append(0.+1j*0.,XPerBulk))
     
@@ -284,7 +293,7 @@ def F_inst_per_coni(self,X0: complex ,XPerBulk: Array, conj: bool = False, n: in
         coeff = -coeff
 
     # Compute exponentiated argument of polylog
-    t = jnp.matmul(self.lcs_tree.gv_charges,XPer[1:])
+    t = jnp.matmul(bulk_charges,XPer[1:])
     t = t/XPer[0]
     z = jnp.exp(coeff*t)
     
@@ -292,7 +301,8 @@ def F_inst_per_coni(self,X0: complex ,XPerBulk: Array, conj: bool = False, n: in
     Li_val = jax_polylog_vmap(z,3-n,self.prange,approx="patch")
     
     # Compute sum over curves
-    res = jnp.matmul(self.lcs_tree.gv_invariants*(self.lcs_tree.gv_charges[:,0]**n),Li_val)
+    res = jnp.matmul(bulk_invs*(bulk_charges[:,0]**n),Li_val)
+    #res = jnp.sum(bulk_invs*(bulk_charges[:,0]**n)*Li_val)
 
     # Add numerical prefactor
     return -res/(coeff)**(3-n)*XPer[0]**(2-n)
@@ -336,9 +346,9 @@ def F_coni_per(self, X: Array, conj: bool = False) -> complex:
         
     """
     if conj:
-        return self.lcs_tree.ncf*(X[1])**2/(-4*jnp.pi*1j)*jnp.log(2*jnp.pi*1j*X[1]/X[0])
+        return self.lcs_tree.conifold.ncf*(X[1])**2/(-4*jnp.pi*1j)*jnp.log(2*jnp.pi*1j*X[1]/X[0])
     else:
-        return self.lcs_tree.ncf*(X[1])**2/(4*jnp.pi*1j)*jnp.log(-2*jnp.pi*1j*X[1]/X[0])
+        return self.lcs_tree.conifold.ncf*(X[1])**2/(4*jnp.pi*1j)*jnp.log(-2*jnp.pi*1j*X[1]/X[0])
     
 
 @partial(jit, static_argnums = (4,5,))
@@ -415,7 +425,7 @@ def F_coniLCS_exp_per(self,
     # ----------------------------------------
     # ncf = number of conifold divisors
     # X0^(2-n) reflects homogeneity of the prepotential
-    coeff_cf = self.lcs_tree.ncf / zeta_denom * X0 ** (2 - n)
+    coeff_cf = self.lcs_tree.conifold.ncf / zeta_denom * X0 ** (2 - n)
     
     # We expand around the conifold point Xcf = 0
     Xcf = 0. + 1j * 0.
@@ -471,12 +481,7 @@ def F_coniLCS_exp_per(self,
             (n - 2)
         )
 
-    # ----------------------------------------
-    # Divide by n! (Taylor expansion normalization)
-    # ----------------------------------------
-    # This converts derivatives into expansion coefficients
-    if n > 1:
-        val = val / jax.scipy.special.gamma(n + 1)
+    
         
     if self.include_mirror_wsi:
         val = val + self.F_inst_per_coni(X0,XPerBulk,conj=conj,n=n)
@@ -561,13 +566,22 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     for n_exp in range(self.nmax + 1):
         
         # Add nth-order term in expansion
-        val += self.F_coniLCS_exp_per(
+        tmp = self.F_coniLCS_exp_per(
             X0,           # X^0 (overall scaling period)
             XConi,        # NOTE: passed as Xcf-like argument (implementation detail)
             XPerBulk,     # Bulk periods
             conj=conj,
             n=n_exp       # Order of expansion
         )
+        
+        # ----------------------------------------
+        # Divide by n! (Taylor expansion normalization)
+        # ----------------------------------------
+        # This converts derivatives into expansion coefficients
+        if n_exp > 1:
+            tmp = tmp / jax.scipy.special.gamma(n_exp + 1)
+            
+        val += tmp
     
     # ----------------------------------------
     # Return full prepotential
@@ -644,10 +658,77 @@ def F_coniLCS_bulk(self, moduli: Array, conj: bool = False) -> complex:
 
     """
 
-    return self.F_LCS(moduli,conj=conj)+self.lcs_tree.ncf*self.lcs_tree.conifold_curve0@moduli/24.
+    return self.F_LCS(moduli,conj=conj)+self.lcs_tree.conifold.ncf*self.lcs_tree.conifold.conifold_curve0@moduli/24.
+
+
+@partial(jit, static_argnums = (2,3,))
+def F_coniLCS_exp(self, 
+                  bulk_moduli: Array, 
+                  conj: bool = False, 
+                  n: int = 1
+                  ) -> complex:
+    r"""
+    **Description:**
+    Calculates the expansion coefficients of the prepotential :math:`F` around the conifold point in terms of the complex structure moduli :math:`z^i`.
+    
+    .. admonition:: Details
+        :class: dropdown
+        
+        The prepotential :math:`F` can be expanded around the conifold point as 
+        :math:`F(z) = \sum_{n=0}^{\infty}\, \dfrac{1}{n!}\, \dfrac{\partial^n F}{\partial (z_{\mathrm{cf}})^n}\Bigg |_{z_{\mathrm{cf}}=0}\, (z_{\mathrm{cf}})^n\, .`
+        This function computes the **coefficient** of :math:`(z_{\mathrm{cf}})^n` in this expansion, i.e. it computes
+        :math:`\tfrac{1}{n!}\,\partial^n_{\!z_{\mathrm{cf}}} F\big|_{z_{\mathrm{cf}}=0}`.
+        The full coniLCS prepotential is reconstructed in :func:`F_coniLCS_series` by summing these coefficients up to order ``nmax``. 
+        
+    Args:
+        bulk_moduli (Array): Bulk structure moduli values.
+        conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+        n_exp (int, optional): Order of expansion in the conifold modulus. Defaults to ``1``.
+        
+    Returns:
+        complex: Value of the :math:`n`-th derivative of the prepotential :math:`F` around the conifold point.
+        
+    See also: :func:`F_coniLCS_series`
+    """
+    # ----------------------------------------
+    # Extract periods
+    # ----------------------------------------
+    # XPer = (X^0, X_cf, X^2, ..., X^{h^{1,2}})
+    moduli = jnp.append(jnp.zeros(1), bulk_moduli)
+    XPer = self.moduli_to_periods(moduli,conj=conj)
+    XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
+    XConi    = 1. + 0*1j    # Conifold period X_cf
+    X0       = XPer[0]    # Fundamental period X^0
+    
+    return self.periods.F_coniLCS_exp_per(X0, XConi, XPerBulk, conj=conj, n=n)
+
+
+@partial(jit, static_argnums = (2,3,))
+def dF_coniLCS_exp(self, 
+                  bulk_moduli: Array, 
+                  conj: bool = False, 
+                  n: int = 1
+                  ) -> complex:
+    r"""
+    **Description:**
+    Calculates the derivative of the conifold-LCS prepotential :math:`F_{\mathrm{coniLCS}}^{(n)}` with respect to the bulk moduli.
+    
+    Args:
+        bulk_moduli (Array): Bulk structure moduli values.
+        conj (bool, optional): If ``True``, computes the complex conjugate. Defaults to ``False``.
+        n_exp (int, optional): Order of expansion in the conifold modulus. Defaults to ``1``.
+        
+    Returns:
+        complex: Value of the derivative of the conifold-LCS prepotential :math:`F_{\mathrm{coniLCS}}^{(n)}` with respect to the bulk moduli.
+    """
+    
+    return jax.grad(self.F_coniLCS_exp,holomorphic=True,argnums=0)(bulk_moduli,conj=conj,n=n)
 
 @partial(jit, static_argnums = (2,))
-def F_coniLCS_series(self, moduli: Array, conj: bool = False) -> complex:
+def F_coniLCS_series(self, 
+                     moduli: Array, 
+                     conj: bool = False
+                     ) -> complex:
     r"""
     **Description:**
     Calculates the full conifold-LCS prepotential :math:`F_{\mathrm{coniLCS}}` in terms of the complex structure moduli :math:`z^i`.
@@ -1109,48 +1190,47 @@ class Conifold:
           the polytope dual to the conifold (these become light in the
           coniLCS limit).
         * **Gopakumar-Vafa invariant** :math:`n_{\rm cf}` — the genus-0 GV
-          invariant of the flopping curve, used to normalise the
-          :attr:`conifold_charge`.
-        * **Conifold charge** :math:`q \in \mathbb{Z}^{h^{1,1}}` and
-          **basis change** :math:`\Lambda` — computed lazily; see
-          :meth:`conifold_charge` and :meth:`basis_change`.
+          invariant of the flopping curve.
+        * **Conifold curve** :math:`q \in \mathbb{Z}^{h^{1,1}}` (original-basis
+          charge) and **conifold_curve0** = :math:`q\,\Lambda^{T} = (1,0,\ldots,0)`
+          (canonical-basis charge after the basis transformation
+          :math:`\Lambda`); both are eagerly materialised at construction in
+          geometric mode.
+
+    The class supports two construction modes via the
+    :meth:`from_geometry` and :meth:`from_data` classmethods.  After a JAX
+    pytree round-trip, the cytools refs (:meth:`polytope`,
+    :meth:`dual_triangulation`) return ``None``; the numerical state survives
+    unchanged.
     """
-    
-    def __init__(self, 
-                 polytope: Polytope, 
-                 dual_triangulation: Triangulation, 
-                 one_face_divisors: Array, 
-                 flop_edge: Array, 
-                 gv: int
-                 ):
+
+    def __init__(self, *,
+                 ncf: int = 0,
+                 conifold_curve:     Optional[Array]         = None,
+                 conifold_curve0:    Optional[Array]         = None,
+                 basis_change:       Optional[Array]         = None,
+                 flop_edge:          Optional[Array]         = None,
+                 one_face_divisors:  Optional[Array]         = None,
+                 polytope:           Optional[Polytope]      = None,
+                 dual_triangulation: Optional[Triangulation] = None):
         r"""
         **Description:**
-        Constructor for the :class:`Conifold` class.
-
-        Args:
-            polytope (cytools.Polytope): Toric polytope of the CY model.
-            dual_triangulation (cytools.Triangulation): Fine, regular, star
-                triangulation of the dual polytope associated with this
-                conifold transition.
-            one_face_divisors (Array): Indices of the divisors interior to the
-                1-face of the polytope dual to the conifold transition.
-            flop_edge (Array): Pair of point indices (in the dual
-                triangulation) forming the edge that undergoes the flop.
-            gv (int): Gopakumar-Vafa invariant :math:`n_{\rm cf}` of the
-                flopping curve (used to normalise the conifold charge).
+        Low-level keyword-only constructor; prefer :meth:`from_geometry` or
+        :meth:`from_data` in user code.
         """
-        
+        # Eager / hot-path attributes (plain names, in pytree).
+        self.ncf                 = int(ncf)
+        self.conifold_curve      = conifold_curve     # original-basis charge
+        self.conifold_curve0     = conifold_curve0    # canonical-basis charge
+        # Lazy-getter backing storage (underscore-prefixed).
+        self._basis_change       = basis_change
+        self._flop_edge          = flop_edge
+        self._one_face_divisors  = one_face_divisors
+        # Cytools refs — dropped at the JAX pytree boundary by the custom flatten.
+        self._polytope           = polytope
         self._dual_triangulation = dual_triangulation
-        self._one_face_divisors = one_face_divisors
-        self._flop_edge = flop_edge
-        self._polytope = polytope
-        self._conifold_charge = None
-        self._basis_change = None
-        self._gv = gv
-        
+        self._projection = None
 
-        self._remove_for_saving = ['_polytope']
-        
     def __repr__(self):
         r"""
         **Description:**
@@ -1160,32 +1240,43 @@ class Conifold:
         Returns:
             str: String representation.
         """
-         
-        return f"A conifold limit in complex structure moduli space dual to a flop transition with GV = {self._gv}"
+
+        return f"A conifold limit in complex structure moduli space dual to a flop transition with GV = {self.ncf}"
+
+    # ------------------------------------------------------------------ #
+    # Lazy / on-demand getter methods
+    # ------------------------------------------------------------------ #
     
-    def polytope(self):
+    def projection(self):
+        
+        if self._projection is None and self.conifold_curve is not None:
+            q = np.array([0]+list(self.conifold_curve))
+            w_proj_np  = extended_euclidean(q)[2][1:len(q)].T
+            self._projection = jnp.asarray(w_proj_np)
+        
+        return self._projection
+        
+
+    def basis_change(self):
         r"""
         **Description:**
-        Returns the toric polytope associated with the conifold limit.
+        Returns the unimodular basis change matrix :math:`\Lambda` that maps
+        the :attr:`conifold_curve` to :math:`(1, 0, \ldots, 0)`.  Computed
+        lazily on first call when the cache is empty and a
+        ``conifold_curve`` is available.
 
         Returns:
-            cytools.Polytope: The polytope.
-        """
-        
-        return self._polytope
-    
-    def dual_triangulation(self):
-        r"""
-        **Description:**
-        Returns the fine, regular, star triangulation of the dual polytope
-        from which this conifold was identified.
+            Array | None: Integer matrix
+            :math:`\Lambda \in \mathrm{GL}(h^{1,1},\mathbb{Z})` of shape
+            :math:`(h^{1,1}, h^{1,1})`, or ``None`` if neither cache nor
+            ``conifold_curve`` is available.
 
-        Returns:
-            cytools.Triangulation: The dual triangulation.
+        See also: :func:`get_basis_change`
         """
-        
-        return self._dual_triangulation
-    
+        if self._basis_change is None and self.conifold_curve is not None:
+            self._basis_change = jnp.asarray(get_basis_change(self.conifold_curve))
+        return self._basis_change
+
     def flop_edge(self):
         r"""
         **Description:**
@@ -1193,25 +1284,12 @@ class Conifold:
         triangulation.
 
         Returns:
-            Array: Pair of integer indices defining the flop edge.
+            Array | None: Pair of integer indices defining the flop edge,
+            or ``None`` if not available.
         """
-        
         return self._flop_edge
-    
-    def gv(self):
-        r"""
-        **Description:**
-        Returns the genus-0 Gopakumar-Vafa invariant :math:`n_{\rm cf}` of
-        the flopping curve.
 
-        Returns:
-            int: The Gopakumar-Vafa invariant.
-        """
-        
-        return self._gv
-    def one_face_divisors(self,
-                          as_index: bool = True
-                          ):
+    def one_face_divisors(self, as_index: bool = True):
         r"""
         **Description:**
         Returns the divisors interior to the 1-face dual to the conifold
@@ -1219,91 +1297,186 @@ class Conifold:
 
         Args:
             as_index (bool, optional): If ``True`` (default), returns the
-                integer indices of the interior points.  If ``False``, returns
-                the corresponding rows of the GLSM charge matrix.
+                integer indices of the interior points.  If ``False``,
+                returns the corresponding rows of the GLSM charge matrix
+                (only valid when the cytools polytope is loaded).
 
         Returns:
-            Array: Interior-point indices or GLSM charges, depending on
-            ``as_index``.
+            Array | None: Interior-point indices or GLSM charges, depending
+            on ``as_index``.
         """
-        
         if as_index:
             return self._one_face_divisors
-        else:
-            return self.polytope().glsm_charge_matrix().T[self._one_face_divisors]
-    
-    def conifold_charge(self):
+        if self._polytope is None:
+            raise RuntimeError(
+                "polytope not loaded; cannot compute GLSM charge rows. "
+                "Reconstruct via Conifold.from_geometry to use as_index=False."
+            )
+        return self._polytope.glsm_charge_matrix().T[self._one_face_divisors]
+
+    def polytope(self):
         r"""
         **Description:**
-        Returns the charge vector :math:`q \in \mathbb{Z}^{h^{1,1}}` of the
-        conifold curve in the dual GLSM basis. Computed lazily on first call.
-
-        .. admonition:: Details
-            :class: dropdown
-
-            The charge is extracted from the triple intersection numbers of
-            the mirror Calabi-Yau threefold.  For each basis element :math:`b`
-            of the dual GLSM lattice,
-
-            .. math::
-                q_b = \frac{\kappa(e_1, e_2, b)}{n_{\rm cf}} \,,
-
-            where :math:`(e_1, e_2)` are the endpoints of the flop edge and
-            :math:`n_{\rm cf}` is the GV invariant.
+        Returns the cytools polytope, or ``None`` after a JAX pytree
+        round-trip (geometric data is dropped at the pytree boundary).
 
         Returns:
-            np.ndarray: Integer charge vector of shape :math:`(h^{1,1},)`.
+            cytools.Polytope | None: The polytope, or ``None`` if not loaded.
         """
-        
-        if self._conifold_charge is None:
-            # Compute mirror CY and intersection numbers
-            dual_cy = self.dual_triangulation().get_cy()
-            intnums = dual_cy.intersection_numbers()
-            
-            # Compute conifold charge in dual basis
-            dual_basis = self.polytope().dual().glsm_basis()
-            edge = self.flop_edge()
-            ncf = self.gv()
-            self._conifold_charge = np.rint(np.array([intnums.get(tuple(np.sort(list(edge)+[b])),0) for b in dual_basis])/ncf).astype(int)
-            
-        # Return conifold charge
-        return self._conifold_charge
+        return self._polytope
 
-    def basis_change(self):
+    def dual_triangulation(self):
         r"""
         **Description:**
-        Returns the unimodular basis change matrix :math:`\Lambda` that maps
-        the conifold charge to :math:`(1, 0, \ldots, 0)`. Computed lazily on
-        first call (after :meth:`conifold_charge`).
+        Returns the cytools fine, regular, star triangulation of the dual
+        polytope, or ``None`` after a JAX pytree round-trip.
 
         Returns:
-            np.ndarray: Integer matrix
-            :math:`\Lambda \in \mathrm{GL}(h^{1,1},\mathbb{Z})` of shape
-            :math:`(h^{1,1}, h^{1,1})`.
-
-        See also: :func:`get_basis_change`
+            cytools.Triangulation | None: The dual triangulation, or ``None``
+            if not loaded.
         """
+        return self._dual_triangulation
 
-        if self._basis_change is None:
-
-            self._basis_change = get_basis_change(self.conifold_charge())
-
-        return self._basis_change
+    # ------------------------------------------------------------------ #
+    # Construction
+    # ------------------------------------------------------------------ #
 
     @classmethod
-    def from_dict(cls, d):
+    def from_geometry(cls,
+                      polytope: Polytope,
+                      dual_triangulation: Triangulation,
+                      one_face_divisors: Array,
+                      flop_edge: Array,
+                      ncf: int) -> "Conifold":
         r"""
         **Description:**
-        Constructs a :class:`Conifold` instance from a dictionary.
+        Construct a :class:`Conifold` from cytools geometry.  Eagerly
+        computes :attr:`conifold_curve`, :attr:`conifold_curve0` and the
+        basis-change matrix from the supplied polytope, triangulation and
+        flop edge.
 
         Args:
-            d (dict): Dictionary whose keys match the constructor parameters.
+            polytope (cytools.Polytope): Toric polytope of the CY model.
+            dual_triangulation (cytools.Triangulation): Fine, regular, star
+                triangulation of the dual polytope.
+            one_face_divisors (Array): Indices of divisors interior to the
+                1-face dual to the conifold transition.
+            flop_edge (Array): Pair of point indices forming the flop edge.
+            ncf (int): Gopakumar-Vafa invariant :math:`n_{\rm cf}` of the
+                flopping curve (used to normalise the conifold charge).
 
         Returns:
-            Conifold: Reconstructed instance.
+            Conifold: A geometric-mode Conifold with all numerical fields
+            populated and the cytools refs attached.
         """
-        
-        return cls(**d)
+        # Compute the mirror CY intersection numbers and conifold charge.
+        dual_cy    = dual_triangulation.get_cy()
+        intnums    = dual_cy.intersection_numbers()
+        dual_basis = polytope.dual().glsm_basis()
+        edge_list  = list(np.asarray(flop_edge))
+        charge_np  = np.rint(np.array([
+            intnums.get(tuple(np.sort(edge_list + [b])), 0)
+            for b in dual_basis
+        ]) / ncf).astype(int)
+
+        bc_np  = np.asarray(get_basis_change(charge_np))   # int matrix
+        curve  = jnp.asarray(charge_np)
+        bc     = jnp.asarray(bc_np)
+        curve0 = curve @ bc.T                              # = (1,0,...,0)
+
+        return cls(
+            ncf=int(ncf),
+            conifold_curve=curve,
+            conifold_curve0=curve0,
+            basis_change=bc,
+            flop_edge=jnp.asarray(flop_edge),
+            one_face_divisors=jnp.asarray(one_face_divisors),
+            polytope=polytope,
+            dual_triangulation=dual_triangulation,
+        )
+
+    @classmethod
+    def from_data(cls, **kwargs) -> "Conifold":
+        r"""
+        **Description:**
+        Construct a numerical-only :class:`Conifold` from kwargs.  If
+        ``conifold_curve`` and ``basis_change`` are supplied but
+        ``conifold_curve0`` is omitted, it is derived as
+        ``conifold_curve @ basis_change.T``.
+
+        Args:
+            **kwargs: Any subset of the :meth:`__init__` keyword arguments
+                excluding ``polytope`` and ``dual_triangulation``.
+
+        Returns:
+            Conifold: A numerical-mode Conifold (cytools refs ``None``).
+        """
+        cc  = kwargs.get("conifold_curve")
+        bc  = kwargs.get("basis_change")
+        cc0 = kwargs.get("conifold_curve0")
+        if cc0 is None and cc is not None and bc is not None:
+            kwargs["conifold_curve0"] = jnp.asarray(cc) @ jnp.asarray(bc).T
+        return cls(**kwargs)
+
+    def to_data(self) -> "Conifold":
+        r"""
+        **Description:**
+        Return a numerical-only copy of this :class:`Conifold` suitable for
+        carrying across a JAX pytree boundary.  The cytools refs are
+        stripped; the lazy basis-change cache is warmed first if a
+        ``conifold_curve`` is available.
+
+        Returns:
+            Conifold: Numerical-mode copy.
+        """
+        # Warm the basis_change cache while geometry is still loaded.
+        _ = self.basis_change()
+        return Conifold.from_data(
+            ncf=self.ncf,
+            conifold_curve=self.conifold_curve,
+            conifold_curve0=self.conifold_curve0,
+            basis_change=self._basis_change,
+            flop_edge=self._flop_edge,
+            one_face_divisors=self._one_face_divisors,
+        )
+
+
+# --------------------------------------------------------------------------
+# JAX pytree registration for Conifold.
+#
+# Cytools objects (Polytope, Triangulation) are not hashable and cannot live
+# in aux_data, so the custom flatten silently drops them.  After a round-trip,
+# ``polytope()`` and ``dual_triangulation()`` return ``None``.
+# --------------------------------------------------------------------------
+
+_CONIFOLD_DYNAMIC_KEYS = (
+    # Hot-path attributes (plain names)
+    'conifold_curve', 'conifold_curve0',
+    # Lazy-getter backing storage (underscore-prefixed)
+    '_basis_change', '_flop_edge', '_one_face_divisors',
+)
+_CONIFOLD_STATIC_KEYS = ('ncf',)
+
+
+def _flatten_conifold(obj):
+    children = tuple(getattr(obj, k, None) for k in _CONIFOLD_DYNAMIC_KEYS)
+    aux_data = tuple((k, getattr(obj, k, None)) for k in _CONIFOLD_STATIC_KEYS)
+    return children, aux_data
+
+
+def _unflatten_conifold(aux_data, children):
+    obj = object.__new__(Conifold)
+    for k, v in aux_data:
+        object.__setattr__(obj, k, v)
+    for k, v in zip(_CONIFOLD_DYNAMIC_KEYS, children):
+        object.__setattr__(obj, k, v)
+    # Cytools refs are not part of the pytree — set to None on the way back.
+    object.__setattr__(obj, '_polytope', None)
+    object.__setattr__(obj, '_dual_triangulation', None)
+    return obj
+
+
+register_pytree_node(Conifold, _flatten_conifold, _unflatten_conifold)
 
 
 def find_conifolds(polytope: Polytope,
@@ -1511,7 +1684,13 @@ def find_conifolds(polytope: Polytope,
                 # Keep only if this is an extremal ray of the Mori cone
                 if tuple(flop_charge) in Mcap:
                     conifolds.append(
-                        Conifold(p, t, one_face_divisors, e, n_conifolds)
+                        Conifold.from_geometry(
+                            polytope=p,
+                            dual_triangulation=t,
+                            one_face_divisors=one_face_divisors,
+                            flop_edge=e,
+                            ncf=n_conifolds,
+                        )
                     )
                     
                     if verbosity >= 2:
@@ -1521,6 +1700,269 @@ def find_conifolds(polytope: Polytope,
     # Return all detected conifolds
     # ----------------------------------------
     return conifolds
+
+
+def conifold_fluxes(self,flux):
+    
+    f1, f2, h1, h2 = self._split_fluxes(flux)
+    
+    M0 = f2[0]
+    H0 = h2[0]
+    P0 = f1[0]
+    K0 = h1[0]
+    
+    if self.lcs_tree.conifold_basis:
+        
+        M1 = f2[1]
+        H1 = h2[1]
+        P1 = f1[1]
+        K1 = h1[1]
+        Malpha = f2[2:]
+        Halpha = h2[2:]
+        Palpha = f1[2:]
+        Kalpha = h1[2:]
+        
+    else:
+        q = self.lcs_tree.conifold.coni_curve
+        # Ensure projection is cached before the JIT-compiled solver tries to access it.
+        w_proj = self.lcs_tree.conifold.projection()  
+
+        M1 = f2[1:] @ q
+        H1 = h2[1:] @ q
+        P1 = f1[1:] @ q
+        K1 = h1[1:] @ q
+        
+        Malpha = f2[1:] @ w_proj
+        Halpha = h2[1:] @ w_proj
+        Palpha = f1[1:] @ w_proj
+        Kalpha = h1[1:] @ w_proj
+    
+    return M0, H0, M1, H1, Malpha, Halpha, P1, K1, Palpha, Kalpha, P0, K0
+    
+@jit
+def delete_coni_index(self, x, indx):
+    y = jnp.arange(len(x))
+    flags = jnp.where(jnp.arange(len(x) - 1) < indx, y[:-1], y[1:])
+    return x[flags]
+
+def W_bulk(self, z, tau, flux, conj=False,normalise=False):
+    
+    if not self.lcs_tree.conifold_basis:
+        raise NotImplementedError("compute_zcf_compact is only implemented for conifold_basis=True.")
+    
+    coeff = 2 * jnp.pi * 1j
+    if conj:
+        coeff = -coeff
+        
+    ncf = self.lcs_tree.conifold.ncf
+
+    zbulk = z
+    
+    M0, H0, M1, H1, Malpha, Halpha, P1, K1, Palpha, Kalpha, P0, K0 = self.conifold_fluxes(flux)
+    
+    F0 = self.F_coniLCS_exp(zbulk, conj=conj, n=0)
+    dF0 = self.dF_coniLCS_exp(zbulk, conj=conj, n=0)
+    F1 = self.F_coniLCS_exp(zbulk, conj=conj, n=1)
+    
+    tmp  = (M0 - tau * H0) * (2*F0 - zbulk@dF0- 2*ncf*jax.scipy.special.zeta(3, q=1)/coeff**3)
+    tmp += (M1 - tau * H1) * F1
+    tmp += (Malpha - tau * Halpha) @ dF0
+    tmp += (-1) * (P0 - tau * K0)
+    tmp += (-1) * (Palpha - tau * Kalpha) @ zbulk
+    
+    if normalise:
+        tmp = jnp.sqrt(2./jnp.pi)*tmp
+    
+    return tmp
+
+def dK_cf_bulk(self, z, cz):
+    
+    coeff = 2 * jnp.pi * 1j
+    
+    zbulk = z
+    czbulk = cz
+    ncf = self.lcs_tree.conifold.ncf
+    
+    F0 = self.F_coniLCS_exp(zbulk, conj=False, n=0)
+    cF0 = self.F_coniLCS_exp(czbulk, conj=True, n=0)
+    dF0 = self.dF_coniLCS_exp(zbulk, conj=False, n=0)
+    dcF0 = self.dF_coniLCS_exp(czbulk, conj=True, n=0)
+    
+    F1 = self.F_coniLCS_exp(zbulk, conj=False, n=1)
+    dF1 = self.dF_coniLCS_exp(zbulk, conj=False, n=1)
+    cF1 = self.F_coniLCS_exp(czbulk, conj=True, n=1)
+    
+    numerator = F1-cF1 - zbulk@dF1 + czbulk@dF1
+    
+    FF0 = 2*F0 - zbulk@dF0- 2*ncf*jax.scipy.special.zeta(3, q=1)/coeff**3
+    cFF0 = 2*cF0 - czbulk@dcF0- 2*ncf*jax.scipy.special.zeta(3, q=1)/(-coeff)**3
+    
+    denom = czbulk@dF0 - zbulk@dcF0 + FF0 - cFF0
+    
+    dK = -numerator / denom
+    
+    return dK
+
+def compute_zcf_correction(self, z, cz, tau, ctau, flux, conj=False):
+    
+    if not self.lcs_tree.conifold_basis:
+        raise NotImplementedError("compute_zcf_correction is only implemented for conifold_basis=True.")
+    
+    coeff = 2 * jnp.pi * 1j
+    if conj:
+        coeff = -coeff
+    
+    ncf = self.lcs_tree.conifold.ncf
+
+    zbulk = z
+    czbulk = cz
+    
+    _, _, M1, H1, _, _, _, _, _, _, _, _, = self.conifold_fluxes(flux)
+    
+    if conj:
+        Wbulk = self.W_bulk(czbulk, ctau, flux, conj=conj)
+    else:
+        Wbulk = self.W_bulk(zbulk, tau, flux, conj=conj)
+    
+    dK = self.dK_cf_bulk(zbulk, czbulk)
+    
+    tmp = dK*Wbulk
+    
+    if conj:
+        denom = (M1 - ctau * H1)
+    else:
+        denom = (M1 - tau * H1)
+
+    correction = -coeff * tmp / ncf / denom
+    
+    zcf1 = jnp.exp(correction)
+    
+    return zcf1
+
+def compute_zcf_explicit(self, z, tau, flux, conj=False):
+    """Notebook-local: conifold modulus solver for ``conifold_basis=False``.
+
+    Args:
+        self: a FluxEFT-like object exposing ``_split_fluxes``, ``prange``.
+        z: bulk moduli (already projected onto the basis-false bulk slice).
+        tau: axio-dilaton.
+        flux: full flux vector.
+        lcs_tree: jaxvacua lcs_tree (must have ``conifold_basis=False``).
+        mode: ``None`` for the full expression; reserved for ``"pfv"``.
+        conj: if True, take the complex-conjugate branch.
+    """
+    #assert lcs_tree.conifold_basis is False, \
+    #    "compute_zcf_new is the basis=False solver — pass an lcs_tree with conifold_basis=False."
+    #if mode not in [None, "pfv", "analytic"]:
+    #    raise ValueError("Mode must be one of [None, 'pfv', 'analytic'].")
+
+    coeff = 2 * jnp.pi * 1j
+    if conj:
+        coeff = -coeff
+    
+    
+    ncf = self.lcs_tree.conifold.ncf
+
+    zbulk = z
+    
+    M0, H0, M1, H1, Malpha, Halpha, P1, K1, Palpha, Kalpha, P0, K0 = self.conifold_fluxes(flux)
+
+    kappa = self.lcs_tree.intnums
+    if self.lcs_tree.conifold_basis:
+        kappa_011 = kappa[0,1:,1:]
+        kappa_001 = kappa[0,0,1:]
+        a_coni = self.lcs_tree.a_matrix[:,0]
+        a00 = a_coni[0]
+        a01 = a_coni[1:]
+        b_coni = self.lcs_tree.b_vector[0]
+    else:
+        q = self.lcs_tree.conifold.coni_curve
+        # Ensure this is cached before JIT compilation.
+        w_proj = self.lcs_tree.conifold.projection()  
+        kappa_011 = jnp.einsum("ijk,i,jl,km", kappa, q, w_proj, w_proj)
+        kappa_001 = jnp.einsum("ijk,i,j,km",  kappa, q, q, w_proj)
+        a_coni = self.lcs_tree.a_matrix @ q
+        a00 = a_coni @ q
+        a01 = a_coni @ w_proj
+        b_coni = self.lcs_tree.b_vector @ q
+
+    F1b  = ((kappa_011 @ zbulk) @ zbulk) / 2 + b_coni - jnp.pi**2 / 6 * ncf / coeff**2
+    F2b  = -((kappa_001 @ zbulk)) + a00
+    dF1b = -((kappa_011 @ zbulk)) + a01
+
+    if self.periods.include_mirror_wsi:
+        if self.lcs_tree.limit in ["coniLCS_series","coniLCS_bulk"]:
+            bulk_invs = self.lcs_tree.gv_invariants
+            bulk_charges = self.lcs_tree.gv_charges
+        else:
+            bulk_invs = self.periods.delete_coni_index(self.lcs_tree.gv_invariants, self.periods.coni_index)
+            bulk_charges = self.periods.delete_coni_index(self.lcs_tree.gv_charges, self.periods.coni_index)
+
+        if self.lcs_tree.conifold_basis:
+            beta1 = jnp.asarray(bulk_charges[:,0])
+            bulk_charges_proj = jnp.asarray(bulk_charges[:,1:])
+            etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
+        else:
+            q = self.lcs_tree.conifold.coni_curve
+            beta1 = jnp.asarray(bulk_charges @ q)
+            raise NotImplementedError("compute_zcf_explicit is not yet implemented for conifold_basis=False — the projection of the bulk charges must be cached first to avoid JIT issues.")    
+            w_proj = self.lcs_tree.conifold.projection()
+            bulk_charges_proj = jnp.asarray(bulk_charges @ w_proj.T)
+            etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, w_proj @ zbulk))
+        
+        Li1  = jax_polylog_vmap(etpz, 1, self.periods.prange)
+        F2b  += -1 / coeff * jnp.sum(bulk_invs * beta1**2 * Li1)
+        dF1b += -1 / coeff * jnp.sum((bulk_invs * Li1 * beta1)[:, None] * bulk_charges_proj, axis=0)
+        
+        # Li corrections to F1b
+        Li2  = jax_polylog_vmap(etpz, 2, self.periods.prange)
+        F1b  += -1 / coeff**2 * jnp.sum(bulk_invs * beta1 * (Li2 - (coeff*bulk_charges_proj@zbulk)*Li1))
+        
+        
+    tmp  = (M0 - tau * H0) * F1b
+    tmp += (M1 - tau * H1) * F2b
+    tmp += (Malpha - tau * Halpha) @ dF1b
+    tmp += (-1) * (P1 - tau * K1)
+
+    exponent = -coeff * tmp / ncf / (M1 - tau * H1)
+    zcf = (-1) / coeff * jnp.exp(exponent)
+    
+    return zcf
+
+def compute_zcf_compact(self, z, tau, flux, conj=False):
+    
+    if not self.lcs_tree.conifold_basis:
+        raise NotImplementedError("compute_zcf_compact is only implemented for conifold_basis=True.")
+    
+    coeff = 2 * jnp.pi * 1j
+    if conj:
+        coeff = -coeff
+    
+    ncf = self.lcs_tree.conifold.ncf
+
+    zbulk = z
+    
+    M0, H0, M1, H1, Malpha, Halpha, P1, K1, Palpha, Kalpha, P0, K0 = self.conifold_fluxes(flux)
+    
+    F2 = self.F_coniLCS_exp(zbulk, conj=conj, n=2)
+    F1 = self.F_coniLCS_exp(zbulk, conj=conj, n=1)
+    dF1 = self.dF_coniLCS_exp(zbulk, conj=conj, n=1)
+    
+    F1b = F1 - zbulk@dF1
+    F2b = F2 + ncf * 3 / 2 / coeff
+    
+    tmp  = (M0 - tau * H0) * F1b
+    tmp += (M1 - tau * H1) * F2b
+    tmp += (Malpha - tau * Halpha) @ dF1
+    tmp += (-1) * (P1 - tau * K1)
+
+    exponent = -coeff * tmp / ncf / (M1 - tau * H1)
+    zcf = (-1) / coeff * jnp.exp(exponent)
+    
+    return zcf
+
+
+
 
 
 #@partial(jit, static_argnums = (7,))
@@ -1552,7 +1994,7 @@ def W1_tilde(self,zbulk,tau,f2,h2,P1,K1,conj=False):
     
     kappa = self.lcs_tree.intnums
 
-    ncf = self.lcs_tree.ncf
+    ncf = self.lcs_tree.conifold.ncf
     coeff = 2*jnp.pi*1j
     
     if conj:
@@ -1600,7 +2042,7 @@ def compute_zcf(self,x,flux,mode=None,conj=False):
     if conj:
         coeff = -coeff
 
-    ncf = self.lcs_tree.ncf
+    ncf = self.lcs_tree.conifold.ncf
 
     if mode == "pfv":
 

@@ -64,7 +64,7 @@ def pfv_to_flux(
     if "coniLCS" in self.periods.limit:
         tmp = jnp.zeros(b.shape[0])
         tmp = tmp.at[0].set(1.)
-        b = b+tmp*self.lcs_tree.ncf/24
+        b = b+tmp*self.lcs_tree.conifold.ncf/24
 
     f0 = M@b
     f2 = (a.T@M)
@@ -112,7 +112,7 @@ def pfv_to_moduli(
         # amatrix[0]@M-P1==0???
         phase_comb = -1j*(+c0*Kprime)
         radial = Kprime/gs
-        zcf = -1/(2*jnp.pi*1j)*jnp.exp(2*jnp.pi/self.lcs_tree.ncf/M[0]*(phase_comb+radial))
+        zcf = -1/(2*jnp.pi*1j)*jnp.exp(2*jnp.pi/self.lcs_tree.conifold.ncf/M[0]*(phase_comb+radial))
 
         z0 = jnp.append(jnp.ones(1)*zcf,zbulk)
     else:

@@ -199,11 +199,11 @@ class LCSDatabase(CYDatabase):
             include_gv (bool): If ``True``, fetch and attach Gopakumar-Vafa
                 and Gromov-Witten invariants.  Defaults to ``False``.
             include_conifolds (bool | str): If ``True``, fetch all available
-                conifold limits and populate ``lcs_tree.ncf`` and
-                ``lcs_tree.conifold_curve`` from the selected conifold
-                (controlled by ``conifold_id``; defaults to 0).  Pass
-                ``"all"`` to obtain a list of trees, one per conifold.
-                Defaults to ``False``.
+                conifold limits and populate ``lcs_tree.conifold`` (the
+                active :class:`~jaxvacua.conifold_utils.Conifold`) from the
+                selected conifold (controlled by ``conifold_id``; defaults
+                to 0).  Pass ``"all"`` to obtain a list of trees, one per
+                conifold.  Defaults to ``False``.
             conifold_id (int | None): Index of the conifold limit to use when
                 ``include_conifolds=True``.  Ignored when
                 ``include_conifolds="all"``.  Defaults to ``0``.
