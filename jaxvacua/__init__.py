@@ -82,88 +82,23 @@ _default_prec = _os.environ.get("JAXVACUA_PRECISION", "float64")
 set_precision(_default_prec)
 # ──────────────────────────────────────────────────────────────────────────
 
-# ── Data directory ────────────────────────────────────────────────────────
-# Default location for all database cache and vacua storage.
-# Override with JAXVACUA_DATA_DIR env var or jvc.set_data_dir().
-_DEFAULT_DATA_DIR = _os.path.join(_os.getcwd(), ".jaxvacua_cache")
-data_dir = _os.environ.get("JAXVACUA_DATA_DIR", _DEFAULT_DATA_DIR)
-
-def set_data_dir(path):
-    r"""
-    **Description:**
-    Set the global data directory for all jaxvacua database operations
-    (HuggingFace cache, vacua storage, designated solutions).
-
-    New :class:`~jaxvacua.lcs_database.LCSDatabase` instances created after
-    this call will use the specified directory unless overridden by an
-    explicit ``cache_dir`` argument.
-
-    Args:
-        path (str | Path): Absolute or relative path to the data
-            directory.  The directory is created on first use.
-
-    Returns:
-        None
-    """
-    global data_dir
-    data_dir = str(path)
-# ──────────────────────────────────────────────────────────────────────────
-
-# ── Vacua vault directory ────────────────────────────────────────────────
-# Permanent storage for designated vacuum solutions.  Resolves in priority:
-#   1. JAXVACUA_VAULT env var (explicit override), or value set via
-#      jvc.set_vault_dir(path)
-#   2. <repo_root>/vacua_vault/ when inside a jaxvacua source checkout
-#   3. <cwd>/vacua_vault/ otherwise
-# The vault is **not** under the cache dir — it persists across
-# clear_cache() calls.
-
-def set_vault_dir(path):
-    r"""
-    **Description:**
-    Set the vault directory for designated vacuum solutions by
-    exporting ``JAXVACUA_VAULT`` into the environment.  Takes effect
-    for all subsequent :class:`~jaxvacua.lcs_database.LCSDatabase` calls.
-
-    Args:
-        path (str | Path): Absolute or relative path to the vault
-            directory.  Pass ``None`` to clear the override and fall
-            back to repo-root / cwd auto-detection.
-
-    Returns:
-        None
-    """
-    if path is None:
-        _os.environ.pop("JAXVACUA_VAULT", None)
-    else:
-        _os.environ["JAXVACUA_VAULT"] = str(path)
-
-
-def set_vault_repo(repo_id):
-    r"""
-    **Description:**
-    Set the HuggingFace dataset repo ID used for uploading / fetching
-    community vacuum solutions.  Sets the ``JAXVACUA_VAULT_REPO`` env
-    var.
-
-    Args:
-        repo_id (str | None): ``"user/repo"`` on HuggingFace Hub, or
-            ``None`` to clear the override and fall back to the
-            package default ``aschachner/vacua_vault``.
-
-    Returns:
-        None
-    """
-    if repo_id is None:
-        _os.environ.pop("JAXVACUA_VAULT_REPO", None)
-    else:
-        _os.environ["JAXVACUA_VAULT_REPO"] = str(repo_id)
+# ── Data directory + vault setters ───────────────────────────────────────
+# These were moved to ``stringjax/__init__.py`` on 2026-04-30 alongside
+# the cy_io / vacuavault extraction.  Use ``stringjax.set_data_dir``,
+# ``stringjax.set_vault_dir``, and ``stringjax.set_vault_repo`` directly.
+# Env vars ``STRINGJAX_DATA_DIR`` / ``STRINGJAX_VAULT`` /
+# ``STRINGJAX_VAULT_REPO`` (formerly ``JAXVACUA_*``) override the
+# defaults; ``stringjax.data_dir`` is the global the I/O layer reads.
 # ──────────────────────────────────────────────────────────────────────────
 
 from .util import *
 from .utils_jaxvacua import *
 from .cytools_interface import *
-from .conifold_utils import *
+# Conifold subsystem: 2026-05-01 Phase 2 split moved the contents of the old
+# ``conifold_utils.py`` into the ``conifold/`` subpackage.  Importing it here
+# (BEFORE ``periods``/``css``/``flux_eft``) makes the symbols visible to those
+# modules' bottom-of-file ``setattr`` blocks via ``from jaxvacua import conifold``.
+from .conifold import *
 from .lcs import *
 from .periods import *
 from .css import *
