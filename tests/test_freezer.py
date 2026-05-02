@@ -35,8 +35,7 @@ _MODEL_LOAD_ERROR = None
 try:
     import jaxvacua
     _MODEL = jaxvacua.FluxEFT(
-        h12=2, model_ID=1, model_type="KS",
-        maximum_degree=0, limit="coniLCS",
+        h12=5, model_ID="aule", maximum_degree=5, limit="coniLCS",
     )
 except Exception as exc:
     _MODEL_LOAD_ERROR = str(exc)
@@ -235,16 +234,26 @@ class TestConifoldFreezer(TestCase):
         # Index 0 should now be a light modulus instead of heavy
         self.assertIn(0, custom.light_indices)
 
-    def test_custom_ncf(self):
+    def test_ncf_property_reads_from_lcs_tree(self):
         r"""
         **Description:**
-        Verifies that a custom conifold degree ``ncf`` is stored correctly by
-        the constructor, since ncf controls the order of the conifold
-        singularity and enters the exponential formula for z_cf.
+        Verifies that ``ncf`` is now exposed as a property that reads directly
+        from ``model.lcs_tree.conifold.ncf`` (single source of truth).  The
+        previous behaviour stored a copy via the ``ncf=`` constructor kwarg;
+        that kwarg has been removed so the freezer never mirrors geometric
+        data already carried by the model.
         """
-        custom = ConifoldFreezer(self.model, ncf=3)
-        # The internal conifold degree attribute should match the input value
-        self.assertEqual(custom._ncf, 3)
+        freezer = ConifoldFreezer(self.model)
+        self.assertEqual(freezer.ncf, int(self.model.lcs_tree.conifold.ncf))
+
+    def test_ncf_kwarg_no_longer_accepted(self):
+        r"""
+        **Description:**
+        Constructing ``ConifoldFreezer(model, ncf=...)`` must raise
+        ``TypeError`` after the kwarg removal.
+        """
+        with self.assertRaises(TypeError):
+            ConifoldFreezer(self.model, ncf=3)
 
     # ------------------------------------------------------------------
     # Partition consistency (union / disjointness)
@@ -273,6 +282,158 @@ class TestConifoldFreezer(TestCase):
         all_indices = set(self.freezer.heavy_indices) | set(self.freezer.light_indices)
         # The union must equal the complete set of moduli indices
         self.assertEqual(all_indices, set(range(h12)))
+
+
+# ==============================================================================
+#  TestConifoldFreezerIntegration — exercises solve_heavy / _real_light_to_full
+#  end-to-end against the new conifold_utils API.  Uses the same "aule"
+#  PromotionModels fixture as tests/test_conifold_bulk_eft.py so we get a
+#  loadable coniLCS model regardless of the standalone FluxEFT(h12=2,
+#  model_ID=1) fixture above.
+# ==============================================================================
+
+import pytest as _pytest
+
+_INT_NAME  = "aule"
+_INT_MVEC0 = np.array([20, 4, 8, -18, -20])
+_INT_KVEC0 = np.array([-5, -1, 0, 1, -1])
+_INT_PVEC0 = np.array([0.0, 0.020833333333333332, 0.041666666666666664,
+                       0.020833333333333332, 0.0])
+_INT_TAU0  = 1j / 0.04317129968232153
+_INT_ATOL  = 1e-10
+
+_INT_MODELS = None
+_INT_PFV = None
+_INT_LOAD_ERROR = None
+
+
+def _try_load_int_models():
+    """Build the (bulk, series, conilcs) PromotionModels triple from the
+    'aule' lcs_tree, plus a PFV seed point. Returns (models, pfv) on success,
+    or raises with a descriptive error."""
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    promo_dir = os.path.join(repo_root, "private", "promotion")
+    if promo_dir not in sys.path:
+        sys.path.insert(0, promo_dir)
+    import vacuum_promotion as vp  # noqa: E402
+    import jaxvacua as jvc  # noqa: E402
+
+    lcs_tree = jvc.periods(h12=len(_INT_MVEC0), model_ID=_INT_NAME, limit="coniLCS").lcs_tree
+    models = vp.PromotionModels.from_lcs_tree(
+        lcs_tree, conifold_basis=True, ncf=2, prange=20, maximum_degree=2,
+    )
+    pfv = vp.PFV.from_quantum_numbers(
+        models, M_vec=_INT_MVEC0, K_vec=_INT_KVEC0, p_vec=_INT_PVEC0, tau=_INT_TAU0,
+        metadata={"model_name": _INT_NAME},
+    )
+    return models, pfv
+
+
+try:
+    _INT_MODELS, _INT_PFV = _try_load_int_models()
+except Exception as _exc:
+    _INT_LOAD_ERROR = f"{type(_exc).__name__}: {_exc}"
+
+
+_NEEDS_INT_MODEL = _pytest.mark.skipif(
+    _INT_MODELS is None,
+    reason=f"PromotionModels unavailable ({_INT_LOAD_ERROR})",
+)
+
+
+@_NEEDS_INT_MODEL
+class TestConifoldFreezerIntegration(TestCase):
+    r"""
+    Integration tests that pin :class:`ConifoldFreezer` to the new
+    :func:`jaxvacua.conifold.zcf_solver.compute_zcf` and
+    :func:`jaxvacua.conifold.zcf_solver.zcf_handling` dispatchers exactly.
+
+    Each test runs against the ``models.bulk`` model from the "aule"
+    ``PromotionModels`` fixture; this model has ``conifold_basis=True`` and
+    ``maximum_degree=2`` (instanton corrections enabled).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model   = _INT_MODELS.bulk
+        cls.freezer = ConifoldFreezer(cls.model)
+        cls.x_full  = jnp.asarray(_INT_PFV.x)
+        cls.flux    = jnp.asarray(_INT_PFV.flux)
+        h12 = len(_INT_MVEC0)
+        # Bulk-only real vector: drop the first 2 real components (Re/Im of z_cf).
+        cls.x_bulk  = jnp.concatenate([cls.x_full[2:2 * h12], cls.x_full[2 * h12:]])
+        # Complex-coord pieces.
+        z, _, tau, _ = cls.model._convert_real_to_complex(cls.x_full)
+        cls.z_bulk = z[1:]
+        cls.tau    = tau
+
+    def test_solve_heavy_matches_compute_zcf(self):
+        r"""
+        ``freezer.solve_heavy(z_bulk, tau, flux, mode=m)[0]`` must match
+        ``model.compute_zcf(z_bulk, jnp.conj(z_bulk), tau, jnp.conj(tau),
+        flux, mode=m)`` for every dispatcher mode.
+        """
+        for m in ("manual", "autodiff", "pfv"):
+            via_freezer = complex(self.freezer.solve_heavy(
+                self.z_bulk, self.tau, self.flux, mode=m)[0])
+            via_model = complex(self.model.compute_zcf(
+                self.z_bulk, jnp.conj(self.z_bulk),
+                self.tau, jnp.conj(self.tau),
+                self.flux, mode=m,
+            ))
+            self.assertAllClose(via_freezer, via_model, atol=_INT_ATOL,
+                                msg=f"mode={m}")
+
+    def test_solve_heavy_apply_correction_toggle(self):
+        r"""
+        ``apply_correction=True`` must (a) differ from the default and
+        (b) match ``model.compute_zcf(..., apply_correction=True)``.
+        """
+        z_off = complex(self.freezer.solve_heavy(
+            self.z_bulk, self.tau, self.flux, mode="manual",
+            apply_correction=False)[0])
+        z_on  = complex(self.freezer.solve_heavy(
+            self.z_bulk, self.tau, self.flux, mode="manual",
+            apply_correction=True)[0])
+        z_on_via_model = complex(self.model.compute_zcf(
+            self.z_bulk, jnp.conj(self.z_bulk),
+            self.tau, jnp.conj(self.tau),
+            self.flux, mode="manual", apply_correction=True,
+        ))
+        # Toggle is non-trivial.
+        self.assertGreater(abs(z_on - z_off), 1e-12 * abs(z_off))
+        # And matches the model dispatcher exactly.
+        self.assertAllClose(z_on, z_on_via_model, atol=_INT_ATOL)
+
+    def test_real_light_to_full_matches_zcf_handling(self):
+        r"""
+        ``freezer._real_light_to_full(x_bulk, flux, mode=m)`` must equal
+        ``model.zcf_handling(x_bulk, flux, mode=m)`` for every dispatcher mode.
+        """
+        for m in ("manual", "autodiff", "pfv"):
+            via_freezer = self.freezer._real_light_to_full(
+                self.x_bulk, self.flux, mode=m)
+            via_model = self.model.zcf_handling(self.x_bulk, self.flux, mode=m)
+            self.assertAllClose(via_freezer, via_model, atol=_INT_ATOL,
+                                msg=f"mode={m}")
+
+    # NOTE: previously this section had ``test_DW_x_light_matches_DWbulk_x``,
+    # a deprecation-era bridge test pinning ``freezer.DW_x_light`` to
+    # ``model.DWbulk_x``.  After 2026-05-01 ``DWbulk_x`` / ``dDWbulk_x`` were
+    # hard-removed (vacuum_promotion.py migrated to the freezer interface).
+    # The slice-equivalence semantics are now covered by
+    # ``test_conifold_bulk_eft.py::TestDWxLight::test_slice_equivalence``,
+    # which compares ``freezer.DW_x_light`` against
+    # ``DW_x(zcf_handling(x_bulk, ...), flux)[2:]`` directly.
+
+    def test_ncf_property_matches_lcs_tree(self):
+        r"""
+        ``freezer.ncf`` must read directly from
+        ``model.lcs_tree.conifold.ncf`` after the kwarg removal.
+        """
+        self.assertEqual(self.freezer.ncf,
+                         int(self.model.lcs_tree.conifold.ncf))
 
 
 if __name__ == "__main__":

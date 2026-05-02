@@ -32,7 +32,7 @@ from functools import reduce
 from util import *
 
 sys.path.append("./../")
-from jaxvacua.conifold_utils import (
+from jaxvacua.conifold import (
     extended_euclidean,
     orthogonal_lattice,
     get_basis_change,

@@ -29,6 +29,7 @@ jax.config.update("jax_enable_x64", True)
 sys.path.append("./../")
 import jaxvacua
 from jaxvacua.critical_points import CriticalPointFinder
+from jaxvacua.util import PRNGSequence
 
 warnings.filterwarnings("ignore")
 
@@ -69,11 +70,19 @@ class TestCriticalPointFinder(TestCase):
             dilaton_bounds=(math.sqrt(3) / 2, 10.),
             axion_bounds=(-0.5, 0.5),
             seed=42,
+            use_jax=True,   # required so `rns_key=...` passed to the sampler
+                            # methods below is actually honoured (otherwise the
+                            # _rand_* helpers fall through to global np.random.*).
         )
 
         cls.Nmax = 200
         cls.n_fl = cls.model.n_fluxes
         cls.dim_H3 = cls.model.dimension_H3
+
+        # Class-level PRNGSequence threaded through every sampler call below
+        # so test outcomes are independent of which earlier tests advanced the
+        # sampler's own internal PRNGSequence.
+        cls.rng_key = PRNGSequence(42)
 
     # ------------------------------------------------------------------
     # Constructor
@@ -112,8 +121,10 @@ class TestCriticalPointFinder(TestCase):
         valid flux candidates with correct shapes.
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(50), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(50), dtype=complex)
+        
+        N = 50
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        
 
         x0, fluxes, idx = finder._generate_flux_candidates(
             50, mod_pts, tau_pts, isd_mode="F")
@@ -131,8 +142,8 @@ class TestCriticalPointFinder(TestCase):
         ISD- takes [f₁|h₁] of length 2*dim_H3 as input and computes [f₂|h₂].
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(50), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(50), dtype=complex)
+        N = 50
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
 
         x0, fluxes, idx = finder._generate_flux_candidates(
             50, mod_pts, tau_pts, isd_mode="ISD-")
@@ -147,8 +158,8 @@ class TestCriticalPointFinder(TestCase):
         Verify that an invalid mode raises ``ValueError``.
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(10), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(10), dtype=complex)
+        N = 10
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
 
         with self.assertRaises(ValueError):
             finder._generate_flux_candidates(10, mod_pts, tau_pts, isd_mode="INVALID")
@@ -167,8 +178,10 @@ class TestCriticalPointFinder(TestCase):
         A critical point satisfies :math:`|\partial_\alpha V| < \text{tol}`.
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(20), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(20), dtype=complex)
+        
+        
+        N = 20
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
 
         x0, fluxes, _ = finder._generate_flux_candidates(
             20, mod_pts, tau_pts, isd_mode="ISD-")
@@ -189,8 +202,9 @@ class TestCriticalPointFinder(TestCase):
         ``(x_solution, residual, converged)`` with correct types.
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(5), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(5), dtype=complex)
+        
+        N = 5
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
 
         x0, fluxes, _ = finder._generate_flux_candidates(
             5, mod_pts, tau_pts, isd_mode="F")
@@ -340,8 +354,10 @@ class TestCriticalPointFinder(TestCase):
         shapes: ``(N, 2*(h12+1))``, ``(N,)``, ``(N,)``.
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(20), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(20), dtype=complex)
+        
+        N = 20
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        
 
         x0, fluxes, _ = finder._generate_flux_candidates(
             20, mod_pts, tau_pts, isd_mode="ISD-")
@@ -363,20 +379,51 @@ class TestCriticalPointFinder(TestCase):
         to the starting points (more steps → lower residuals).
         """
         finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        mod_pts = jnp.array(self.sampler.get_complex_moduli(30), dtype=complex)
-        tau_pts = jnp.array(self.sampler.get_complex_tau(30), dtype=complex)
+        N = 30
+        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
 
         x0, fluxes, _ = finder._generate_flux_candidates(
             30, mod_pts, tau_pts, isd_mode="ISD-")
 
         if len(x0) >= 3:
             n = min(5, len(x0))
-            _, res_100, _ = finder._solve_dV_optax_batch(
+            x_final_100, res_100, _ = finder._solve_dV_optax_batch(
                 x0[:n], fluxes[:n], n_steps=100, tol=1e-8)
-            _, res_1000, _ = finder._solve_dV_optax_batch(
+            x_final_1000, res_1000, _ = finder._solve_dV_optax_batch(
                 x0[:n], fluxes[:n], n_steps=1000, tol=1e-8)
+
+            # Only validate residuals at points that are still inside the
+            # Kähler cone after the optax scan AND pass `filter_moduli`
+            # (instanton convergence + Kähler-metric positivity). The optax
+            # solver is unconstrained and can wander to points with
+            # `Im(z) < 0` or otherwise singular geometry, where ``dV_x`` may
+            # legitimately produce NaN; such points are not physically
+            # meaningful so should not poison the median comparison.
+            def _valid_mask(x_finals):
+                mask = []
+                for xf in x_finals:
+                    z, _, tau, _ = self.model._convert_real_to_complex(jnp.asarray(xf))
+                    in_cone = bool(np.all(
+                        np.asarray(self.sampler._hyperplanes @ z.imag) > 0))
+                    if not in_cone:
+                        mask.append(False)
+                        continue
+                    z_kept = self.sampler.filter_moduli(
+                        jnp.asarray([z]), jnp.asarray([tau]))
+                    mask.append(len(z_kept) > 0)
+                return np.array(mask)
+
+            res_100  = np.where(_valid_mask(x_final_100),  res_100,  np.nan)
+            res_1000 = np.where(_valid_mask(x_final_1000), res_1000, np.nan)
+
+            # nanmedian skips invalidated points; require at least one valid
+            # residual at each step count.
+            self.assertTrue(np.any(np.isfinite(res_100)),
+                            msg="no in-cone residuals after n_steps=100")
+            self.assertTrue(np.any(np.isfinite(res_1000)),
+                            msg="no in-cone residuals after n_steps=1000")
             # Median residual should decrease with more steps
-            self.assertLessEqual(np.median(res_1000), np.median(res_100))
+            self.assertLessEqual(np.nanmedian(res_1000), np.nanmedian(res_100))
 
     @pytest.mark.slow
     def test_sample_critical_points_adam_v(self):

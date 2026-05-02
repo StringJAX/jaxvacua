@@ -414,8 +414,12 @@ class TestFluxBounding(TestCase):
         even when starting from a slightly perturbed initial guess.
 
         The starting moduli and axio-dilaton are shifted by a small
-        imaginary perturbation, and the Newton solver should recover the
-        exact vacuum to high accuracy.
+        imaginary perturbation, and the **damped** Newton solver
+        (``step_size=0.5``) should recover the exact vacuum to high
+        accuracy.  Full-step Newton (``step_size=1.0``) overshoots from
+        this perturbation magnitude and diverges to NaN — production
+        code in ``vacuum_promotion.py`` uses damped Newton for the
+        same reason.
         """
         N = 1
 
@@ -429,7 +433,7 @@ class TestFluxBounding(TestCase):
 
         moduli_out, tau_out, residuals = self.bf.newton_refine_batch(
             moduli_batch, tau_batch, flux_batch,
-            step_size=1.0, tol=1e-12, max_iters=200,
+            step_size=0.5, tol=1e-12, max_iters=200,
         )
 
         # Should converge to a small residual
@@ -1180,10 +1184,32 @@ class TestClusterRoundTrip(TestCase):
         Merge with ``database=..., designate=True`` promotes merged
         results to the vault.  The vault should then contain a shard
         with the expected rows loadable via ``load_local_vacua``.
+
+        Skipped when ``stringjax`` is not installed — the database +
+        vault layer was extracted to the stringjax package on
+        2026-05-01, so this test only runs in environments that have
+        the optional sibling installed.
         """
         import os, tempfile
-        from jaxvacua.lcs_database import LCSDatabase as CYDatabase
+        # ``importorskip`` produces a clean ``SKIPPED`` (with reason) in
+        # pytest output rather than failing with ``ModuleNotFoundError``.
+        # ``exc_type=ImportError`` silences a pytest 9.1 deprecation
+        # warning and locks the skip semantics to "module not found"
+        # only — any other exception during import is re-raised.
+        LCSDatabase = pytest.importorskip(
+            "stringjax.lcs_database",
+            reason="stringjax is not installed; skipping vault round-trip "
+                   "test. Install stringjax via "
+                   "`pip install git+https://github.com/AndreasSchachner/stringjax`.",
+            exc_type=ImportError,
+        ).LCSDatabase
         with tempfile.TemporaryDirectory() as tmp:
+            # Point the strict ``_resolve_vault_dir`` at this scratch
+            # directory; otherwise it raises LookupError and the test
+            # can't designate / load_local_vacua.  Restore on exit so
+            # subsequent tests aren't affected.
+            prev_vault = os.environ.get("STRINGJAX_VAULT")
+            os.environ["STRINGJAX_VAULT"] = os.path.join(tmp, "vault")
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(
                 output_dir=run_dir, mode="enumerate", chunk_size=50_000,
@@ -1194,7 +1220,7 @@ class TestClusterRoundTrip(TestCase):
                     output_dir=run_dir, chunk_id=i,
                     model=self.model, sampler=self.sampler, verbose=False,
                 )
-            db = CYDatabase()
+            db = LCSDatabase()
             results = bounded_fluxes.merge_cluster_results(
                 run_dir, model=self.model, sampler=self.sampler,
                 refine=False, verbose=False,
@@ -1210,3 +1236,8 @@ class TestClusterRoundTrip(TestCase):
             self.assertIsNotNone(df)
             self.assertGreater(len(df), 0,
                                "designate=True did not promote any rows to the vault")
+            # Restore the prior STRINGJAX_VAULT (if any).
+            if prev_vault is None:
+                os.environ.pop("STRINGJAX_VAULT", None)
+            else:
+                os.environ["STRINGJAX_VAULT"] = prev_vault
