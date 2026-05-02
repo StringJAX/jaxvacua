@@ -5,8 +5,21 @@ name: CI
 #  * fast — runs on every push/PR. pytest -m "not slow".
 #    All deps installed (cytools is required at import time); targets
 #    a few minutes of GHA wall time.
+#  * coniLCS_limit — fast targeted regression test for the coniLCS limit
+#    (NB13 fingerprints).  Runs on every push/PR. Catches polylog /
+#    prepotential / scipy-driver regressions that show up only in the
+#    "approx=patch" code path.  See tests/test_coniLCS_limit.py.
 #  * full — weekly cron + manual dispatch only. Runs everything
 #    including the 97 __with_jit tests. Multi-hour on GHA runners.
+#
+# jaxpolylog version exclusion
+# ----------------------------
+# The conifold dilog uses jax_polylog_vmap(..., approx="patch") for
+# limit="coniLCS". jaxpolylog 0.2.0 changed the "patch" output enough to
+# break the coniLCS convergence basin; all earlier and later versions are
+# fine.  Pin via "!=0.2.0" rather than an upper bound — a fixed 0.2.x is
+# expected upstream soon. Drop the exclusion once test_coniLCS_limit.py
+# passes against the new release.
 
 on:
   push:
@@ -16,6 +29,10 @@ on:
   schedule:
     - cron: "0 4 * * 0"   # Sunday 04:00 UTC (weekly)
   workflow_dispatch:
+
+# Single source of truth for the jaxpolylog spec.
+env:
+  JAXPOLYLOG_PIN: "jaxpolylog>=0.1.0,!=0.2.0"
 
 jobs:
   fast:
@@ -47,7 +64,7 @@ jobs:
       - name: Install jaxvacua + deps
         run: |
           python -m pip install --upgrade pip
-          pip install pytest chex "jaxpolylog>=0.1.0"
+          pip install pytest chex "${{ env.JAXPOLYLOG_PIN }}"
           # platformdirs is a transitive dep of cytools not declared by the
           # cytools PyPI wheel; install explicitly to avoid ModuleNotFoundError.
           pip install platformdirs
@@ -59,6 +76,53 @@ jobs:
         env:
           JAX_ENABLE_X64: "1"
         run: pytest tests/ -v -m "not slow"
+
+  conilcs_limit:
+    # Targeted regression net for the coniLCS-limit code path.
+    # The NB13 fingerprints in tests/test_coniLCS_limit.py exercise the
+    # `approx="patch"` polylog evaluation that's specific to limit="coniLCS";
+    # this is the path that broke under jaxpolylog 0.2.0.  Runs on every
+    # push/PR in parallel with `fast`, so a regression here is loud and
+    # immediate.
+    name: coniLCS limit (NB13 fingerprints)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Cache JAX compilation cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/jax
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-conilcs-${{ hashFiles('jaxvacua/**/*.py', 'tests/test_coniLCS_limit.py') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-conilcs-
+
+      - name: Install jaxvacua + deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest chex "${{ env.JAXPOLYLOG_PIN }}"
+          pip install platformdirs
+          pip install -e .
+
+      - name: Print resolved jaxpolylog version
+        run: python -c "import jaxpolylog; print('jaxpolylog =', jaxpolylog.__version__)"
+
+      - name: Run coniLCS-limit regression suite
+        env:
+          JAX_ENABLE_X64: "1"
+        run: pytest tests/test_coniLCS_limit.py -v --tb=short
 
   full:
     name: Full (pytest tests/)
@@ -90,7 +154,7 @@ jobs:
       - name: Install jaxvacua + all heavy deps
         run: |
           python -m pip install --upgrade pip
-          pip install pytest chex "jaxpolylog>=0.1.0"
+          pip install pytest chex "${{ env.JAXPOLYLOG_PIN }}"
           pip install platformdirs
           pip install -e .
 
