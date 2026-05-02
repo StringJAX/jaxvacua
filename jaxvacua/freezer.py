@@ -415,7 +415,6 @@ class ConifoldFreezer(Freezer):
         self,
         model: Any,
         conifold_index: int = 0,
-        ncf: int = 2,
     ) -> None:
         r"""
         **Description:**
@@ -425,15 +424,12 @@ class ConifoldFreezer(Freezer):
             model: A flux EFT model with ``"coniLCS"`` in ``model.periods.limit``.
             conifold_index (int, optional): Index of the conifold modulus in the
                 moduli array. Defaults to ``0``.
-            ncf (int, optional): Conifold degree. Defaults to ``2``.
 
         Attributes:
             _conifold_index (int): Stored index of the conifold modulus.
-            _ncf (int): Stored conifold degree.
         """
         super().__init__(model)
         self._conifold_index = conifold_index
-        self._ncf = ncf
 
     @property
     def heavy_indices(self) -> Tuple[int, ...]:
@@ -442,59 +438,13 @@ class ConifoldFreezer(Freezer):
         Indices of the heavy (conifold) modulus; always a length-1 tuple."""
         return (self._conifold_index,)
 
-    def _W1_tilde(
-        self,
-        zbulk: Array,
-        tau: complex,
-        f2: Array,
-        h2: Array,
-        P1: complex,
-        K1: complex,
-        conj: bool = False,
-    ) -> complex:
+    @property
+    def ncf(self) -> int:
         r"""
-        **Description:**
-        Compute :math:`\widetilde{W}_1`, the effective superpotential
-        contribution from the bulk fields that sources the conifold modulus.
-
-        Args:
-            zbulk (Array): Bulk moduli values (excluding conifold).
-            tau (complex): Axio-dilaton.
-            f2 (Array): RR flux component :math:`f_2`.
-            h2 (Array): NSNS flux component :math:`h_2`.
-            P1 (complex): Flux :math:`P^1`.
-            K1 (complex): Flux :math:`K^1`.
-            conj (bool, optional): If ``True``, use conjugate conventions.
-
-        Returns:
-            complex: Value of :math:`\widetilde{W}_1`.
-        """
-        M0, H0 = f2[0], h2[0]
-        M1, H1 = f2[1], h2[1]
-        Malpha, Halpha = f2[2:], h2[2:]
-
-        kappa = self.lcs_tree.intnums
-
-        coeff = 2 * jnp.pi * 1j
-        if conj:
-            coeff = -coeff
-
-        ncf = self._ncf
-
-        F1b = (
-            (kappa[0, 1:, 1:] @ zbulk) @ zbulk / 2
-            + self.lcs_tree.b_vector[0]
-            - jnp.pi**2 / 6 * ncf / coeff**2
-        )
-        F2b = -(kappa[0, 0, 1:] @ zbulk) + self.lcs_tree.a_matrix[0, 0]
-        dF1b = -(kappa[0, 1:, 1:] @ zbulk) + self.lcs_tree.a_matrix[0, 1:]
-
-        tmp = (M0 - tau * H0) * F1b
-        tmp += (M1 - tau * H1) * F2b
-        tmp += (Malpha - tau * Halpha) @ dF1b
-        tmp += (-1) * (P1 - tau * K1)
-
-        return tmp
+        Description:
+        Conifold degree :math:`n_{\text{cf}}`, sourced from
+        ``self.model.lcs_tree.conifold.ncf`` (single source of truth)."""
+        return int(self.model.lcs_tree.conifold.ncf)
 
     def solve_heavy(
         self,
@@ -502,117 +452,70 @@ class ConifoldFreezer(Freezer):
         tau: complex,
         fluxes: Array,
         conj: bool = False,
-        mode: str | None = None,
+        mode: str = "manual",
+        apply_correction: bool = False,
     ) -> Array:
         r"""
         **Description:**
-        Solve for :math:`z_{\text{cf}}` from its leading-order EOM.
+        Solve for :math:`z_{\text{cf}}` from its leading-order EOM by
+        delegating to :func:`jaxvacua.conifold.zcf_solver.compute_zcf` (the unified
+        complex-coord dispatcher attached to the model).
 
         Args:
             z_light (Array): Bulk (light) moduli values.
             tau (complex): Axio-dilaton.
             fluxes (Array): Full flux vector.
             conj (bool, optional): Conjugate conventions. Defaults to ``False``.
-            mode (str, optional): If ``"pfv"``, use the PFV approximation.
-                If ``None``, use the full expression. Defaults to ``None``.
+            mode (str, optional): One of ``{"manual", "autodiff", "pfv"}``.
+                Routes through ``model.W_log_coeff(..., mode=mode)``.
+                Defaults to ``"manual"`` (closed-form ``kappa`` /
+                ``a_matrix`` / ``b_vector`` + ``Li`` assembly).
+            apply_correction (bool, optional): If ``True``, add the
+                Kähler-covariant correction ``log_coeff_K_corr`` to the log
+                coefficient before exponentiating. Defaults to ``False``.
 
         Returns:
             Array: Value of :math:`z_{\text{cf}}` (length-1 array).
         """
-        from .flux_utils import split_fluxes
-
-        f1, f2, h1, h2 = split_fluxes(fluxes, self.lcs_tree)
-
-        coeff = 2 * jnp.pi * 1j
-        if conj:
-            coeff = -coeff
-
-        ncf = self._ncf
-
-        if mode == "pfv":
-            Mvec = f2[1:]
-            Kvec = h1[1:]
-            M = Mvec[0]
-            P1 = f1[1]
-            N = self.lcs_tree.intnums @ Mvec
-            pvec = jnp.linalg.inv(N[1:, 1:]) @ Kvec[1:]
-            Kprime = Kvec[0] - N[0, 1:] @ pvec
-
-            # Extract tau components from light moduli real repr
-            # In PFV mode, tau is encoded in the last two entries of x_light
-            c0 = tau.real
-            gs = 1.0 / tau.imag
-
-            phase_comb = -1j * (
-                self.lcs_tree.a_matrix[0] @ Mvec - P1 + c0 * Kprime
-            )
-            if conj:
-                phase_comb = -phase_comb
-
-            radial = Kprime / gs  # gs = 1/s, so Kprime/gs = Kprime*s
-            exponent = 2 * jnp.pi / ncf / M * (phase_comb + radial)
-
-        else:
-            zbulk = z_light
-            M1, H1 = f2[1], h2[1]
-            P1, K1 = f1[1], h1[1]
-
-            W1 = self._W1_tilde(zbulk, tau, f2, h2, P1, K1, conj=conj)
-            exponent = -coeff * W1 / ncf / (M1 - tau * H1)
-
-        zcf = (-1) / coeff * jnp.exp(exponent)
+        cz_light = jnp.conj(z_light)
+        ctau = jnp.conj(tau)
+        zcf = self.model.compute_zcf(
+            z_light, cz_light, tau, ctau, fluxes,
+            mode=mode, apply_correction=apply_correction, conj=conj,
+        )
         return jnp.array([zcf])
-
-    def reconstruct_full_moduli(
-        self,
-        z_light: Array,
-        tau: complex,
-        fluxes: Array,
-        **kwargs,
-    ) -> Array:
-        r"""
-        **Description:**
-        Reconstruct the full moduli array by prepending the solved conifold modulus
-        :math:`z_{\text{cf}}` to the bulk (light) moduli.
-
-        Args:
-            z_light (Array): Bulk moduli values (excluding the conifold modulus).
-            tau (complex): Axio-dilaton value.
-            fluxes (Array): Full flux vector.
-
-        Returns:
-            Array: Full moduli array of length ``h12``, with :math:`z_{\text{cf}}` at index 0.
-        """
-        z_heavy = self.solve_heavy(z_light, tau, fluxes, **kwargs)
-        return jnp.append(z_heavy, z_light)
 
     def _real_light_to_full(
         self,
         x_light: Array,
         fluxes: Array,
-        mode: str | None = None,
+        mode: str = "manual",
         conj: bool = False,
+        apply_correction: bool = False,
     ) -> Array:
         r"""
         **Description:**
-        Convert real light-field coordinates to the full real array by
-        solving for :math:`z_{\text{cf}}` and prepending it.
+        Convert real light-field coordinates to the full real array by solving
+        for :math:`z_{\text{cf}}` and prepending it.  Delegates to
+        :func:`jaxvacua.conifold.zcf_solver.zcf_handling`, which expects ``x_light``
+        to already be the bulk-only real vector (length ``2 * h12``, no
+        conifold direction).
 
         Args:
             x_light (Array): Real coordinates for bulk moduli + tau
                 (length ``2 * n_light + 2``).
             fluxes (Array): Full flux vector.
-            mode (str, optional): Solving mode for ``solve_heavy``.
-            conj (bool, optional): Conjugate conventions.
+            mode (str, optional): Solving mode forwarded to ``zcf_handling``.
+                Defaults to ``"manual"``.
+            conj (bool, optional): Conjugate conventions, forwarded to
+                ``zcf_handling``.
+            apply_correction (bool, optional): If ``True``, include the
+                Kähler-covariant correction in the z_cf solve.
 
         Returns:
             Array: Full real coordinate array.
         """
-        # Extract tau from x_light (last two entries)
-        x_out = jnp.append(jnp.ones(2), x_light)
-        z, _, tau, _ = self.model._convert_real_to_complex(x_out)
-        z_light = z[1:]
-
-        zcf = self.solve_heavy(z_light, tau, fluxes, conj=conj, mode=mode)
-        xcz = jnp.array([zcf[0].real, zcf[0].imag])
-        return jnp.append(xcz, x_light)
+        return self.model.zcf_handling(
+            x_light, fluxes,
+            mode=mode, apply_correction=apply_correction, conj=conj,
+        )

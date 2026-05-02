@@ -20,6 +20,9 @@ from functools import partial, lru_cache
 import pickle
 import gzip
 
+# Exact-integer lattice algebra (used by ``orthogonal_lattice``)
+from flint import fmpz_mat
+
 # For progress bar
 import threading
 try:
@@ -653,6 +656,316 @@ def jit_with_dynamic_static_args(func):
     
     return wrapped_func
 
+
+
+# ------------------------------------------------------------------------------
+# Lattice / number-theory helpers (general-purpose; relocated from the old
+# ``conifold_utils.py`` during the Phase 2 conifold-subpackage split).
+#
+# These two functions don't depend on any conifold-specific state and are also
+# used by ``private/promotion/promotion.py`` and elsewhere, so they belong
+# alongside the other general-purpose helpers.  Conifold-specific lattice
+# wrappers (``get_basis_change``, ``getAMatrix``, ``get_projection``) live in
+# ``jaxvacua/conifold/conifold_utils.py``.
+# ------------------------------------------------------------------------------
+
+def extended_euclidean(w):
+    r"""
+    **Description:**
+    Computes Bézout's identity and a unimodular integer basis transformation
+    for an integer array :math:`w`.
+
+    .. admonition:: Details
+        :class: dropdown
+
+        Given an integer array :math:`w = (w_1,\ldots,w_n)`, the function
+        returns integers :math:`b_i` (Bézout coefficients) satisfying
+
+        .. math::
+            \sum_{i=1}^{n} b_i \, w_i = \gcd(w_1,\ldots,w_n) \,,
+
+        together with a unimodular integer matrix
+        :math:`\Lambda \in \mathrm{GL}(n,\mathbb{Z})` such that
+
+        .. math::
+            \Lambda \, w = \bigl(\gcd(w_1,\ldots,w_n),\; 0,\;\ldots,\; 0\bigr)^T \,.
+
+        The algorithm iteratively reduces pairs of entries via the Euclidean
+        algorithm, tracking the accumulated integer row operations in
+        :math:`\Lambda`.  Edge cases (single non-zero entry, all-zero input)
+        are handled explicitly.
+
+    Args:
+        w (Array): Integer input array of length :math:`n`.
+
+    Returns:
+        tuple: ``(Bezout, GCD, Lambda)`` where
+
+        - ``Bezout`` (``np.ndarray``, shape ``(n,)``, dtype ``int``) —
+          Bézout coefficients satisfying
+          :math:`\sum_i \text{Bezout}_i \cdot w_i = \gcd(w)`.
+        - ``GCD`` (``int``) — Greatest common divisor of all non-zero
+          entries of :math:`w`.
+        - ``Lambda`` (``np.ndarray``, shape ``(n, n)``, dtype ``int``) —
+          Unimodular transformation satisfying
+          :math:`\Lambda w = (\gcd(w), 0,\ldots,0)^T`.
+
+    See also: :func:`orthogonal_lattice`, and the conifold-specific
+    :func:`jaxvacua.conifold.conifold_utils.get_basis_change`.
+    """
+
+    # Ensure input is a NumPy array
+    w = np.asarray(w)
+
+    # Identify non-zero and zero entries
+    nonvan_flag = (w != 0)   # Boolean mask for non-zero entries
+    van_flag = (w == 0)      # Boolean mask for zero entries
+
+    # Get indices of non-zero and zero entries
+    nonvan_pos = np.where(nonvan_flag)[0]
+    van_pos = np.where(van_flag)[0]
+
+    # Initialize Bézout coefficients (same size as input)
+    Bezout = np.zeros(len(w), dtype=int)
+
+    # -----------------------------
+    # Special case: only one non-zero entry
+    # -----------------------------
+    if sum(nonvan_flag) == 1:
+        # The gcd is just that entry
+        GCD = w[nonvan_flag][0]
+
+        # Bézout coefficient is 1 for that entry
+        Bezout[nonvan_flag] = 1
+
+        # Construct transformation matrix
+        Lambda_final = np.identity(len(w), dtype=int)
+
+        # Swap first row with the non-zero position
+        Lambda_final[0][0] = 0
+        Lambda_final[nonvan_pos[0]][nonvan_pos[0]] = 0
+        Lambda_final[0][nonvan_pos[0]] = 1
+        Lambda_final[nonvan_pos[0]][0] = 1
+
+    else:
+        # -----------------------------
+        # General case: multiple non-zero entries
+        # -----------------------------
+
+        # Extract non-zero entries
+        v = w[nonvan_flag]
+
+        # Work with absolute values for Euclidean algorithm
+        acoeff = np.abs(v)
+
+        # Sort entries in descending order (largest first)
+        reordering = np.flip(np.argsort(acoeff))
+        acoeffsorted = acoeff[reordering]
+
+        # Initialize Lambda as permutation matrix corresponding to sorting
+        Lambda = np.array([
+            np.eye(1, len(reordering), i, dtype=int)[0]
+            for i in reordering
+        ])
+
+        # Track how many dimensions have been reduced (zeros introduced)
+        dim_red = 0
+
+        # -----------------------------
+        # Iterative Euclidean reduction
+        # -----------------------------
+        while True:
+            # Divide all but last element by smallest element
+            divs = acoeffsorted[:-1] / acoeffsorted[-1]
+
+            # Integer quotients
+            qs = divs.astype(int)
+
+            # Remainders (careful rounding for integer stability)
+            rs = np.rint(((divs - qs) * acoeffsorted[-1])).astype(int) \
+                 + np.arange(len(divs)) * 1e-10
+
+            # Sort remainders in descending order
+            rssorted = np.flip(np.sort(rs))
+
+            # Build permutation matrix mapping old remainders → sorted ones
+            perm = np.array([i == rs for i in rssorted], dtype=int)
+
+            # Update coefficients: smallest becomes first, followed by remainders
+            acoeffsorted = np.rint(
+                np.concatenate(([acoeffsorted[-1]], rssorted))
+            ).astype(int)
+
+            # Build next transformation block
+            LambdaNext0 = np.block([
+                [qs, np.transpose([[1]])],
+                [perm, np.transpose([np.zeros(len(perm))])]
+            ]).astype(int)
+
+            # Expand transformation to include previously eliminated dimensions
+            LambdaNext = np.block([
+                [LambdaNext0, np.zeros([len(LambdaNext0), dim_red])],
+                [np.zeros([dim_red, len(LambdaNext0)]), np.identity(dim_red)]
+            ])
+
+            # Update accumulated transformation
+            Lambda = LambdaNext @ Lambda
+
+            # Identify non-zero and zero positions
+            posnonvan = np.where(acoeffsorted > 0)[0]
+            posvan = np.where(acoeffsorted == 0)[0]
+
+            # Remove zeros (dimension reduction)
+            acoeffsorted = acoeffsorted[posnonvan]
+            dim_red = dim_red + len(posvan)
+
+            # Stop when only one value remains (the gcd)
+            if len(acoeffsorted) == 1:
+                break
+
+        # -----------------------------
+        # Recover Bézout coefficients
+        # -----------------------------
+
+        # First row of inverse transformation gives Bézout coefficients
+        Bezout0 = (
+            np.rint(np.transpose(np.linalg.inv(Lambda))[0]) * np.sign(v)
+        ).astype(int)
+
+        # Full inverse transformation (with signs restored)
+        Lambda0 = (
+            np.rint(np.transpose(np.linalg.inv(Lambda))) * np.sign(v)
+        ).astype(int)
+
+        # Embed into full dimension (including zeros)
+        Lambda_tilde = np.block([
+            [np.zeros([len(Lambda0), len(w) - len(Lambda0)], dtype=int), Lambda0],
+            [np.identity(len(w) - len(Lambda0), dtype=int),
+             np.zeros([len(w) - len(Lambda0), len(Lambda0)], dtype=int)]
+        ])
+
+        # -----------------------------
+        # Reassemble full transformation
+        # -----------------------------
+        Lambda_final = np.identity(len(w), dtype=int)
+
+        # Fill rows corresponding to non-zero entries
+        Lambda_final[nonvan_pos] = Lambda_tilde.T[
+            len(w) - len(Lambda0):len(Lambda_tilde)
+        ]
+
+        # Fill rows corresponding to zero entries
+        Lambda_final[van_pos] = Lambda_tilde.T[
+            0:len(w) - len(Lambda0)
+        ]
+
+        # Transpose to get final form
+        Lambda_final = Lambda_final.T
+
+        # Compute gcd from Bézout identity
+        GCD = np.rint(sum(Bezout0 * v)).astype(int)
+
+        # Place Bézout coefficients back into original positions
+        Bezout[nonvan_flag] = Bezout0
+
+    return (Bezout, GCD, Lambda_final)
+
+
+def orthogonal_lattice(gens_in):
+    r"""
+    **Description:**
+    Returns generators of the integer lattice orthogonal to the lattice
+    spanned by ``gens_in``.
+
+    .. admonition:: Details
+        :class: dropdown
+
+        Given :math:`d` generators :math:`g_1,\ldots,g_d \in \mathbb{Z}^n`
+        with :math:`d < n`, the function computes generators of the
+        *orthogonal complement lattice*
+
+        .. math::
+            L^\perp = \bigl\{ v \in \mathbb{Z}^n \;:\;
+                v \cdot g_i = 0 \;\;\forall\, i=1,\ldots,d \bigr\} \,,
+
+        which has rank :math:`n - d`.
+
+        The algorithm constructs the augmented matrix
+
+        .. math::
+            B = \begin{pmatrix} c\,G \\ I_n \end{pmatrix}
+            \in \mathbb{Z}^{(d+n)\times n} \,,
+
+        where :math:`G` is the :math:`d\times n` generator matrix and
+        :math:`c` is an integer scale chosen so that LLL reduction on
+        :math:`B^T` separates the null-space rows.  The last :math:`n-d`
+        rows of the LLL-reduced matrix (extracted from the :math:`I_n`
+        block) are the desired generators.  The LLL computation uses
+        ``flint.fmpz_mat`` for exact integer arithmetic.
+
+    Args:
+        gens_in (list): List of :math:`d` integer generator vectors of
+            length :math:`n`, with :math:`d < n`.
+
+    Returns:
+        list: List of :math:`n-d` integer generators of :math:`L^\perp`,
+        each of length :math:`n`.
+
+    See also: :func:`extended_euclidean`, and the conifold-specific
+    :func:`jaxvacua.conifold.conifold_utils.get_basis_change`.
+    """
+
+    # Convert input list of generators into a NumPy array
+    gens = np.array(gens_in)
+
+    # d = number of input generators, n = ambient dimension
+    d = len(gens)
+    n = len(gens[0])
+
+    # -----------------------------
+    # Compute scaling factor c
+    # -----------------------------
+    # The exponent comes from bounds ensuring LLL separates
+    # the orthogonal complement correctly
+    exponent = (n - 1) / 2 + (n - d) * (n - d - 1) / 4
+
+    # c scales the input generators so that LLL reduction
+    # prioritizes orthogonality constraints over identity rows
+    c = int(np.ceil(
+        (2 ** exponent) *
+        np.prod([np.linalg.norm(g) for g in gens])
+    ))
+
+    # -----------------------------
+    # Build augmented matrix B^T
+    # -----------------------------
+    # Stack scaled generators on top of identity matrix:
+    #   B^T = [ c * G ]
+    #         [  I_n  ]
+    #
+    # Shape: (d + n) x n
+    b_T = np.concatenate((c * gens, np.identity(n, dtype=int)))
+
+    # Convert to FLINT integer matrix for exact LLL reduction
+    b_T_mat = fmpz_mat(b_T.T.tolist())
+
+    # -----------------------------
+    # Perform LLL reduction
+    # -----------------------------
+    # Apply LLL to B^T (transposed form expected by FLINT)
+    # Convert result back to NumPy array
+    #
+    # The first (n - d) rows correspond to short vectors,
+    # which encode the orthogonal complement
+    b_T_lll = [
+        [int(ii) for ii in row][-n:]   # Extract last n entries (original coordinates)
+        for row in np.array(b_T_mat.lll().tolist(), dtype=int)[:n - d]
+    ]
+
+    # -----------------------------
+    # Return orthogonal lattice generators
+    # -----------------------------
+    return b_T_lll
 
 
 def quit_function(fn_name):

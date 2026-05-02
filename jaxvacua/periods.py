@@ -70,8 +70,8 @@ class periods:
                 # Instaton data input
                 maximum_degree: int = 0,
                 grading_vector: Array | None = None,
-                use_gvs: bool = False,
-                prange: int = 500,
+                use_gvs: bool = True,
+                prange: int = 5,
                 
                 # Conifold data for coniLCS limits
                 ncf: int | None = None,
@@ -185,7 +185,7 @@ class periods:
         else:
             self.include_mirror_wsi = True
             
-        if limit in ["coniLCS_series","coniLCS_bulk"]:
+        if limit in ["coniLCS_series","coniLCS_bulk","coniLCS"]:
             conifold_basis = True
         
         # Set lcs_tree from input or construct it from provided data or CYTools interface. The lcs_tree object holds all the relevant data of the CY model and is used as input for the period calculations. If no lcs_tree_input is provided, we construct the lcs_tree object from the provided data or using the CYTools interface. If an lcs_tree_input is provided, we use it directly.
@@ -249,13 +249,20 @@ class periods:
                             raise ValueError(f"`model_data` needs to be of type `dict`, but got {type(model_data)}!")
                         
                         model_data["maximum_degree"]=maximum_degree
+                        model_data["limit"]=limit
+                        model_data["conifold_basis"]=conifold_basis
                         
                         self._lcs_tree = lcs_tree.from_dict(model_data)
                     else:
                         if not os.path.isfile(model_file):
                             raise ValueError(f"Could not find file for path {model_file}!")
                         
-                        self._lcs_tree = lcs_tree.from_file(model_file,maximum_degree=maximum_degree)
+                        self._lcs_tree = lcs_tree.from_file(model_file,
+                                                            maximum_degree=maximum_degree,
+                                                            limit=limit,
+                                                            conifold_basis=conifold_basis)
+                        
+                
                         
             else:
                 self._lcs_tree = lcs_tree_input.__copy__()
@@ -292,40 +299,9 @@ class periods:
         if (limit in NON_LCS_LIMITS) or (limit not in LCS_FAMILY_LIMITS) or (self._lcs_tree is None):
             self._setup_custom_input(period_input, prepotential_input)
             
-            
-        if "coniLCS" in self.limit:
-            # Number of terms in the conifold expansion to be included. Only relevant for the "coniLCS_series" limit.
-            # Setting default to 2 in order to get linear expansion at the level of the superpotential.
-            self.nmax = kwargs.get("nmax", 2) 
-            
-            gv_charges = self._lcs_tree.gv_charges
-            gv_invariants = self._lcs_tree.gv_invariants
-            
-            if conifold_basis:
-                coninop0 = self._lcs_tree.conifold.conifold_curve0
-            else:
-                coninop0 = self._lcs_tree.conifold.conifold_curve
-                if coninop0 is None:
-                    raise ValueError("Conifold curve data not found in lcs_tree! Please check conifold curve input and basis choice!")
-                
-            # Find index of conifold curve in GV charge data 
-            flag = jnp.any(gv_charges!=coninop0,axis=1)
-            # Test if conifold curve is found in GV charge data
-            self.coni_index = jnp.where(flag==False)[0]
-            if len(self.coni_index)==0:
-                raise ValueError("Could not find conifold curve in GV charge data! Please check conifold curve input and basis choice!")
-            
-            if len(self.coni_index)>1:
-                raise ValueError("Found multiple matches for conifold curve in GV charge data! Please check conifold curve input and basis choice!")
-            
-            self.coni_index = int(self.coni_index[0])
-            
-            # Remove conifold curve from gvs!
-            if self.limit in ["coniLCS_series","coniLCS_bulk"]:
-                gv_charges = gv_charges[flag]
-                gv_invariants = gv_invariants[flag]
-                self._lcs_tree.gv_charges = gv_charges
-                self._lcs_tree.gv_invariants = gv_invariants
+        # Number of terms in the conifold expansion to be included. Only relevant for the "coniLCS_series" limit.
+        # Setting default to 2 in order to get linear expansion at the level of the superpotential.
+        self.nmax = kwargs.get("nmax", 2)
                 
 
         # DONE
@@ -1537,17 +1513,14 @@ periods.F_coniLCS_bulk_per = F_coniLCS_bulk_per
 periods.delete_coni_index = delete_coni_index
 """
 
-from . import conifold_utils as _cu
+# Conifold methods are attached via the ``_ConifoldGated`` descriptor so they
+# are only surfaced when ``self.limit ∈ {coniLCS, coniLCS_series, coniLCS_bulk}``.
+# The list of method names lives in :mod:`jaxvacua.conifold` (single source of
+# truth — append there to add a new attached method, no edit needed here).
+from jaxvacua import conifold as _cf
 
-_CONIFOLD_PERIODS_METHODS = (
-    "F_coniLCS_series_per", "F_coniLCS_exp_per", "F_coni_per",
-    "F_inst_per_coni", "F_coniLCS_poly_split_per",
-    "dF_coniLCS_poly_per", "ddF_coniLCS_poly_per",
-    "dddF_coniLCS_poly_per", "ddddF_coniLCS_poly_per",
-    "F_coniLCS_bulk_per", "delete_coni_index",
-)
-for _name in _CONIFOLD_PERIODS_METHODS:
-    setattr(periods, _name, _cu._ConifoldGated(getattr(_cu, _name)))
+for _name in _cf._PERIODS_METHODS:
+    setattr(periods, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, periods)
 

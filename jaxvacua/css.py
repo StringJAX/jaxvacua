@@ -57,12 +57,13 @@ class css:
                  basis_change: Array | None = None,
                  ncf: int | None = None,
                  conifold_curve: Array | None = None,
+                 conifold_basis: bool | None = True,
                  grading_vector: Array | None = None, 
                  period_input: Callable | None = None, 
                  prepotential_input: Callable | None = None,
                  gauge_choice: complex = 1.+0.*1j, 
-                 prange: int = 500, 
-                 use_gvs: bool = False,
+                 prange: int = 5, 
+                 use_gvs: bool = True,
                  save_file: bool = False, 
                  **kwargs) -> None:
         r"""
@@ -112,6 +113,7 @@ class css:
                                use_cytools = use_cytools,
                                basis_change = basis_change,
                                conifold_curve=conifold_curve,
+                               conifold_basis=conifold_basis,
                                ncf=ncf,
                                grading_vector = grading_vector, 
                                period_input = period_input, 
@@ -2504,14 +2506,15 @@ css.dF_coniLCS_exp = dF_coniLCS_exp
 """
 
 
-from . import conifold_utils as _cu
+# Conifold methods are attached via the ``_ConifoldGated`` descriptor so they
+# are only surfaced when ``self.periods.limit ∈ {coniLCS, coniLCS_series,
+# coniLCS_bulk}``.  The list of method names lives in :mod:`jaxvacua.conifold`
+# (single source of truth — append there to add a new attached method, no
+# edit needed here).
+from jaxvacua import conifold as _cf
 
-_CONIFOLD_CSS_METHODS = (
-    "F_coniLCS_bulk", "F_coniLCS_series",
-    "dK_cf_bulk", "F_coniLCS_exp", "dF_coniLCS_exp",
-)
-for _name in _CONIFOLD_CSS_METHODS:
-    setattr(css, _name, _cu._ConifoldGated(getattr(_cu, _name)))
+for _name in _cf._CSS_METHODS:
+    setattr(css, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, css)

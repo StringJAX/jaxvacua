@@ -55,13 +55,14 @@ class FluxEFT(css):
         basis_change: Array | None = None,
         ncf: int | None = None,
         conifold_curve: Any | None = None,
+        conifold_basis: bool | None = True,
         grading_vector: Array | None = None,
         period_input: Callable | None = None,
         prepotential_input: Callable | None = None,
         Q: int | None = None,
         gauge_choice: complex = 1.0 + 0.0j,
-        prange: int = 500,
-        use_gvs: bool = False,
+        prange: int = 5,
+        use_gvs: bool = True,
         save_file: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -110,6 +111,7 @@ class FluxEFT(css):
             basis_change=basis_change,
             ncf=ncf,
             conifold_curve=conifold_curve,
+            conifold_basis=conifold_basis,
             grading_vector=grading_vector,
             period_input=period_input,
             prepotential_input=prepotential_input,
@@ -710,6 +712,8 @@ class FluxEFT(css):
 
         if normalise:
             W0 = jnp.sqrt(2./jnp.pi)*W0
+            
+        W0 += self.lcs_tree.Wnp
 
         return W0
 
@@ -4175,18 +4179,15 @@ FluxEFT.pfv_to_moduli = _pfv_to_moduli_func
 FluxEFT.flux_to_pfv = _flux_to_pfv_func
 
 
-from types import MethodType
-from . import conifold_utils as _cu
+# Conifold methods are attached via the ``_ConifoldGated`` descriptor so they
+# are only surfaced when ``self.periods.limit ∈ {coniLCS, coniLCS_series,
+# coniLCS_bulk}``.  The list of method names lives in :mod:`jaxvacua.conifold`
+# (single source of truth — append there to add a new attached method, no
+# edit needed here).
+from jaxvacua import conifold as _cf
 
-_CONIFOLD_METHODS = (
-    "W1_tilde", "compute_zcf", "zcf_handling",
-    "DWbulk_x", "dDWbulk_x", "DWbulk", "dDWbulk",
-    "W_bulk", "conifold_fluxes",
-    "compute_zcf_correction", "compute_zcf_explicit", "compute_zcf_compact",
-)
-
-for _name in _CONIFOLD_METHODS:
-    setattr(FluxEFT, _name, _cu._ConifoldGated(getattr(_cu, _name)))
+for _name in _cf._FLUXEFT_METHODS:
+    setattr(FluxEFT, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 

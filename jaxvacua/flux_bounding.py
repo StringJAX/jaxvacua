@@ -5734,7 +5734,18 @@ bounded_fluxes.process_chunk_from_disk(
                 fluxes[i] = np.asarray(fluxes_fd, dtype=np.int32)
                 moduli[i] = np.asarray(moduli_fd)
                 taus[i] = complex(tau_fd)
-            key = np.round(fluxes[i]).astype(np.int32).tobytes()
+            # Strip any zero-magnitude imaginary part (JAX → numpy
+            # roundoff on the upstream solver) before casting to int32.
+            fl_i = np.asarray(fluxes[i])
+            if np.iscomplexobj(fl_i):
+                max_im = float(np.max(np.abs(fl_i.imag)))
+                assert max_im < 1e-9, (
+                    f"flux[{i}] has non-negligible imaginary part "
+                    f"(max |imag|={max_im:.3e}) — should be a real "
+                    f"integer vector."
+                )
+                fl_i = fl_i.real
+            key = np.round(fl_i).astype(np.int32).tobytes()
             if key not in seen:
                 seen.add(key)
                 keep.append(i)
@@ -5825,8 +5836,22 @@ bounded_fluxes.process_chunk_from_disk(
                 )
             try:
                 import pandas as pd
+                # Same defensive cast as in the dedup loop above:
+                # tolerate trace imaginary parts (JAX roundoff) but
+                # assert they're below tolerance.
+                def _as_real_int_list(fl):
+                    fl = np.asarray(fl)
+                    if np.iscomplexobj(fl):
+                        max_im = float(np.max(np.abs(fl.imag)))
+                        assert max_im < 1e-9, (
+                            f"flux row has non-negligible imaginary part "
+                            f"(max |imag|={max_im:.3e})"
+                        )
+                        fl = fl.real
+                    return list(int(x) for x in fl)
+
                 df_rows = [{
-                    "flux":      list(int(x) for x in fluxes[i]),
+                    "flux":      _as_real_int_list(fluxes[i]),
                     "moduli_re": list(float(x) for x in np.asarray(moduli[i]).real),
                     "moduli_im": list(float(x) for x in np.asarray(moduli[i]).imag),
                     "tau_re":    float(np.asarray(taus[i]).real),

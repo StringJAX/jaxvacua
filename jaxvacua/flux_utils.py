@@ -62,8 +62,13 @@ def pfv_to_flux(
     b = self.lcs_tree.b_vector
 
     if "coniLCS" in self.periods.limit:
-        tmp = jnp.zeros(b.shape[0])
-        tmp = tmp.at[0].set(1.)
+        #tmp = jnp.zeros(b.shape[0])
+        #tmp = tmp.at[0].set(1.)
+        if self.lcs_tree.conifold_basis:
+            tmp = self.lcs_tree.conifold.conifold_curve0
+        else:
+            tmp = self.lcs_tree.conifold.conifold_curve
+            
         b = b+tmp*self.lcs_tree.conifold.ncf/24
 
     f0 = M@b

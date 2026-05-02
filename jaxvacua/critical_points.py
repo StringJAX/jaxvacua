@@ -528,13 +528,16 @@ class CriticalPointFinder:
             moduli_pts (Array): Starting moduli, shape ``(N, h12)``.
             tau_pts (Array): Starting axio-dilatons, shape ``(N,)``.
             isd_mode (str): One of ``"F"``, ``"H"``, ``"ISD+"``, ``"ISD-"``.
-            rng (np.random.Generator): Random number generator.
+            rng (np.random.Generator): Random number generator. If ``None``,
+                a deterministic ``np.random.default_rng(0)`` is used so that
+                tests and downstream consumers see reproducible flux draws;
+                pass an explicit ``rng`` to vary the seed.
 
         Returns:
             Tuple of (x0_array, flux_array, indices) for valid candidates.
         """
         if rng is None:
-            rng = np.random.default_rng()
+            rng = np.random.default_rng(0)
 
         n_fl = self.n_fluxes
         dim_H3 = self.dimension_H3

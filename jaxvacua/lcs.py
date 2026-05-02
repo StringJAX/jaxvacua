@@ -26,7 +26,7 @@ from jax.tree_util import register_pytree_node
 import jax.numpy as jnp
 from jax.scipy.special import zeta
 from jax import Array
-from .conifold_utils import getAMatrix,get_basis_change,Conifold
+from .conifold import getAMatrix, get_basis_change, Conifold
 from .cytools_interface import compute_intersection_numbers_coo, cytools_model_data_init
 from .util import load_zipped_pickle
 from .utils_jaxvacua import flatten_func,unflatten_func_class
@@ -97,7 +97,7 @@ class lcs_tree(object):
                  conifolds: Tuple[Conifold, ...] | None = None,
                  active_conifold_idx: int | None = None,
                  conifold_curve: Array | None = None,
-                 ncf: int | None = None,
+                 ncf: int | None = 2,
                  conifold_basis: bool | None = True,
                  conifold_limits: Array | None = None,
                  n_conifolds: int | None = None,
@@ -112,6 +112,9 @@ class lcs_tree(object):
                  # KS data
                  polytope_points: Array | None = None,
                  heights: Array | None = None,
+                 
+                 # Non-pert. superpotential
+                 Wnp: complex | float = 0.+1j*0.,
                  
                  # Extra data
                  extra_data: Dict | None = None,
@@ -171,6 +174,7 @@ class lcs_tree(object):
         self.model_type = model_type
         self.extra_data = extra_data
         self.name = name
+        self.Wnp = Wnp
         
         if model_type=="KS":
             self.polytope_points=polytope_points
@@ -266,40 +270,48 @@ class lcs_tree(object):
         
         self.rays_mori_cone = mori_rays
         
-        
-        
         # ---------- Conifold container ----------
         # Resolve self.conifolds, self.conifold, self._active_conifold_idx by
         # priority order: conifolds=, conifold=, legacy conifold_limits=,
         # else None (LCS) or raise (coniLCS).
-        if conifolds is not None:
-            self.conifolds = tuple(conifolds)
-            idx = active_conifold_idx if active_conifold_idx is not None else 0
-            self._active_conifold_idx = int(idx)
-            self.conifold = self.conifolds[self._active_conifold_idx]
-        elif conifold is not None:
-            self.conifolds = None
-            self._active_conifold_idx = None
-            self.conifold = conifold
-        elif conifold_curve is not None and ncf is not None:
-            # Legacy path 2: single (conifold_curve, ncf) pair (lcs_database.py
-            # and other callers that don't materialise a full conifold list).
-            self.conifolds = None
-            self._active_conifold_idx = None
+        self.conifolds = None
+        self._active_conifold_idx = None
+        if conifold_curve is not None:
             self.conifold = Conifold.from_data(
                 ncf=ncf,
                 conifold_curve=jnp.asarray(conifold_curve),
             )
-        elif "coniLCS" in (self.limit or ""):
-            raise ValueError(
-                "coniLCS limit requires `conifold=`, `conifolds=`, "
-                "`conifold_limits=` or (`conifold_curve=` + `ncf=`)."
-            )
+        elif conifold is not None:
+            self.conifold = conifold
+        elif conifolds is not None and active_conifold_idx is not None:
+            if active_conifold_idx < 0 or active_conifold_idx >= len(conifolds):
+                raise ValueError(f"active_conifold_idx={active_conifold_idx} is out of bounds for conifolds with length {len(conifolds)}! Please provide a valid index for the active conifold!")
+            self.conifold = conifolds[active_conifold_idx]
+            self._active_conifold_idx = active_conifold_idx
+        else:
+            self.conifold = None
+            
+        if self.conifold is not None:
+            if "coniLCS" not in self.limit:
+                raise ValueError("Input for conifold curve provided but limit is not coniLCS! Please make sure that the input is consistent with the limit!")
+            
+        if conifolds is not None:
+            self.conifolds = tuple(conifolds)
+            idx = 0
+            if self.conifold is not None and active_conifold_idx is None:
+                for c in self.conifolds:
+                    if c.conifold_curve is not None:
+                        if self.conifold is not None and not jnp.allclose(c.conifold_curve, self.conifold.conifold_curve):
+                            break
+                        idx += 1
+                        
+                self._active_conifold_idx = int(idx)
+            else:
+                self._active_conifold_idx = None
         else:
             self.conifolds = None
             self._active_conifold_idx = None
-            self.conifold = None
-
+        
         self.conifold_basis = conifold_basis
 
         # coniLCS-specific bookkeeping on the active conifold.
@@ -329,18 +341,29 @@ class lcs_tree(object):
                     and self.conifold.conifold_curve is not None
                     and bc_curr is not None):
                 self.conifold.conifold_curve0 = self.conifold.conifold_curve @ bc_curr.T
-                
+            
+            """
+            if self.conifold_basis:
+                self.conifold.conifold_curve0 = jnp.identity(self.h12)[0]
+            else:
+                self.conifold.conifold_curve0 = self.conifold.conifold_curve
+            """
 
             # Validate: conifold_curve @ basis_change.T must equal (1,0,...,0).
             if (self.conifold.conifold_curve is not None and bc_curr is not None):
                 coninop0 = self.conifold.conifold_curve @ bc_curr.T
                 expected = jnp.identity(self.h12)[0]
                 if not jnp.allclose(coninop0, expected):
-                    raise ValueError(
-                        f"Input of basis transformation and conifold curve seems "
-                        f"incompatible! After applying the basis transformation, "
-                        f"expect (1,0,0,...,0), but got {coninop0}!"
-                    )
+                    bc_curr = -bc_curr
+                    self.basis_change = bc_curr
+                    coninop0 = self.conifold.conifold_curve @ bc_curr.T
+                    if not jnp.allclose(coninop0, expected):
+                    
+                        raise ValueError(
+                            f"Input of basis transformation and conifold curve seems "
+                            f"incompatible! After applying the basis transformation, "
+                            f"expect (1,0,0,...,0), but got {coninop0}!"
+                        )
         
         # ---------- Basis change ----------
         
@@ -362,8 +385,58 @@ class lcs_tree(object):
         
         self._prepare_prepot()
         
+        # Remove conifold curve when required for limit from
+        # set of charges
+        # Compute the conifold index
+        if "coniLCS" in self.limit and maximum_degree>0:
+            
+            self._update_conifold_curve_and_index()
+            
         # Store additional keyword arguments
         self.__dict__.update(kwargs)
+        
+    def _update_conifold_curve_and_index(self):
+        r"""
+        **Description:**
+        Updates the conifold curve and its index in the GV charge data, and removes the conifold curve from the GV charges and invariants if required by the limit.
+        
+        Args:
+            None
+            
+        Returns:
+            None
+        
+        """
+        
+        gv_charges = self.gv_charges
+        gv_invariants = self.gv_invariants
+        
+        if self.conifold_basis:
+            coninop0 = self.conifold.conifold_curve0
+        else:
+            coninop0 = self.conifold.conifold_curve
+            if coninop0 is None:
+                raise ValueError("Conifold curve data not found in lcs_tree! Please check conifold curve input and basis choice!")
+            
+        # Find index of conifold curve in GV charge data 
+        flag = jnp.any(gv_charges!=coninop0,axis=1)
+        # Test if conifold curve is found in GV charge data
+        self.coni_index = jnp.where(flag==False)[0]
+        if len(self.coni_index)==0:
+            raise ValueError("Could not find conifold curve in GV charge data! Please check conifold curve input and basis choice!")
+        
+        if len(self.coni_index)>1:
+            raise ValueError("Found multiple matches for conifold curve in GV charge data! Please check conifold curve input and basis choice!")
+        
+        self.coni_index = int(self.coni_index[0])
+        
+        # Remove conifold curve from gvs!
+        if self.limit in ["coniLCS_series","coniLCS_bulk"]:
+            gv_charges = gv_charges[flag]
+            gv_invariants = gv_invariants[flag]
+            self.gv_charges = gv_charges
+            self.gv_invariants = gv_invariants
+            self.gv_degrees = self.gv_degrees[flag]
         
     def _perform_basis_change(self):
         r"""
@@ -755,9 +828,6 @@ class lcs_tree(object):
         md["limit"] = limit
             
         return cls.from_dict(md)
-        
-        
-    
 
     def update(self,**kwargs):
         r"""
@@ -771,8 +841,23 @@ class lcs_tree(object):
         Returns:
             None
         """
+        
+        limit0 = self.limit
 
         self.__dict__.update(kwargs)
+        
+        if "gv_charges" in kwargs or "limit" in kwargs:
+            # Remove conifold curve when required for limit from
+            # set of charges
+            # Compute the conifold index
+            if "coniLCS" in self.limit and len(self.gv_charges)>0:
+                
+                if self.limit != limit0:
+                    if "bulk" in limit0 or "series" in limit0:
+                        warnings.warn(f"Changing limit from {limit0} to {self.limit} may lead to inconsistencies in the GV charge data! Please make sure that the input is consistent with the basis transformation and the limit!")
+                
+                self._update_conifold_curve_and_index()
+                
     
     def __copy__(self):
         r"""

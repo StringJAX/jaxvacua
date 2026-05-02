@@ -39,7 +39,7 @@ except ImportError:
 # JAXVacua custom imports
 from .util import *
 from .utils_jaxvacua import save_model_data
-from .conifold_utils import find_conifolds
+from .conifold import find_conifolds
 
 # Some global variables
 home_dir=os.path.dirname(os.path.realpath(__file__))
