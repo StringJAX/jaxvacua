@@ -11,7 +11,7 @@ VacuaWriter
 
 Standalone class for writing, querying, retracting, and pushing flux-vacuum
 solutions to the vault and to the community HuggingFace repository.  Wraps a
-:class:`jaxvacua.cy_io.CYDatabase` (or any subclass) instance and forwards
+:class:`stringjax.cy_io.CYDatabase` (or any subclass) instance and forwards
 attribute lookups to it via ``__getattr__``.
 
 Users can either call the methods directly on an explicit ``VacuaWriter(db)``

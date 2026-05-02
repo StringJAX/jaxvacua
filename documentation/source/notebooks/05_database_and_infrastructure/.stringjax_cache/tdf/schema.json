@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "released": "2026-04-30",
+  "description": "Initial versioned schema. basis_change column in conifolds/ shards; n_conifolds and D3_tadpole in catalog.parquet; conifold_catalog.parquet introduced."
+}

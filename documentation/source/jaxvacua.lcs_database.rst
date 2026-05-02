@@ -9,7 +9,7 @@ jaxvacua.lcs_database
 Database class
 -----------------------------------
 
-Extends :class:`jaxvacua.cy_io.CYDatabase` with model construction
+Extends :class:`stringjax.cy_io.CYDatabase` with model construction
 (``lcs_tree`` / ``FluxVacuaFinder``) and vacua-writing delegation.  This is
 the canonical user-facing database class.
 

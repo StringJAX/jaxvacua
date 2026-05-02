@@ -80,7 +80,7 @@ The database uses a **lazy download** strategy:
 3. **Loading** (`db.load(...)`) — downloads only the specific shard(s) containing the requested model.
 4. **Batch loading** (`db.load_batch(h11=2)`) — downloads shards as needed.
 
-Downloaded files are cached in `.jaxvacua_cache/` (in the current working directory) by default. This keeps data visible and project-local. The location can be changed globally via `jvc.set_data_dir()` or the `JAXVACUA_DATA_DIR` environment variable, or per-instance via the `cache_dir` constructor argument.
+Downloaded files are cached in `.stringjax_cache/` (in the current working directory) by default. This keeps data visible and project-local. The location can be changed globally via `stringjax.set_data_dir()` or the `STRINGJAX_DATA_DIR` environment variable, or per-instance via the `cache_dir` constructor argument.
 
 Subsequent loads of models in the same shard are served from disk (or from an in-memory LRU cache for recently accessed shards). A one-time warning is issued if the data directory exceeds 500 MB.
 
@@ -131,8 +131,8 @@ For HPC clusters without internet access:
 
 | Variable | Default | Description |
 |---|---|---|
-| `JAXVACUA_DATA_DIR` | `{cwd}/.jaxvacua` | Override the data directory for all database operations |
-| `JAXVACUA_HF_REPO` | `aschachner/cy-database` | Override the HuggingFace repository ID |
+| `STRINGJAX_DATA_DIR` | `{cwd}/.jaxvacua` | Override the data directory for all database operations |
+| `STRINGJAX_HF_REPO` | `aschachner/cy-database` | Override the HuggingFace repository ID |
 
 ## Further reading
 

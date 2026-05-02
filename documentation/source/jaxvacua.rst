@@ -23,7 +23,6 @@ Subpackages
     jaxvacua.conifold_utils
     jaxvacua.hypergeometric_models
     jaxvacua.sampling
-    jaxvacua.cy_io
     jaxvacua.lcs_database
     jaxvacua.vacua_writer
     jaxvacua.util
