@@ -92,7 +92,6 @@ set_precision(_default_prec)
 # ──────────────────────────────────────────────────────────────────────────
 
 from .util import *
-from .utils_jaxvacua import *
 from .cytools_interface import *
 # Conifold subsystem: 2026-05-01 Phase 2 split moved the contents of the old
 # ``conifold_utils.py`` into the ``conifold/`` subpackage.  Importing it here

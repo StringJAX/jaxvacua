@@ -38,7 +38,7 @@ except ImportError:
     
 # JAXVacua custom imports
 from .util import *
-from .utils_jaxvacua import save_model_data
+from .util import save_model_data
 from .conifold import find_conifolds
 
 # Some global variables

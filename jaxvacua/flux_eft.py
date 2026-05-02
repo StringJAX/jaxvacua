@@ -30,7 +30,6 @@ from jax.tree_util import register_pytree_node
 # Enable 64 bit precision
 # JAXVacua custom imports
 from .util import *
-from .utils_jaxvacua import flatten_func, unflatten_func_class
 from .css import css
 
 class FluxEFT(css):

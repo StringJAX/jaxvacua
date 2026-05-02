@@ -34,7 +34,6 @@ from jaxpolylog import jax_polylog_vmap
 
 # JAXVacua custom imports
 from .util import *
-from .utils_jaxvacua import flatten_func, unflatten_func_class
 from .periods import periods
 
 

@@ -28,8 +28,7 @@ from jax.scipy.special import zeta
 from jax import Array
 from .conifold import getAMatrix, get_basis_change, Conifold
 from .cytools_interface import compute_intersection_numbers_coo, cytools_model_data_init
-from .util import load_zipped_pickle
-from .utils_jaxvacua import flatten_func,unflatten_func_class
+from .util import load_zipped_pickle,flatten_func,unflatten_func_class
 
 
 from itertools import permutations

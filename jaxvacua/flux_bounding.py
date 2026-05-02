@@ -5634,13 +5634,13 @@ bounded_fluxes.process_chunk_from_disk(
 
         1. ``database=<CYDatabase>``: write the merged results as a
            **session-tier** batch via
-           :meth:`jaxvacua.lcs_database.LCSDatabase.vacua_writer`.  The
+           :meth:`stringjax.lcs_database.LCSDatabase.vacua_writer`.  The
            results are queryable via :meth:`query_vacua` but not yet
            permanent.
         2. ``designate=True`` (requires ``database``, ``label``,
            ``committed_by``): additionally promote the merged results to
            the **permanent vault** via
-           :meth:`jaxvacua.lcs_database.LCSDatabase.designate_vacua`.  The
+           :meth:`stringjax.lcs_database.LCSDatabase.designate_vacua`.  The
            results are retrievable via :meth:`load_local_vacua`.
 
         Args:
