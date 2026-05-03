@@ -5,6 +5,26 @@ JAXVacua
 ===============
 
 
+Package architecture
+--------------------
+
+The package is organised as a layered pipeline. ``lcs_tree`` is the
+data interface; the linear chain ``periods → css → FluxEFT →
+FluxVacuaFinder`` adds physics one layer at a time; orthogonal tools
+(``sampling``, ``flux_bounding``, ``freezer``) plug into
+``FluxVacuaFinder``; helper modules (``cytools_interface``,
+``hypergeometric_models``, ``flux_utils``) feed the pipeline.
+
+.. raw:: html
+   :file: _static/figures/f2_architecture.html
+
+Solid arrows are required code dependencies; dashed arrows indicate
+"used by" tools that ``FluxVacuaFinder`` calls into rather than stages
+it produces. The orange callout marks ``lcs_tree`` as the data hub —
+every input on-ramp eventually populates it, and every model layer
+reads from it.
+
+
 Subpackages
 -------------
 
@@ -20,10 +40,8 @@ Subpackages
     jaxvacua.flux_bounding
     jaxvacua.flux_utils
     jaxvacua.freezer
-    jaxvacua.conifold_utils
+    jaxvacua.conifold
     jaxvacua.hypergeometric_models
     jaxvacua.sampling
-    jaxvacua.lcs_database
-    jaxvacua.vacua_writer
     jaxvacua.util
     jaxvacua.cytools_interface
