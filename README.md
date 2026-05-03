@@ -71,11 +71,11 @@ tree = jvc.lcs_tree.from_cytools(cy, maximum_degree=1)
 model = jvc.FluxEFT(lcs_tree=tree)
 ```
 
-**3. From the CY database (new).** The [`cy-database`](https://huggingface.co/datasets/aschachner/cy-database) HuggingFace dataset hosts precomputed topological data for millions of Calabi-Yau geometries. The `TDFDatabase` / `CICYDatabase` interface downloads only the catalog (~10 MB) upfront and pulls individual model shards on demand:
+**3. From the CY database (new).** The [`cy-database`](https://huggingface.co/datasets/aschachner/cy-database) HuggingFace dataset hosts precomputed topological data for millions of Calabi-Yau geometries. The database stack lives in the [`stringjax`](https://github.com/AndreasSchachner/stringjax) umbrella package: `TDFDatabase` / `CICYDatabase` for pure I/O, and `LCSDatabase` for ready-to-use `FluxVacuaFinder` instances. The interface downloads only the catalog (~10 MB) upfront and pulls individual model shards on demand:
 
 ```python
-from jaxvacua.database import TDFDatabase
-db = TDFDatabase()
+from stringjax.lcs_database import LCSDatabase
+db = LCSDatabase(dataset="tdf")
 df = db.query(h12=2, has_conifolds=True)             # catalog-only filter
 model = db.load_model(ks_id=int(df.iloc[0]["ks_id"]),
                       triang_id=int(df.iloc[0]["triang_id"]),
