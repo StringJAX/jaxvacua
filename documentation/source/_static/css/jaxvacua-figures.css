@@ -1,0 +1,276 @@
+/* =========================================================================
+   jaxvacua workflow / module-graph figures
+   -------------------------------------------------------------------------
+   Shared stylesheet for the HTML+SVG figures embedded via `raw` HTML in
+   the workflow page (`intro/index.md`) and the per-module API pages.
+   Ported from `private/userflow.html` (Andreas Schachner, March 2026).
+
+   All rules are scoped under `.jx-fig` so the styles do not bleed into
+   the surrounding Sphinx theme. Each individual figure on a page should
+   be wrapped in `<div class="jx-fig"> ... </div>`.
+   ========================================================================= */
+
+.jx-fig {
+  --b-dark:  #1B3A5C;
+  --b-mid:   #2B5F8E;
+  --b-fill:  #D6E8F5;
+  --b-fill2: #EAF3FB;
+  --b-bord:  #4A8ABF;
+  --b-inv:   #0F2942;
+  --g-dark:  #1A4D2E;
+  --g-mid:   #3A7D5A;
+  --g-fill:  #D4EDDA;
+  --g-bord:  #52A070;
+  --g-inv:   #0D3320;
+  --tx-dk:   #1a1a1a;
+  --tx-md:   #444;
+  --tx-lt:   #888;
+  --jx-radius: 7px;
+  --jx-shadow: 0 2px 7px rgba(0, 0, 0, .10);
+
+  position: relative;
+  margin: 1.5rem auto;
+  font-family: "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  color: var(--tx-dk);
+}
+
+/* ── Inner chart container ───────────────────────────────────── */
+.jx-fig .jx-chart {
+  position: relative;
+  width: 880px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* ── Arrow SVG overlay ──────────────────────────────────────── */
+.jx-fig .jx-asvg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  pointer-events: none;
+  z-index: 0;
+  overflow: visible;
+}
+
+/* ── Section dividers ───────────────────────────────────────── */
+.jx-fig .jx-step {
+  position: relative;
+  z-index: 1;
+}
+
+.jx-fig .jx-step-hdr {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  margin-top: 22px;
+}
+.jx-fig .jx-step-hdr span.lbl {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-right: 11px;
+}
+.jx-fig .jx-step-hdr span.rl { flex: 1; height: 1px; }
+.jx-fig .blue  .lbl { color: var(--b-mid); }
+.jx-fig .blue  .rl  { background: var(--b-mid); }
+.jx-fig .green .lbl { color: var(--g-mid); }
+.jx-fig .green .rl  { background: var(--g-mid); }
+
+/* ── Generic box ────────────────────────────────────────────── */
+.jx-fig .bx {
+  border-radius: var(--jx-radius);
+  padding: 11px 16px;
+  box-shadow: var(--jx-shadow);
+  text-align: center;
+  background-clip: padding-box;
+}
+.jx-fig .bx .t {
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 5px;
+  letter-spacing: .15px;
+}
+.jx-fig .bx .d {
+  font-size: 10px;
+  line-height: 1.65;
+}
+.jx-fig .bx code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9.5px;
+}
+
+/* ── Colour variants ────────────────────────────────────────── */
+.jx-fig .lb  { background: var(--b-fill);  border: 1.3px solid var(--b-bord); }
+.jx-fig .lb  .t { color: var(--b-dark); }
+.jx-fig .lb  .d { color: var(--tx-md);  }
+
+.jx-fig .lb2 { background: var(--b-fill2); border: 1.3px solid var(--b-bord); }
+.jx-fig .lb2 .t { color: var(--b-dark); }
+.jx-fig .lb2 .d { color: var(--tx-md);  }
+
+.jx-fig .db  { background: var(--b-inv);   border: 1.5px solid #1a5080; }
+.jx-fig .db  .t { color: #fff; }
+.jx-fig .db  .d { color: #9EC5E8; }
+.jx-fig .db  code { color: #9EC5E8; }
+
+.jx-fig .lg  { background: var(--g-fill);  border: 1.3px solid var(--g-bord); }
+.jx-fig .lg  .t { color: var(--g-dark); }
+.jx-fig .lg  .d { color: var(--tx-md);  }
+
+.jx-fig .dg  { background: var(--g-inv);   border: 1.5px solid #1d6037; }
+.jx-fig .dg  .t { color: #fff; }
+.jx-fig .dg  .d { color: #8FCF9F; }
+.jx-fig .dg  code { color: #8FCF9F; }
+
+.jx-fig .gh  { background: #fafafa; border: 1.3px dashed #bbb; }
+.jx-fig .gh  .t { color: #555; font-size: 11px; }
+.jx-fig .gh  .d { color: #777; font-size: 9.5px; }
+
+/* Alternative input box (dashed border) — used in Step 1 of F1 */
+.jx-fig .lb-alt { background: var(--b-fill2); border: 1.5px dashed var(--b-bord); }
+.jx-fig .lb-alt .t { color: var(--b-dark); }
+.jx-fig .lb-alt .d { color: var(--tx-md); }
+
+/* "or" divider — vertical separator in Step 1 of F1 */
+.jx-fig .jx-or-div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  font-size: 10.5px;
+  font-style: italic;
+  letter-spacing: 0.5px;
+  gap: 6px;
+}
+.jx-fig .jx-or-div .or-l { width: 1px; flex: 1; background: #e0e0e0; }
+.jx-fig .jx-or-div .or-t { white-space: nowrap; }
+
+/* Step-1 bottom row: lcs_tree | "or" | direct input */
+.jx-fig .jx-s1-bottom {
+  display: grid;
+  grid-template-columns: 3fr 36px 2fr;
+  align-items: stretch;
+}
+
+/* Freezer in Step-3 header (right-floated next to the divider line) */
+.jx-fig .jx-step-hdr .jx-fig-freezer {
+  flex: 0 0 152px;
+  margin-left: 16px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* ── Workflow-specific layout (used in intro/index.md) ──────── */
+.jx-fig .jx-s1-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.jx-fig .jx-s1-row .bx { min-height: 78px; }
+
+.jx-fig .gap-sm { height: 28px; }
+.jx-fig .gap-md { height: 38px; }
+
+.jx-fig .jx-s2-chain {
+  display: flex;
+  flex-direction: column;
+  padding: 0 100px;
+}
+
+/* "inherits ↓" side label */
+.jx-fig .inh {
+  position: absolute;
+  right: -82px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8.5px;
+  color: #aaa;
+  font-style: italic;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.jx-fig .jx-s3-samp { padding: 0 100px; }
+
+.jx-fig .jx-s3-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.jx-fig .jx-s3-split .bx { min-height: 100px; }
+
+.jx-fig .jx-s4-wrap { padding: 0 100px; }
+
+.jx-fig .jx-out-bar {
+  background: #f0f2f4;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 11px 22px;
+  font-size: 11.5px;
+  color: var(--tx-md);
+  text-align: center;
+  line-height: 1.75;
+}
+.jx-fig .jx-out-bar strong { color: var(--tx-dk); font-size: 12px; }
+
+/* Optional side box (Freezer in F1) — positioned via inline style by JS */
+.jx-fig .jx-sidebox {
+  position: absolute;
+  width: 148px;
+  visibility: hidden;
+}
+
+/* ── Title ──────────────────────────────────────────────────── */
+.jx-fig .jx-title {
+  text-align: center;
+  font-size: 16.5px;
+  font-weight: 700;
+  color: var(--tx-dk);
+  letter-spacing: .3px;
+  margin-bottom: 4px;
+  margin-top: 4px;
+}
+
+/* ── MathJax baseline alignment ─────────────────────────────── */
+.jx-fig mjx-container { vertical-align: middle; }
+
+/* ── Dark-mode adjustments ──────────────────────────────────── */
+/* The figure's box backgrounds are explicit (light/dark blue, light/dark
+   green, light grey), so their internal text colours stay readable on
+   either theme. Only the text that sits on the page background — the
+   title and the step-header label — needs to be retinted in dark mode.
+   Sphinx Book Theme exposes `data-theme="dark"` on the html element;
+   `prefers-color-scheme` is also covered as a fallback. */
+
+.jx-fig .jx-title       { color: var(--pst-color-text-base, var(--tx-dk)); }
+/* The output bar has a hardcoded light background, so its text colour
+   must NOT follow the page text colour (which the Book theme inverts
+   in dark mode). Pin to the figure's own dark-text variables. */
+.jx-fig .jx-out-bar       { color: var(--tx-md) !important; }
+.jx-fig .jx-out-bar strong { color: var(--tx-dk) !important; }
+
+html[data-theme="dark"] .jx-fig .jx-title { color: #f0f0f0; }
+html[data-theme="dark"] .jx-fig .blue  .lbl { color: #79B5DD; }
+html[data-theme="dark"] .jx-fig .blue  .rl  { background: #79B5DD; }
+html[data-theme="dark"] .jx-fig .green .lbl { color: #82C998; }
+html[data-theme="dark"] .jx-fig .green .rl  { background: #82C998; }
+html[data-theme="dark"] .jx-fig .jx-or-div   { color: #888; }
+html[data-theme="dark"] .jx-fig .jx-or-div .or-l { background: #555; }
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .jx-fig .jx-title { color: #f0f0f0; }
+  html:not([data-theme="light"]) .jx-fig .blue  .lbl { color: #79B5DD; }
+  html:not([data-theme="light"]) .jx-fig .blue  .rl  { background: #79B5DD; }
+  html:not([data-theme="light"]) .jx-fig .green .lbl { color: #82C998; }
+  html:not([data-theme="light"]) .jx-fig .green .rl  { background: #82C998; }
+  html:not([data-theme="light"]) .jx-fig .jx-or-div   { color: #888; }
+  html:not([data-theme="light"]) .jx-fig .jx-or-div .or-l { background: #555; }
+}
+
+/* ── Print ──────────────────────────────────────────────────── */
+@media print {
+  .jx-fig .jx-chart { width: 100%; }
+}

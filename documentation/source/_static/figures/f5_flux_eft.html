@@ -1,0 +1,314 @@
+<div class="jx-fig mathjax_process" id="f5-flux-eft">
+<style>
+  .jx-fig#f5-flux-eft .jx-chart { width: 920px; }
+  .jx-fig#f5-flux-eft .f5-input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .jx-fig#f5-flux-eft .f5-input-group {
+    border: 1px dashed #cdd6df;
+    border-radius: 8px;
+    padding: 10px 12px 14px;
+    background: #fafbfc;
+  }
+  .jx-fig#f5-flux-eft .f5-input-group .ig-hdr {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #6a96c0; margin-bottom: 8px;
+    text-align: center;
+  }
+  .jx-fig#f5-flux-eft .f5-input-group .ig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .jx-fig#f5-flux-eft .f5-w-row { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; padding: 0 60px; }
+  .jx-fig#f5-flux-eft .f5-V-wrap { padding: 0 100px; }
+  .jx-fig#f5-flux-eft .f5-l4-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 0 30px; }
+  .jx-fig#f5-flux-eft .f5-tadpole-inline {
+    flex: 0 0 200px;
+    margin-left: 16px;
+    margin-top: 0;
+    margin-bottom: 0;
+    align-self: center;
+  }
+  .jx-fig#f5-flux-eft .f5-tadpole-inline .t { font-size: 11px; }
+  .jx-fig#f5-flux-eft .f5-tadpole-inline .d { font-size: 9.5px; line-height: 1.5; }
+  .jx-fig#f5-flux-eft .f5-gap-lg { height: 56px; }
+</style>
+
+<div class="jx-chart" id="f5-chart">
+
+  <svg class="jx-asvg" id="f5-asvg">
+    <defs>
+      <marker id="f5-ab" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#2B5F8E"/></marker>
+      <marker id="f5-agr" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#999"/></marker>
+    </defs>
+  </svg>
+
+  <div class="jx-title">jaxvacua.flux_eft.FluxEFT &mdash; Computational graph</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Inputs (inherited from periods/css &nbsp;+&nbsp; external runtime)</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f5-input-row">
+
+      <div class="f5-input-group">
+        <div class="ig-hdr">Inherited from periods / css</div>
+        <div class="ig-row">
+          <div class="bx lb" id="f5-Pi">
+            <div class="t">$\Pi(z)$</div>
+            <div class="d">period vector</div>
+          </div>
+          <div class="bx lb" id="f5-K">
+            <div class="t">$K,\; K_{i\bar\jmath}$</div>
+            <div class="d">Kähler potential and metric</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="f5-input-group" style="border-style:dashed;">
+        <div class="ig-hdr" style="color:#888;">External (user-supplied at runtime)</div>
+        <div class="ig-row">
+          <div class="bx lb-alt" id="f5-flux">
+            <div class="t">flux $(F_3, H_3)$</div>
+            <div class="d">$\in \mathbb{Z}^{2(h^{1,2}+1)}$</div>
+          </div>
+          <div class="bx lb-alt" id="f5-tau">
+            <div class="t">$\tau$</div>
+            <div class="d">axio-dilaton</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="f5-gap-lg"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Superpotential &amp; F-terms</span>
+      <span class="rl"></span>
+      <div class="bx gh f5-tadpole-inline" id="f5-tadpole">
+        <div class="t">tadpole &nbsp;$N_{\rm flux}$</div>
+        <div class="d">
+          $N_{\rm flux} = \tfrac{1}{2}\, G_3 \cdot \Sigma \cdot \bar G_3$<br>
+          $\Longrightarrow\; N_{\rm flux} \leq Q_{\rm O3}$ (D3-charge)<br>
+          <code>FluxEFT.tadpole</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="f5-w-row">
+      <div class="bx lb2" id="f5-W">
+        <div class="t">$W = (F_3 - \tau H_3) \cdot \Pi(z)$</div>
+        <div class="d">
+          GVW superpotential: $W = \int_X G_3 \wedge \Omega$ with $G_3 = F_3 - \tau H_3$<br>
+          <code>FluxEFT.superpotential</code>
+        </div>
+      </div>
+      <div class="bx lb2" id="f5-DW">
+        <div class="t">$D_I W = \partial_I W + (\partial_I K)\, W$</div>
+        <div class="d">
+          $I = (z^i,\, \tau)$ &mdash; Kähler-covariant derivative on the full sector<br>
+          $D_I W = 0$ defines a SUSY vacuum<br>
+          <code>FluxEFT.DW</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Scalar potential</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f5-V-wrap">
+      <div class="bx lb2" id="f5-V">
+        <div class="t">$V \;=\; e^{K}\!\left( K^{I\bar J}\, D_I W\, \overline{D_J W} - 3\,|W|^2 \right)$</div>
+        <div class="d">
+          Inverse Kähler metric on the full $(z^i, \tau)$ sector,&nbsp;
+          $K^{I\bar J} = \bigl(\partial_I \partial_{\bar J} K\bigr)^{-1}$<br>
+          <code>FluxEFT.scalar_potential</code>&nbsp;&middot;&nbsp;<code>FluxEFT.V</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Differentials of $V$</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f5-l4-row">
+      <div class="bx db" id="f5-dV">
+        <div class="t">$\partial_I V$</div>
+        <div class="d">
+          Gradient of the scalar potential<br>
+          (target for gradient-flow vacuum search)<br>
+          <code>FluxEFT.ddV</code>&nbsp;<span style="color:#9EC5E8;">(via</span>&nbsp;<code>jax.grad</code><span style="color:#9EC5E8;">)</span>
+        </div>
+      </div>
+      <div class="bx db" id="f5-Hess">
+        <div class="t">$\partial_I \partial_J V$</div>
+        <div class="d">
+          Full Hessian on the moduli + axio-dilaton sector<br>
+          <code>FluxEFT.hessian</code>&nbsp;<span style="color:#9EC5E8;">(via</span>&nbsp;<code>jax.hessian</code><span style="color:#9EC5E8;">)</span>
+        </div>
+      </div>
+      <div class="bx db" id="f5-Mass">
+        <div class="t">$M^2_{IJ}$</div>
+        <div class="d">
+          Bosonic mass matrix evaluated at $D_I W = 0$,&nbsp;
+          $m^2 = \operatorname{eig}(M^2)$<br>
+          <code>FluxEFT.mass_matrix</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .jx-chart -->
+</div><!-- .jx-fig -->
+
+<script>
+(function() {
+  function drawF5() {
+    var chart = document.getElementById('f5-chart');
+    var svg   = document.getElementById('f5-asvg');
+    if (!chart || !svg) return;
+
+    while (svg.lastChild) {
+      if (svg.lastChild.tagName === 'defs') break;
+      svg.removeChild(svg.lastChild);
+    }
+
+    var cr = chart.getBoundingClientRect();
+    var H  = chart.scrollHeight;
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', '0 0 ' + cr.width + ' ' + H);
+
+    function g(id) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var r = el.getBoundingClientRect();
+      return {
+        cx: r.left - cr.left + r.width  / 2,
+        cy: r.top  - cr.top  + r.height / 2,
+        t:  r.top    - cr.top,
+        b:  r.bottom - cr.top,
+        l:  r.left   - cr.left,
+        r:  r.right  - cr.left
+      };
+    }
+    function seg(x1, y1, x2, y2, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', marker === 'f5-agr' ? '#999' : '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      if (marker === 'f5-agr') el.setAttribute('stroke-dasharray', '5,3');
+      svg.appendChild(el);
+    }
+    function arr(x1, y1, x2, y2, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', marker === 'f5-agr' ? '#999' : '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      if (marker === 'f5-agr') el.setAttribute('stroke-dasharray', '5,3');
+      el.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(el);
+    }
+    function elbow(points, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      el.setAttribute('points', points);
+      el.setAttribute('stroke', marker === 'f5-agr' ? '#999' : '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      if (marker === 'f5-agr') el.setAttribute('stroke-dasharray', '5,3');
+      el.setAttribute('fill', 'none');
+      el.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(el);
+    }
+    function txt(x, y, s, col, style) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      el.setAttribute('x', x); el.setAttribute('y', y);
+      el.setAttribute('font-size', '10');
+      el.setAttribute('fill', col || '#666');
+      if (style) el.setAttribute('font-style', style);
+      el.textContent = s;
+      svg.appendChild(el);
+    }
+
+    var Pi   = g('f5-Pi'),   K   = g('f5-K');
+    var flux = g('f5-flux'), tau = g('f5-tau');
+    var W    = g('f5-W'),    DW  = g('f5-DW');
+    var V    = g('f5-V');
+    var dV   = g('f5-dV'),   Hess = g('f5-Hess'), Mass = g('f5-Mass');
+    var td   = g('f5-tadpole');
+
+    if (Pi && K && flux && tau && W && DW) {
+      var inputBottom = Math.max(Pi.b, K.b, flux.b, tau.b);
+      var busY = inputBottom + 30;
+      [Pi, K, flux, tau].forEach(function(src) { seg(src.cx, src.b, src.cx, busY); });
+      seg(Math.min(Pi.cx, K.cx, flux.cx, tau.cx), busY,
+          Math.max(Pi.cx, K.cx, flux.cx, tau.cx), busY);
+      arr(W.cx,  busY, W.cx,  W.t  - 2, 'f5-ab');
+      arr(DW.cx, busY, DW.cx, DW.t - 2, 'f5-ab');
+    }
+
+    if (W && DW) arr(W.r, W.cy, DW.l - 2, DW.cy, 'f5-ab');
+
+    if (flux && td) {
+      var elbowX = flux.r + Math.max(28, (td.l - flux.r) * 0.55);
+      elbow(flux.r + ',' + flux.cy + ' ' +
+            elbowX + ',' + flux.cy + ' ' +
+            elbowX + ',' + td.cy + ' ' +
+            (td.l - 2) + ',' + td.cy, 'f5-agr');
+      txt(flux.r + 6, flux.cy - 5, 'tadpole', '#888', 'italic');
+    }
+
+    if (DW && V) elbow(DW.cx + ',' + DW.b + ' ' + DW.cx + ',' + (V.t - 16) + ' ' + V.cx + ',' + (V.t - 16) + ' ' + V.cx + ',' + (V.t - 2), 'f5-ab');
+    if (W  && V) elbow(W.cx + ',' + W.b + ' ' + W.cx + ',' + (V.t - 26) + ' ' + (V.cx - 18) + ',' + (V.t - 26) + ' ' + (V.cx - 18) + ',' + (V.t - 2), 'f5-ab');
+
+    if (V && dV && Hess && Mass) {
+      var busY2 = V.b + 18;
+      seg(V.cx, V.b, V.cx, busY2);
+      seg(Math.min(dV.cx, V.cx), busY2, Math.max(Mass.cx, V.cx), busY2);
+      arr(dV.cx,   busY2, dV.cx,   dV.t   - 2, 'f5-ab');
+      arr(Hess.cx, busY2, Hess.cx, Hess.t - 2, 'f5-ab');
+      arr(Mass.cx, busY2, Mass.cx, Mass.t - 2, 'f5-ab');
+    }
+
+    if (Hess && Mass) arr(Hess.r, Hess.cy, Mass.l - 2, Mass.cy, 'f5-ab');
+  }
+
+  function setupF5() {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(function() {
+        requestAnimationFrame(function() { requestAnimationFrame(drawF5); });
+      });
+    } else {
+      requestAnimationFrame(drawF5);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupF5();
+  } else {
+    window.addEventListener('load', setupF5);
+  }
+
+  var _t;
+  window.addEventListener('resize', function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() {
+      requestAnimationFrame(function() { requestAnimationFrame(drawF5); });
+    }, 100);
+  });
+})();
+</script>

@@ -1,0 +1,225 @@
+<div class="jx-fig mathjax_process" id="f3-periods">
+<style>
+  .jx-fig#f3-periods .jx-chart { width: 880px; }
+  .jx-fig#f3-periods .f3-input-wrap  { padding: 0 130px; }
+  .jx-fig#f3-periods .f3-mid-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; padding: 0 60px; }
+  .jx-fig#f3-periods .f3-prepot-wrap { padding: 0 240px; }
+  .jx-fig#f3-periods .f3-output-row  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 0 30px; }
+  .jx-fig#f3-periods .f3-gap-lg      { height: 48px; }
+  .jx-fig#f3-periods .f3-extra-bottom { padding-bottom: 18px; }
+  .jx-fig#f3-periods .f3-extra-top    { padding-top: 6px; }
+</style>
+
+<div class="jx-chart" id="f3-chart">
+
+  <svg class="jx-asvg" id="f3-asvg">
+    <defs>
+      <marker id="f3-ab" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#2B5F8E"/></marker>
+    </defs>
+  </svg>
+
+  <div class="jx-title">jaxvacua.periods &mdash; Computational graph</div>
+
+  <div class="jx-step f3-extra-bottom">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Inputs (inherited from lcs_tree)</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f3-input-wrap">
+      <div class="bx lb" id="f3-input">
+        <div class="t">topological data</div>
+        <div class="d">
+          $\kappa_{ijk}$&nbsp;&middot;&nbsp; $c_2$&nbsp;&middot;&nbsp; $n_\beta^0$<br>
+          (triple intersections,&nbsp; second Chern class,&nbsp; genus-0 GV invariants)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f3-gap-lg"></div>
+
+  <div class="jx-step f3-extra-top f3-extra-bottom">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Prepotential</span>
+      <span class="rl"></span>
+    </div>
+
+    <div class="f3-mid-row">
+      <div class="bx lb2" id="f3-fpoly">
+        <div class="t">$F_{\rm poly}(z)$</div>
+        <div class="d">
+          cubic + sub-leading terms<br>
+          $-\tfrac{1}{6}\, \kappa_{ijk}\, z^i z^j z^k + \tfrac{1}{2}\, a_{ij}(c_2)\, z^i z^j + b_i\, z^i + K_0(\chi)$
+        </div>
+      </div>
+      <div class="bx lb2" id="f3-finst">
+        <div class="t">$F_{\rm inst}(z)$</div>
+        <div class="d">
+          non-perturbative instanton sum (jaxpolylog)<br>
+          $-\dfrac{1}{(2\pi i)^3} \displaystyle\sum_\beta n_\beta^0\, \mathrm{Li}_3\!\bigl(q^{\beta}\bigr),\;
+          q^{\beta} = e^{2\pi i\, \beta \cdot z}$
+        </div>
+      </div>
+    </div>
+
+    <div class="gap-md"></div>
+
+    <div class="f3-prepot-wrap">
+      <div class="bx lb2" id="f3-prepot">
+        <div class="t">prepotential $\mathcal{F}(X)$</div>
+        <div class="d">
+          $X^0\, F(z) = X^0\,\bigl(F_{\rm poly}(z) + F_{\rm inst}(z)\bigr)$<br>
+          (in projective coordinates $X^I$, with $z^i = X^i / X^0$)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f3-gap-lg"></div>
+
+  <div class="jx-step f3-extra-top">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Outputs (consumed by css and FluxEFT)</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f3-output-row">
+      <div class="bx db" id="f3-pi">
+        <div class="t">$\Pi(z) = (\mathcal{F}_I, X^I)$</div>
+        <div class="d">
+          $X^0=1,\; X^i = z^i$,&nbsp;
+          $\mathcal{F}_i = \partial_i \mathcal{F},\; \mathcal{F}_0 = 2\mathcal{F} - z^i \partial_i \mathcal{F}$<br>
+          <code>periods.period_vector_per</code>
+        </div>
+      </div>
+      <div class="bx db" id="f3-K">
+        <div class="t">$K(z, \bar z)$</div>
+        <div class="d">
+          $K = -\!\log\!\bigl(-i\, \Pi^\dagger \Sigma\, \Pi\bigr)$<br>
+          <code>periods.kahler_potential_per</code>
+        </div>
+      </div>
+      <div class="bx db" id="f3-N">
+        <div class="t">$\mathcal{N}_{IJ}(X)$</div>
+        <div class="d">
+          gauge-kinetic matrix in projective coordinates<br>
+          <code>periods.gauge_kinetic_matrix</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .jx-chart -->
+</div><!-- .jx-fig -->
+
+<script>
+(function() {
+  function drawF3() {
+    var chart = document.getElementById('f3-chart');
+    var svg   = document.getElementById('f3-asvg');
+    if (!chart || !svg) return;
+
+    while (svg.lastChild) {
+      if (svg.lastChild.tagName === 'defs') break;
+      svg.removeChild(svg.lastChild);
+    }
+
+    var cr = chart.getBoundingClientRect();
+    var H  = chart.scrollHeight;
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', '0 0 ' + cr.width + ' ' + H);
+
+    function g(id) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var r = el.getBoundingClientRect();
+      return {
+        cx: r.left - cr.left + r.width  / 2,
+        cy: r.top  - cr.top  + r.height / 2,
+        t:  r.top    - cr.top,
+        b:  r.bottom - cr.top,
+        l:  r.left   - cr.left,
+        r:  r.right  - cr.left
+      };
+    }
+    function arr(x1, y1, x2, y2) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      el.setAttribute('marker-end', 'url(#f3-ab)');
+      svg.appendChild(el);
+    }
+    function seg(x1, y1, x2, y2) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      svg.appendChild(el);
+    }
+    function elbow(points) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      el.setAttribute('points', points);
+      el.setAttribute('stroke', '#2B5F8E');
+      el.setAttribute('stroke-width', '1.4');
+      el.setAttribute('fill', 'none');
+      el.setAttribute('marker-end', 'url(#f3-ab)');
+      svg.appendChild(el);
+    }
+
+    var inp = g('f3-input');
+    var fp  = g('f3-fpoly');
+    var fi  = g('f3-finst');
+    var pre = g('f3-prepot');
+
+    if (inp && fp && fi) {
+      var branchY = inp.b + 22;
+      var polyX = fp.cx;
+      var instX = fi.cx;
+      seg(inp.cx, inp.b, inp.cx, branchY);
+      seg(Math.min(polyX, instX), branchY, Math.max(polyX, instX), branchY);
+      arr(polyX, branchY, polyX, fp.t - 2);
+      arr(instX, branchY, instX, fi.t - 2);
+    }
+
+    if (fp && pre) elbow(fp.cx + ',' + fp.b + ' ' + fp.cx + ',' + (pre.t - 14) + ' ' + pre.cx + ',' + (pre.t - 14) + ' ' + pre.cx + ',' + (pre.t - 2));
+    if (fi && pre) elbow(fi.cx + ',' + fi.b + ' ' + fi.cx + ',' + (pre.t - 14) + ' ' + pre.cx + ',' + (pre.t - 14) + ' ' + pre.cx + ',' + (pre.t - 2));
+
+    var pi = g('f3-pi'), K = g('f3-K'), N = g('f3-N');
+    if (pre && pi && K && N) {
+      var branchY2 = pre.b + 22;
+      seg(pre.cx, pre.b, pre.cx, branchY2);
+      seg(pi.cx, branchY2, N.cx, branchY2);
+      arr(pi.cx, branchY2, pi.cx, pi.t - 2);
+      arr(K.cx,  branchY2, K.cx,  K.t  - 2);
+      arr(N.cx,  branchY2, N.cx,  N.t  - 2);
+    }
+  }
+
+  function setupF3() {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(function() {
+        requestAnimationFrame(function() { requestAnimationFrame(drawF3); });
+      });
+    } else {
+      requestAnimationFrame(drawF3);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupF3();
+  } else {
+    window.addEventListener('load', setupF3);
+  }
+
+  var _t;
+  window.addEventListener('resize', function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() {
+      requestAnimationFrame(function() { requestAnimationFrame(drawF3); });
+    }, 100);
+  });
+})();
+</script>

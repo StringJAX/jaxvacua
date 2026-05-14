@@ -34,30 +34,30 @@ Table of contents
     :maxdepth: 1
     :caption: Introduction
 
+    intro/index
     intro/sugra
     intro/geometries
     intro/flux_compactifications
     intro/moduli_stabilisation
     intro/periods
     intro/pfv
-    intro/database
 
 .. toctree::
     :maxdepth: 1
     :caption: Tutorials — Basics
 
-    notebooks/01_basics/1_jax_introduction
-    notebooks/01_basics/2_jaxvacua_overview
-    notebooks/01_basics/3_cytools_interface
-    notebooks/01_basics/4_cicy
+    notebooks/01_basics/01_jax_introduction
+    notebooks/01_basics/02_jaxvacua_overview
+    notebooks/01_basics/03_cytools_interface
+    notebooks/01_basics/04_sampling_module
 
 .. toctree::
     :maxdepth: 1
     :caption: Tutorials — Vacuum Finding
 
-    notebooks/02_vacuum_finding/5_finding_flux_vacua
-    notebooks/02_vacuum_finding/6_sampling_module
-    notebooks/02_vacuum_finding/7_ISD_sampling_flux_vacua
+    notebooks/02_vacuum_finding/05_finding_flux_vacua
+    notebooks/02_vacuum_finding/06_ISD_sampling_principle
+    notebooks/02_vacuum_finding/07_ISD_sampling
     notebooks/02_vacuum_finding/8_ISD_sampling_wrapper
     notebooks/02_vacuum_finding/9_sampling_vacua_from_fluxes
     notebooks/02_vacuum_finding/19_non_susy_sampling
@@ -80,13 +80,14 @@ Table of contents
     notebooks/04_geometry_and_limits/14_period_input
     notebooks/04_geometry_and_limits/15_hypergeometric_models
 
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Database and Infrastructure
+.. note::
 
-    notebooks/05_database_and_infrastructure/17_database_interface
-    notebooks/05_database_and_infrastructure/23_cluster_parallelisation
-    notebooks/05_database_and_infrastructure/25_vacua_storage
+    The **database, vacua-vault, and cluster-parallelisation** tutorials
+    have moved to the StringJAX umbrella package, which now hosts the
+    shared catalog I/O and storage layer (see ``stringjax.cy_io``,
+    ``stringjax.lcs_database``, ``stringjax.vacua_writer``).
+    The tutorials live at
+    `<https://stringjax.readthedocs.io/en/latest/tutorials/database_and_infrastructure/>`_.
 
 .. toctree::
     :maxdepth: 1

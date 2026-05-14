@@ -1,0 +1,266 @@
+<div class="jx-fig mathjax_process" id="f7-bounding">
+<style>
+  .jx-fig#f7-bounding .jx-chart { width: 880px; }
+  .jx-fig#f7-bounding #f7-input-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .jx-fig#f7-bounding .f7-phase-wrap { padding: 0 80px; }
+  .jx-fig#f7-bounding .f7-row-pool { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 0 60px; }
+</style>
+
+<div class="jx-chart" id="f7-chart">
+
+  <svg class="jx-asvg" id="f7-asvg">
+    <defs>
+      <marker id="f7-ag" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#3A7D5A"/></marker>
+    </defs>
+  </svg>
+
+  <div class="jx-title">jaxvacua.flux_bounding.bounded_fluxes &mdash; 5-phase pipeline</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Inputs</span>
+      <span class="rl"></span>
+    </div>
+    <div id="f7-input-row">
+      <div class="bx lb" id="f7-eft">
+        <div class="t">FluxEFT instance</div>
+        <div class="d">
+          inherited model<br>
+          provides $W$, $K$, $\Pi$, ISD matrix
+        </div>
+      </div>
+      <div class="bx lb-alt" id="f7-Nmax">
+        <div class="t">$N_{\max}$</div>
+        <div class="d">
+          flux radius<br>
+          $\| h \|, \| f \| \leq N_{\max}$
+        </div>
+      </div>
+      <div class="bx lb-alt" id="f7-mods">
+        <div class="t">moduli samples</div>
+        <div class="d">
+          for eigenvalue bounds in Phase 1
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 1 &nbsp;&mdash;&nbsp; Eigenvalue convergence sampling</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f7-phase-wrap">
+      <div class="bx lg" id="f7-p1">
+        <div class="t">Eigenvalue bounds</div>
+        <div class="d">
+          Sample moduli, evaluate $\Im\mathcal{N}$ at each<br>
+          monitor convergence of $\lambda_{\max},\; \widetilde{\lambda}_{\min},\; \widetilde{\lambda}_{\max}$<br>
+          <code>bounded_fluxes.compute_evs</code>&nbsp;&middot;&nbsp;<code>compute_evs_vmap</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 2 &nbsp;&mdash;&nbsp; $s_{\max}$ + tadpole filter on $h$</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f7-phase-wrap">
+      <div class="bx lg" id="f7-p2">
+        <div class="t">Bounding boxes for $h$</div>
+        <div class="d">
+          Apply $s_{\max}$, dilaton bound, tadpole budget $N_{\rm flux} \leq Q_{\rm O3}$<br>
+          $\Longrightarrow$ box of integer $h$-vectors<br>
+          <code>bounded_fluxes.compute_bounding_box</code>&nbsp;&middot;&nbsp;<code>get_h_box</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="gap-sm"></div>
+
+    <div class="f7-row-pool">
+      <div class="bx lg" id="f7-h2">
+        <div class="t">$h_2$ pool &nbsp;<span style="font-style:italic;font-weight:400;font-size:9.5px;color:#52A070;">(small)</span></div>
+        <div class="d">
+          $\sim 10^3$ candidates<br>
+          tight bounding box<br>
+          <code>bound_h2_local</code>
+        </div>
+      </div>
+      <div class="bx lg" id="f7-h1">
+        <div class="t">$h_1$ candidates &nbsp;<span style="font-style:italic;font-weight:400;font-size:9.5px;color:#52A070;">(large)</span></div>
+        <div class="d">
+          $\sim 10^6$ candidates<br>
+          looser bounding box<br>
+          <code>bound_h1_global</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 3 &nbsp;&mdash;&nbsp; Streaming flux assembly</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f7-phase-wrap">
+      <div class="bx lg" id="f7-p3">
+        <div class="t">Stream $h$ pairs into chunks</div>
+        <div class="d">
+          $h_2$-outer &times; $h_1$-inner concat,&nbsp; buffer $\sim 10^5$ rows<br>
+          to prevent JIT recompilation across chunk shapes<br>
+          <code>bounded_fluxes.get_h_candidates</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 4 &nbsp;&mdash;&nbsp; Monodromy reduction</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f7-phase-wrap">
+      <div class="bx lg" id="f7-p4">
+        <div class="t">SL$(2,\mathbb{Z})$ orbit reduction</div>
+        <div class="d">
+          For each candidate $h$, apply monodromy matrices $M_{(n_1, n_2)}$, &nbsp; $n_a \in [-10, 10]$<br>
+          keep the minimal-$\| h \|^2$ representative; $\sim 1\%$ reduction
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 5 &nbsp;&mdash;&nbsp; Per-batch ISD completion + Newton</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f7-phase-wrap">
+      <div class="bx dg" id="f7-p5">
+        <div class="t">ISD completion + multi-start Newton refinement</div>
+        <div class="d">
+          $f = s\,M\,\sigma\, h + c_0\, h$,&nbsp; multi-start Newton on $D_I W = 0$<br>
+          per-batch JIT (<code>_process_h_at_modulus_jit</code>,&nbsp; <code>_process_h_all_moduli_jit</code>)<br>
+          <code>bounded_fluxes.sample_bounded_fluxes()</code>&nbsp;&middot;&nbsp;<code>newton_refine_batch</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-out-bar">
+    <strong>Output:</strong>&nbsp;
+    Deduplicated catalogue of vacua $(z^*, \tau^*, f, h)$
+    &nbsp;&middot;&nbsp;
+    $|W_0|$,&nbsp; $g_s$,&nbsp; tadpole,&nbsp; residual.
+  </div>
+
+</div><!-- .jx-chart -->
+</div><!-- .jx-fig -->
+
+<script>
+(function() {
+  function drawF7() {
+    var chart = document.getElementById('f7-chart');
+    var svg   = document.getElementById('f7-asvg');
+    if (!chart || !svg) return;
+
+    while (svg.lastChild) {
+      if (svg.lastChild.tagName === 'defs') break;
+      svg.removeChild(svg.lastChild);
+    }
+
+    var cr = chart.getBoundingClientRect();
+    var H  = chart.scrollHeight;
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', '0 0 ' + cr.width + ' ' + H);
+
+    function g(id) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var r = el.getBoundingClientRect();
+      return {
+        cx: r.left - cr.left + r.width  / 2,
+        cy: r.top  - cr.top  + r.height / 2,
+        t:  r.top    - cr.top,
+        b:  r.bottom - cr.top,
+        l:  r.left   - cr.left,
+        r:  r.right  - cr.left
+      };
+    }
+    function arr(x1, y1, x2, y2) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', '#3A7D5A');
+      el.setAttribute('stroke-width', '1.5');
+      el.setAttribute('marker-end', 'url(#f7-ag)');
+      svg.appendChild(el);
+    }
+
+    ['f7-eft','f7-Nmax','f7-mods'].forEach(function(id) {
+      var a = g(id), p1 = g('f7-p1');
+      if (a && p1) {
+        var off = (id === 'f7-eft') ? -40 : (id === 'f7-mods' ? 40 : 0);
+        arr(a.cx, a.b, p1.cx + off, p1.t - 2);
+      }
+    });
+
+    var p1 = g('f7-p1'), p2 = g('f7-p2');
+    if (p1 && p2) arr(p1.cx, p1.b, p2.cx, p2.t - 2);
+
+    var h2 = g('f7-h2'), h1 = g('f7-h1');
+    if (p2 && h2) arr(p2.cx - 40, p2.b, h2.cx, h2.t - 2);
+    if (p2 && h1) arr(p2.cx + 40, p2.b, h1.cx, h1.t - 2);
+
+    var p3 = g('f7-p3');
+    if (h2 && p3) arr(h2.cx, h2.b, p3.cx - 30, p3.t - 2);
+    if (h1 && p3) arr(h1.cx, h1.b, p3.cx + 30, p3.t - 2);
+
+    var p4 = g('f7-p4'), p5 = g('f7-p5');
+    if (p3 && p4) arr(p3.cx, p3.b, p4.cx, p4.t - 2);
+    if (p4 && p5) arr(p4.cx, p4.b, p5.cx, p5.t - 2);
+  }
+
+  function setupF7() {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(function() {
+        requestAnimationFrame(function() { requestAnimationFrame(drawF7); });
+      });
+    } else {
+      requestAnimationFrame(drawF7);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupF7();
+  } else {
+    window.addEventListener('load', setupF7);
+  }
+
+  var _t;
+  window.addEventListener('resize', function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() {
+      requestAnimationFrame(function() { requestAnimationFrame(drawF7); });
+    }, 100);
+  });
+})();
+</script>

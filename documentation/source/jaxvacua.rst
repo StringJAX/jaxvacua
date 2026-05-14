@@ -22,7 +22,12 @@ Solid arrows are required code dependencies; dashed arrows indicate
 "used by" tools that ``FluxVacuaFinder`` calls into rather than stages
 it produces. The orange callout marks ``lcs_tree`` as the data hub —
 every input on-ramp eventually populates it, and every model layer
-reads from it.
+reads from it. Concretely, ``lcs_tree`` carries the topological data
+:math:`(\kappa_{ijk},\, c_2,\, \chi,\, n_\beta^0)`; the chain then
+constructs the period vector :math:`\Pi(z) = (\mathcal{F}_I,\, X^I)`,
+the Kähler potential :math:`K(z, \bar z)`, the GVW superpotential
+:math:`W = \int_X G_3 \wedge \Omega`, and the F-terms
+:math:`D_I W = \partial_I W + (\partial_I K)\, W`.
 
 
 Subpackages

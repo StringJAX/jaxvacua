@@ -245,6 +245,6 @@ $$ (eq:WfluxBulk3)
 
 ```
 
-The conifold period computation is handled through `jaxvacua.conifold_utils` and
-the freezer module `jaxvacua.freezer`, which implements the light-field EFT
-for conifold vacua.
+The conifold period computation is handled through the `jaxvacua.conifold`
+subpackage and the freezer module `jaxvacua.freezer`, which implements the
+light-field EFT for conifold vacua.

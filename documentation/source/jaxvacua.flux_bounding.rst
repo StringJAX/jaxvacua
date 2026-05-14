@@ -5,6 +5,35 @@ jaxvacua.flux_bounding
 
 .. automodule:: jaxvacua.flux_bounding
 
+Pipeline overview
+-----------------
+
+Systematic flux enumeration is the heaviest pipeline in the package.
+Given an upstream :class:`jaxvacua.flux_eft.FluxEFT` instance and a
+flux radius :math:`N_{\max}`, ``bounded_fluxes`` enumerates every
+integer flux
+
+.. math::
+
+   G_3 = F_3 - \tau H_3, \qquad
+   (F_3, H_3) \in \mathbb{Z}^{2(h^{1,2}+1)},
+
+inside a bounding box subject to physical constraints — the s-bound
+:math:`s_{\max}`, the D3-tadpole budget :math:`N_{\text{flux}} \leq Q_{\text{O3}}`,
+and modular reduction along the
+:math:`\mathrm{SL}(2,\mathbb{Z})` orbit. Phases 1–4 are filters and
+lattice operations; phase 5 produces the actual vacua via per-batch
+ISD completion and multi-start Newton refinement.
+
+In the diagram, the inherited :class:`FluxEFT` instance is shown
+light grey, the user-supplied :math:`N_{\max}` and the moduli
+samples for the eigenvalue bounds are shown dashed (external), and
+the deduplicated output catalogue is highlighted in orange.
+
+.. raw:: html
+   :file: _static/figures/f7_flux_bounding.html
+
+
 Bounded fluxes class
 -----------------------------------
 

@@ -1,0 +1,236 @@
+<div class="jx-fig mathjax_process" id="f2-architecture">
+<style>
+  /* F2-specific layout (condensed F1 vertical) */
+  .jx-fig#f2-architecture .jx-chart { width: 760px; }
+  .jx-fig#f2-architecture .f2-block { padding: 0 70px; }
+  .jx-fig#f2-architecture .f2-row3  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .jx-fig#f2-architecture .f2-chain { display: flex; flex-direction: column; gap: 24px; }
+  .jx-fig#f2-architecture .f2-helpers {
+    margin-top: 30px;
+    padding: 12px 14px;
+    border: 1px dashed #cdd6df;
+    border-radius: 6px;
+    background: #fafbfc;
+  }
+  .jx-fig#f2-architecture .f2-helpers .hh {
+    font-size: 9.5px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #888;
+    text-align: center; margin-bottom: 8px;
+  }
+</style>
+
+<div class="jx-chart" id="f2-chart">
+
+  <svg class="jx-asvg" id="f2-asvg">
+    <defs>
+      <marker id="f2-ab" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#2B5F8E"/></marker>
+      <marker id="f2-ag" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#3A7D5A"/></marker>
+      <marker id="f2-agr" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#999"/></marker>
+    </defs>
+  </svg>
+
+  <div class="jx-title">jaxvacua &mdash; Package architecture</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Step 1 &nbsp;&mdash;&nbsp; Geometry input</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f2-block">
+      <div class="bx db" id="f2-lcs">
+        <div class="t">lcs_tree</div>
+        <div class="d">
+          JAX-registered pytree carrying $\kappa_{ijk}$, $a$-matrix, $c_2$, $\chi$,
+          GV / GW invariants and conifold data<br>
+          <code>from_cytools()</code>&nbsp;&middot;&nbsp;<code>from_dict()</code>&nbsp;&middot;&nbsp;<code>from_file()</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Step 2 &nbsp;&mdash;&nbsp; Model construction</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f2-block">
+      <div class="f2-chain">
+        <div class="bx lb2" id="f2-per">
+          <div class="t">periods</div>
+          <div class="d">
+            Prepotential $\mathcal{F}(X)$, period vector $\Pi(z) = (\mathcal{F}_I,\, X^I)$,
+            Kähler potential $K$, gauge-kinetic matrix $\mathcal{N}_{IJ}$
+          </div>
+        </div>
+        <div class="bx lb2" id="f2-css">
+          <div class="t">css &nbsp;<span style="font-weight:400;font-style:italic;font-size:9.5px;color:#6a96c0;">&supe; periods</span></div>
+          <div class="d">
+            Kähler metric $K_{i\bar\jmath}$, ISD matrix $M_{AB}$,
+            non-holomorphic completion of $\mathcal{N}_{IJ}$
+          </div>
+        </div>
+        <div class="bx lb2" id="f2-feft">
+          <div class="t">FluxEFT &nbsp;<span style="font-weight:400;font-style:italic;font-size:9.5px;color:#6a96c0;">&supe; css</span></div>
+          <div class="d">
+            Superpotential $W$, F-terms $D_I W$, scalar potential $V$,
+            tadpole $N_{\rm flux}$
+          </div>
+        </div>
+        <div class="bx db" id="f2-fvf">
+          <div class="t">FluxVacuaFinder &nbsp;<span style="font-weight:400;font-style:italic;font-size:9.5px;color:#9EC5E8;">&supe; FluxEFT</span></div>
+          <div class="d">
+            Newton solver, Hessian, mass spectrum<br>
+            Kähler cone &nbsp;&middot;&nbsp; conifold loci &nbsp;&middot;&nbsp; PFV
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Step 3 &nbsp;&mdash;&nbsp; Vacuum search</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f2-block">
+      <div class="bx lg" id="f2-search">
+        <div class="t">data_sampler &nbsp;+&nbsp; bounded_fluxes</div>
+        <div class="d">
+          Stochastic ISD-biased seeds &nbsp;&middot;&nbsp;
+          systematic flux enumeration with bounding boxes<br>
+          <code>data_sampler.ISD_sampling()</code>&nbsp;&middot;&nbsp;
+          <code>bounded_fluxes.sample_bounded_fluxes()</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Step 4 &nbsp;&mdash;&nbsp; Refinement &amp; analysis</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f2-block">
+      <div class="bx dg" id="f2-refine">
+        <div class="t">Newton refinement &nbsp;+&nbsp; mass spectrum</div>
+        <div class="d">
+          Solve $D_I W = 0 \;\Longrightarrow\; (z^*, \tau^*)$
+          via <code>FluxVacuaFinder.newton_method_flux_vacua()</code><br>
+          Hessian / mass matrix via <code>jax.hessian</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f2-helpers">
+    <div class="hh">I/O &amp; helpers (consumed across the pipeline)</div>
+    <div class="f2-row3">
+      <div class="bx lb" id="f2-cy">
+        <div class="t">cytools_interface</div>
+        <div class="d">CYTools&nbsp;&rarr;&nbsp;lcs_tree</div>
+      </div>
+      <div class="bx lb" id="f2-hyp">
+        <div class="t">hypergeometric_models</div>
+        <div class="d">Closed-form one-modulus families</div>
+      </div>
+      <div class="bx lb" id="f2-fu">
+        <div class="t">flux_utils</div>
+        <div class="d">Flux &harr; PFV conversions</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .jx-chart -->
+</div><!-- .jx-fig -->
+
+<script>
+(function() {
+  function drawF2() {
+    var chart = document.getElementById('f2-chart');
+    var svg   = document.getElementById('f2-asvg');
+    if (!chart || !svg) return;
+
+    while (svg.lastChild) {
+      if (svg.lastChild.tagName === 'defs') break;
+      svg.removeChild(svg.lastChild);
+    }
+
+    var cr = chart.getBoundingClientRect();
+    var H  = chart.scrollHeight;
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', '0 0 ' + cr.width + ' ' + H);
+
+    function g(id) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var r = el.getBoundingClientRect();
+      return {
+        cx: r.left - cr.left + r.width  / 2,
+        cy: r.top  - cr.top  + r.height / 2,
+        t:  r.top    - cr.top,
+        b:  r.bottom - cr.top,
+        l:  r.left   - cr.left,
+        r:  r.right  - cr.left
+      };
+    }
+    function arr(x1, y1, x2, y2, col, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', col);
+      el.setAttribute('stroke-width', '1.6');
+      el.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(el);
+    }
+
+    var B = '#2B5F8E', G = '#3A7D5A';
+
+    var lcs = g('f2-lcs'), per = g('f2-per');
+    if (lcs && per) arr(lcs.cx, lcs.b, per.cx, per.t - 2, B, 'f2-ab');
+
+    [['f2-per','f2-css'], ['f2-css','f2-feft'], ['f2-feft','f2-fvf']].forEach(function(p) {
+      var a = g(p[0]), b = g(p[1]);
+      if (a && b) arr(a.cx, a.b, b.cx, b.t - 2, B, 'f2-ab');
+    });
+
+    var fvf = g('f2-fvf'), srh = g('f2-search');
+    if (fvf && srh) arr(fvf.cx, fvf.b, srh.cx, srh.t - 2, G, 'f2-ag');
+
+    var ref = g('f2-refine');
+    if (srh && ref) arr(srh.cx, srh.b, ref.cx, ref.t - 2, G, 'f2-ag');
+  }
+
+  function setupF2() {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(function() {
+        requestAnimationFrame(function() { requestAnimationFrame(drawF2); });
+      });
+    } else {
+      requestAnimationFrame(drawF2);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupF2();
+  } else {
+    window.addEventListener('load', setupF2);
+  }
+
+  var _t;
+  window.addEventListener('resize', function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() {
+      requestAnimationFrame(function() { requestAnimationFrame(drawF2); });
+    }, 100);
+  });
+})();
+</script>

@@ -40,6 +40,7 @@ extensions = [
     "sphinx_autodoc_typehints",
     "sphinx_togglebutton",
     "sphinx_design",
+    "sphinxcontrib.mermaid",
     "myst_nb",
 ]
 
@@ -102,6 +103,19 @@ myst_dmath_double_inline = True
 nb_execution_allow_errors = False
 nb_merge_streams = True
 nb_execution_timeout = 120
+
+# -- Custom CSS / MathJax for raw-HTML figures --------------------
+# Shared stylesheet for the workflow / module-graph figures embedded
+# via raw HTML in `intro/index.md` and the API rst pages.
+html_css_files = ["css/jaxvacua-figures.css"]
+
+# Enable MathJax 3 to scan for inline $...$ in raw HTML blocks. Sphinx's
+# default mathjax setup only renders math wrapped in :math: nodes; raw
+# HTML carrying $...$ (as the workflow figure does) needs this hook.
+mathjax3_config = {
+    "tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]]},
+    "svg": {"fontCache": "global"},
+}
 
 # Removes module and file name in title
 add_module_names = False

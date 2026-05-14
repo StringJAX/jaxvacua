@@ -6,6 +6,7 @@ sphinx-autodoc-typehints
 ipykernel
 sphinx_togglebutton
 sphinx_design
+sphinxcontrib-mermaid
 myst-nb
 nbsphinx
 Pygments

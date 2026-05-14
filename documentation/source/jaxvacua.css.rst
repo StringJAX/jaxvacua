@@ -5,6 +5,39 @@ jaxvacua.css
 
 .. automodule:: jaxvacua.css
 
+Computational graph
+-------------------
+
+The complex-structure sector consumes the period vector :math:`\Pi(z)`
+and the Kähler potential :math:`K(z, \bar z)` from
+:mod:`jaxvacua.periods` and produces the moduli-space metric, the ISD
+matrix and the gauge-kinetic matrix:
+
+.. math::
+   :nowrap:
+
+   \begin{align*}
+       g_{i \bar\jmath}(z, \bar z)
+           &= \partial_i \partial_{\bar\jmath}\, K(z, \bar z), \\[2pt]
+       M_{AB}(z, \bar z)
+           &= e^{K(z, \bar z)}\, \Pi_A(z)\, \overline{\Pi_B(z)}, \\[2pt]
+       \mathcal{N}_{IJ}(z, \bar z)
+           &= \bar{F}_{IJ}
+              + 2 i\, \frac{\bigl(\operatorname{Im} F\bigr)_{IK} X^K\,
+                              \bigl(\operatorname{Im} F\bigr)_{JL} X^L}
+                              {\bigl(\operatorname{Im} F\bigr)_{KL} X^K X^L}.
+   \end{align*}
+
+In the diagram, inherited inputs (light grey, from the upstream
+period layer) flow into the layer's three computed objects; the
+public outputs (orange) feed downstream into
+:class:`jaxvacua.flux_eft.FluxEFT` (via :math:`\mathcal{N}_{IJ}`) and
+:mod:`jaxvacua.sampling` (via :math:`M_{AB}`).
+
+.. raw:: html
+   :file: _static/figures/f4_css.html
+
+
 Complex structure sector class
 -----------------------------------
 

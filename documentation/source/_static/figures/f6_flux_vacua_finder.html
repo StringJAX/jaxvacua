@@ -1,0 +1,269 @@
+<div class="jx-fig mathjax_process" id="f6-fvf">
+<style>
+  .jx-fig#f6-fvf .jx-chart { width: 880px; padding-right: 90px; }
+  .jx-fig#f6-fvf .f6-block         { padding: 0 130px; }
+  .jx-fig#f6-fvf .f6-block-narrow  { padding: 0 200px; }
+  .jx-fig#f6-fvf .f6-input-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .jx-fig#f6-fvf .f6-input-group {
+    border: 1px dashed #cdd6df;
+    border-radius: 8px;
+    padding: 10px 12px 14px;
+    background: #fafbfc;
+  }
+  .jx-fig#f6-fvf .f6-input-group .ig-hdr {
+    font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: #6a96c0; margin-bottom: 8px;
+    text-align: center;
+  }
+  .jx-fig#f6-fvf .f6-diamond-wrap { display: flex; justify-content: center; }
+</style>
+
+<div class="jx-chart" id="f6-chart">
+
+  <svg class="jx-asvg" id="f6-asvg">
+    <defs>
+      <marker id="f6-ag" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#3A7D5A"/></marker>
+      <marker id="f6-ab" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+        <polygon points="0 0,8 3,0 6" fill="#2B5F8E"/></marker>
+    </defs>
+  </svg>
+
+  <div class="jx-title">jaxvacua.flux_vacua_finder.FluxVacuaFinder &mdash; Newton refinement</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Inputs (inherited &nbsp;+&nbsp; runtime)</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f6-block">
+      <div class="f6-input-row">
+        <div class="f6-input-group">
+          <div class="ig-hdr">Inherited</div>
+          <div class="bx lb" id="f6-eft">
+            <div class="t">FluxEFT instance</div>
+            <div class="d">provides $W$, $D_I W$, $V$, $K$, $K_{i\bar\jmath}$</div>
+          </div>
+        </div>
+        <div class="f6-input-group" style="border-style:dashed;">
+          <div class="ig-hdr" style="color:#888;">External (runtime)</div>
+          <div class="bx lb-alt" id="f6-flux">
+            <div class="t">flux $(F_3, H_3)$</div>
+            <div class="d">integer flux pair to refine for</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Layer 2 &nbsp;&mdash;&nbsp; Initial guess</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f6-block">
+      <div class="bx lg" id="f6-sampler">
+        <div class="t">data_sampler &nbsp;+&nbsp; linearised shifts</div>
+        <div class="d">
+          ISD-biased seeds $(z_0, \tau_0)$ at fixed flux<br>
+          ISD completion: $f = s\,M\,\sigma\, h + c_0\, h$<br>
+          <code>data_sampler.initial_guesses_ISD()</code>&nbsp;&middot;&nbsp;<code>FluxVacuaFinder.linearised_shifts_ISD</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Layer 3 &nbsp;&mdash;&nbsp; Newton iteration</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f6-block">
+      <div class="bx lg" id="f6-newton">
+        <div class="t">Newton step</div>
+        <div class="d">
+          residual&nbsp; $r_I = D_I W$&nbsp; (SUSY)&nbsp; or&nbsp; $r_I = \partial_I V$&nbsp; (general critical point)<br>
+          Jacobian&nbsp; $J_{IJ} = \partial_J\, D_I W$&nbsp; or&nbsp; $J_{IJ} = \partial_I\, \partial_J V$<br>
+          shift $\Delta = -J^{-1} r$,&nbsp; update $(z, \tau) \mathrel{+}= \Delta$<br>
+          <code>FluxVacuaFinder.newton_method_flux_vacua()</code>&nbsp;&middot;&nbsp;
+          <code>scipy.optimize.root(method='hybr')</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="f6-diamond-wrap">
+      <div class="bx-diamond" id="f6-conv">
+        <div>converged?</div>
+        <div style="margin-top:4px;">$\lVert r \rVert_\infty &lt; \texttt{tol}$</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Layer 5 &nbsp;&mdash;&nbsp; Store converged vacuum</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f6-block">
+      <div class="bx lg" id="f6-store">
+        <div class="t">Per-vacuum row</div>
+        <div class="d">
+          $(z^*, \tau^*, f, h)$,&nbsp; residual,&nbsp; $|W_0| = |W(z^*, \tau^*; f, h)|$,&nbsp; $g_s = (\Im\tau^*)^{-1}$<br>
+          <code>FluxVacuaFinder.fterm_solver()</code>&nbsp;&middot;&nbsp;<code>sample_SUSY_flux_vacua()</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Layer 6 &nbsp;&mdash;&nbsp; Mass spectrum</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f6-block">
+      <div class="bx dg" id="f6-mass">
+        <div class="t">Hessian / mass matrix</div>
+        <div class="d">
+          $M^2_{IJ} = \partial_I \partial_J V \big|_{D_I W = 0}$,&nbsp;
+          $m^2 = \operatorname{eig}(M^2)$ via <code>jax.hessian(FluxEFT.scalar_potential)</code><br>
+          <code>FluxEFT.mass_matrix</code>&nbsp;&middot;&nbsp;<code>FluxEFT.hessian</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-md"></div>
+
+  <div class="jx-out-bar">
+    <strong>Output:</strong>&nbsp;
+    Per-vacuum row $(z^*, \tau^*, f, h)$,&nbsp; residual,&nbsp; $|W_0|$,&nbsp; $g_s$,&nbsp; tadpole,&nbsp; mass spectrum.
+  </div>
+
+</div><!-- .jx-chart -->
+</div><!-- .jx-fig -->
+
+<script>
+(function() {
+  function drawF6() {
+    var chart = document.getElementById('f6-chart');
+    var svg   = document.getElementById('f6-asvg');
+    if (!chart || !svg) return;
+
+    while (svg.lastChild) {
+      if (svg.lastChild.tagName === 'defs') break;
+      svg.removeChild(svg.lastChild);
+    }
+
+    var cr = chart.getBoundingClientRect();
+    var H  = chart.scrollHeight;
+    svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', '0 0 ' + cr.width + ' ' + H);
+
+    function g(id) {
+      var el = document.getElementById(id);
+      if (!el) return null;
+      var r = el.getBoundingClientRect();
+      return {
+        cx: r.left - cr.left + r.width  / 2,
+        cy: r.top  - cr.top  + r.height / 2,
+        t:  r.top    - cr.top,
+        b:  r.bottom - cr.top,
+        l:  r.left   - cr.left,
+        r:  r.right  - cr.left
+      };
+    }
+    function arr(x1, y1, x2, y2, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+      el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+      el.setAttribute('stroke', marker === 'f6-ab' ? '#2B5F8E' : '#3A7D5A');
+      el.setAttribute('stroke-width', '1.5');
+      el.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(el);
+    }
+    function elbow(points, marker) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      el.setAttribute('points', points);
+      el.setAttribute('stroke', marker === 'f6-ab' ? '#2B5F8E' : '#3A7D5A');
+      el.setAttribute('stroke-width', '1.5');
+      el.setAttribute('fill', 'none');
+      el.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(el);
+    }
+    function txt(x, y, s, col, style) {
+      var el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      el.setAttribute('x', x); el.setAttribute('y', y);
+      el.setAttribute('font-size', '10');
+      el.setAttribute('fill', col || '#666');
+      if (style) el.setAttribute('font-style', style);
+      el.textContent = s;
+      svg.appendChild(el);
+    }
+
+    var eft   = g('f6-eft');
+    var flux  = g('f6-flux');
+    var samp  = g('f6-sampler');
+    var newt  = g('f6-newton');
+    var conv  = g('f6-conv');
+    var store = g('f6-store');
+    var mass  = g('f6-mass');
+
+    if (eft  && samp) elbow(eft.cx + ',' + eft.b + ' ' + eft.cx + ',' + (samp.t - 18) + ' ' + samp.cx + ',' + (samp.t - 18) + ' ' + samp.cx + ',' + (samp.t - 2), 'f6-ab');
+    if (flux && samp) elbow(flux.cx + ',' + flux.b + ' ' + flux.cx + ',' + (samp.t - 18) + ' ' + samp.cx + ',' + (samp.t - 18) + ' ' + samp.cx + ',' + (samp.t - 2), 'f6-ab');
+
+    if (samp && newt) arr(samp.cx, samp.b, newt.cx, newt.t - 2, 'f6-ag');
+
+    if (newt && conv) arr(newt.cx, newt.b, conv.cx, conv.t - 2, 'f6-ag');
+
+    if (conv && store) {
+      arr(conv.cx, conv.b, store.cx, store.t - 2, 'f6-ag');
+      txt(conv.cx + 6, conv.b + 12, 'yes', '#3A7D5A', 'italic');
+    }
+
+    if (conv && newt) {
+      var gut = conv.r + 36;
+      elbow(conv.r + ',' + conv.cy + ' ' + gut + ',' + conv.cy + ' ' + gut + ',' + (newt.cy + 6) + ' ' + (newt.r + 2) + ',' + (newt.cy + 6), 'f6-ag');
+      txt(conv.r + 4, conv.cy - 6, 'no', '#3A7D5A', 'italic');
+      txt(gut + 4, (conv.cy + newt.cy) / 2 + 4, 'iterate', '#888', 'italic');
+    }
+
+    if (store && mass) arr(store.cx, store.b, mass.cx, mass.t - 2, 'f6-ag');
+  }
+
+  function setupF6() {
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+      window.MathJax.startup.promise.then(function() {
+        requestAnimationFrame(function() { requestAnimationFrame(drawF6); });
+      });
+    } else {
+      requestAnimationFrame(drawF6);
+    }
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setupF6();
+  } else {
+    window.addEventListener('load', setupF6);
+  }
+
+  var _t;
+  window.addEventListener('resize', function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() {
+      requestAnimationFrame(function() { requestAnimationFrame(drawF6); });
+    }, 100);
+  });
+})();
+</script>
