@@ -83,12 +83,12 @@ set_precision(_default_prec)
 # ──────────────────────────────────────────────────────────────────────────
 
 # ── Data directory + vault setters ───────────────────────────────────────
-# These were moved to ``stringjax/__init__.py`` on 2026-04-30 alongside
-# the cy_io / vacuavault extraction.  Use ``stringjax.set_data_dir``,
-# ``stringjax.set_vault_dir``, and ``stringjax.set_vault_repo`` directly.
-# Env vars ``STRINGJAX_DATA_DIR`` / ``STRINGJAX_VAULT`` /
-# ``STRINGJAX_VAULT_REPO`` (formerly ``JAXVACUA_*``) override the
-# defaults; ``stringjax.data_dir`` is the global the I/O layer reads.
+# These were moved to ``stringforge/__init__.py`` on 2026-04-30 alongside
+# the cy_io / vacuavault extraction.  Use ``stringforge.set_data_dir``,
+# ``stringforge.set_vault_dir``, and ``stringforge.set_vault_repo`` directly.
+# Env vars ``STRINGFORGE_DATA_DIR`` / ``STRINGFORGE_VAULT`` /
+# ``STRINGFORGE_VAULT_REPO`` (formerly ``JAXVACUA_*``) override the
+# defaults; ``stringforge.data_dir`` is the global the I/O layer reads.
 # ──────────────────────────────────────────────────────────────────────────
 
 from .util import *

@@ -25,7 +25,7 @@ def pytest_collection_modifyitems(config, items):
     # Tests following the "__with_jit" naming convention pay the full
     # JAX tracing + XLA compile cost and are auto-routed to the slow
     # suite. Covers both plain "test_foo__with_jit" and parametrized
-    # "test_foo__with_jit[case-1]". See workflows/stringjax/jaxvacua_ci.md.
+    # "test_foo__with_jit[case-1]". See workflows/stringforge/jaxvacua_ci.md.
     for item in items:
         if item.name.endswith("__with_jit") or "__with_jit[" in item.name:
             item.add_marker(pytest.mark.slow)

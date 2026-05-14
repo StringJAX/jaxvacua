@@ -83,11 +83,11 @@ Table of contents
 .. note::
 
     The **database, vacua-vault, and cluster-parallelisation** tutorials
-    have moved to the StringJAX umbrella package, which now hosts the
-    shared catalog I/O and storage layer (see ``stringjax.cy_io``,
-    ``stringjax.lcs_database``, ``stringjax.vacua_writer``).
+    have moved to the StringForge umbrella package, which now hosts the
+    shared catalog I/O and storage layer (see ``stringforge.cy_io``,
+    ``stringforge.lcs_database``, ``stringforge.vacua_writer``).
     The tutorials live at
-    `<https://stringjax.readthedocs.io/en/latest/tutorials/database_and_infrastructure/>`_.
+    `<https://stringforge.readthedocs.io/en/latest/tutorials/database_and_infrastructure/>`_.
 
 .. toctree::
     :maxdepth: 1

@@ -126,7 +126,7 @@ $\kappa_{ijk}$, and the second Chern class $c_2(X)$ — which enter the Kähler 
 and the D3-brane tadpole — are stored in the package data.
 Kähler cone data are also included, enabling the construction of the prepotential.
 
-For details on loading CICY models — both via the local `model_ID` parameter and via the HuggingFace database hosted on `aschachner/cy-database` — see the database documentation in the stringjax umbrella package.
+For details on loading CICY models — both via the local `model_ID` parameter and via the HuggingFace database hosted on `aschachner/cy-database` — see the database documentation in the stringforge umbrella package.
 
 
 ## Calabi-Yau fourfolds

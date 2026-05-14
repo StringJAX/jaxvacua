@@ -1185,8 +1185,8 @@ class TestClusterRoundTrip(TestCase):
         results to the vault.  The vault should then contain a shard
         with the expected rows loadable via ``load_local_vacua``.
 
-        Skipped when ``stringjax`` is not installed — the database +
-        vault layer was extracted to the stringjax package on
+        Skipped when ``stringforge`` is not installed — the database +
+        vault layer was extracted to the stringforge package on
         2026-05-01, so this test only runs in environments that have
         the optional sibling installed.
         """
@@ -1197,10 +1197,10 @@ class TestClusterRoundTrip(TestCase):
         # warning and locks the skip semantics to "module not found"
         # only — any other exception during import is re-raised.
         LCSDatabase = pytest.importorskip(
-            "stringjax.lcs_database",
-            reason="stringjax is not installed; skipping vault round-trip "
-                   "test. Install stringjax via "
-                   "`pip install git+https://github.com/AndreasSchachner/stringjax`.",
+            "stringforge.lcs_database",
+            reason="stringforge is not installed; skipping vault round-trip "
+                   "test. Install stringforge via "
+                   "`pip install git+https://github.com/AndreasSchachner/stringforge`.",
             exc_type=ImportError,
         ).LCSDatabase
         with tempfile.TemporaryDirectory() as tmp:
@@ -1208,8 +1208,8 @@ class TestClusterRoundTrip(TestCase):
             # directory; otherwise it raises LookupError and the test
             # can't designate / load_local_vacua.  Restore on exit so
             # subsequent tests aren't affected.
-            prev_vault = os.environ.get("STRINGJAX_VAULT")
-            os.environ["STRINGJAX_VAULT"] = os.path.join(tmp, "vault")
+            prev_vault = os.environ.get("STRINGFORGE_VAULT")
+            os.environ["STRINGFORGE_VAULT"] = os.path.join(tmp, "vault")
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(
                 output_dir=run_dir, mode="enumerate", chunk_size=50_000,
@@ -1236,8 +1236,8 @@ class TestClusterRoundTrip(TestCase):
             self.assertIsNotNone(df)
             self.assertGreater(len(df), 0,
                                "designate=True did not promote any rows to the vault")
-            # Restore the prior STRINGJAX_VAULT (if any).
+            # Restore the prior STRINGFORGE_VAULT (if any).
             if prev_vault is None:
-                os.environ.pop("STRINGJAX_VAULT", None)
+                os.environ.pop("STRINGFORGE_VAULT", None)
             else:
-                os.environ["STRINGJAX_VAULT"] = prev_vault
+                os.environ["STRINGFORGE_VAULT"] = prev_vault

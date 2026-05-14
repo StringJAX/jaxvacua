@@ -51,7 +51,7 @@ onto the section captions of [this overview tutorial](../notebooks/01_basics/2_j
         </div>
         <div class="bx lb" id="f1-src-hf">
           <div class="t">Hugging Face</div>
-          <div class="d">stringjax cy-database<br><code>aschachner/cy-database</code></div>
+          <div class="d">stringforge cy-database<br><code>aschachner/cy-database</code></div>
         </div>
       </div>
 
@@ -241,7 +241,7 @@ onto the section captions of [this overview tutorial](../notebooks/01_basics/2_j
         Flux vacua $(z^*,\, \tau^*,\, f,\, h)$,&nbsp;
         residual,&nbsp; $|W_0|$,&nbsp; $g_s$,&nbsp; tadpole,&nbsp; mass spectrum,&nbsp; EFT validity checks
         &nbsp;&middot;&nbsp;
-        persisted to <code>vacua_vault</code> (stringjax).
+        persisted to <code>vacua_vault</code> (stringforge).
       </div>
     </div>
 
@@ -437,7 +437,7 @@ The four stages are:
 
 1. **Geometry input** — load topological data through any of four
    on-ramps (CYTools polytope, the
-   [stringjax cy-database](https://huggingface.co/datasets/aschachner/cy-database),
+   [stringforge cy-database](https://huggingface.co/datasets/aschachner/cy-database),
    a local CICY identifier, or an explicit dictionary). All four
    feed an `lcs_tree` — JAXVacua's data interface for a
    Calabi–Yau threefold.
@@ -451,7 +451,7 @@ The four stages are:
    `FluxVacuaFinder`'s Newton solver.
 4. **Analyse and store** — extract observables ($\lvert W_0
    \rvert$, $g_s$, tadpole, mass spectrum) and persist them to a
-   local or community vacua vault via the `stringjax.vacua_writer`
+   local or community vacua vault via the `stringforge.vacua_writer`
    layer. The optional `Freezer` branch produces a reduced EFT
    when heavy moduli are integrated out.
 
