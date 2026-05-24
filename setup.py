@@ -1,3 +1,20 @@
+"""Packaging metadata for the JAXVacua distribution.
+
+Purpose
+-------
+Declare the package name, version, project metadata and installation
+dependencies used by setuptools.
+
+Main public API
+---------------
+- ``setup(...)`` invocation for building and installing ``jaxvacua``.
+
+Design notes
+------------
+Runtime package behaviour lives in ``jaxvacua``.  Keep this file focused on
+packaging metadata and avoid importing heavy project modules here.
+"""
+
 from setuptools import setup
 from pathlib import Path
 
@@ -15,43 +32,21 @@ setup(
     python_requires='>=3.12',
     install_requires=[
         'numpy',
+        'scipy',
         'jax',
         'jaxlib',
         'optax',
-        'matplotlib',
-        'seaborn',
-        'h5py',
         'pandas',
         'tqdm',
-        'sympy',
         'python-flint',
         'gurobipy',
-        'numba',
-        'scipy',
-        'cvxopt',
-        'python-flint',
-        'ppl',
-        'joblib',
-        'tqdm',
-        'requests',
-        'osqp',
-        'ortools',
-        'mosek',
-        'triangulumancer',
-        'pplpy',
-        'pypalp',
-        'qpsolvers',
-        'cygv',
-        'regfans',
-        'latticepts',
-        'jupyterlab',
-        'matplotlib',
-        'plotly',
-        'ipywidgets',
-        'anywidget',
         'cytools',
-        'jaxpolylog>=0.1.0',
+        'jaxpolylog>=0.3.0',
     ],
+    extras_require={
+        'notebooks': ['jupyterlab', 'ipywidgets', 'anywidget'],
+        'viz': ['matplotlib', 'seaborn', 'plotly'],
+    },
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
         'Programming Language :: Python :: 3',

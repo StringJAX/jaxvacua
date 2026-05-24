@@ -12,6 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for reduced-EFT freezer interfaces.
+
+Purpose
+-------
+Validate the abstract ``Freezer`` contract, the ``ConifoldFreezer``
+implementation and integration with coniLCS model fixtures when available.
+
+Main public API
+---------------
+- ``TestFreezerAbstract``: interface and abstract-class behaviour.
+- ``TestConifoldFreezer``: light/heavy index handling and reduced-EFT
+  method checks.
+- ``TestConifoldFreezerIntegration``: optional end-to-end checks on loaded
+  conifold models.
+
+Design notes
+------------
+Integration tests degrade gracefully when optional conifold fixtures are not
+available.
+"""
+
 import sys, os, warnings, unittest
 import jax
 import jax.numpy as jnp

@@ -76,6 +76,37 @@ jobs:
           JAX_ENABLE_X64: "1"
         run: pytest tests/ -v -m "not slow"
 
+  docs-smoke:
+    name: Docs smoke (sphinx-build)
+    # Catches broken toctree entries, dangling cross-refs, stale notebook
+    # paths after the 2026-05 tutorial refactor. Does NOT execute notebooks
+    # (too slow on GHA — execution is a separate concern).
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install docs build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r documentation/requirements.txt
+          pip install "${{ env.JAXPOLYLOG_PIN }}"
+          pip install platformdirs
+          pip install -e .
+
+      - name: Build HTML (warnings allowed)
+        run: |
+          sphinx-build -b html -E -q -j 1 --keep-going \
+            -d /tmp/sphinx-doctree \
+            documentation/source /tmp/sphinx-out
+
   full:
     name: Full (pytest tests/)
     # Weekly cron + manual dispatch only. Not on push/PR.

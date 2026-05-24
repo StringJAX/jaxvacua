@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for the canonical flux-vacuum finder.
+
+Purpose
+-------
+Validate ``FluxVacuaFinder`` construction, inherited EFT behaviour, SUSY
+vacuum solving, sampling and post-processing helpers.
+
+Main public API
+---------------
+- ``TestFluxVacuaFinder``: broad checks for finder methods, solver outputs,
+  deduplication and physicality workflows.
+
+Design notes
+------------
+The finder is tested as an ``FluxEFT`` subclass, so these tests also guard the
+absence of a separate wrapped model object.
+"""
+
 import sys, os, warnings
 import jax
 import jax.numpy as jnp

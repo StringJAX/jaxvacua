@@ -12,6 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for the flux-bounding workflow.
+
+Purpose
+-------
+Validate the ``bounded_fluxes`` algorithm, local/global bounds, flux
+candidate processing and cluster round-trip helpers.
+
+Main public API
+---------------
+- ``TestFluxBounding``: checks construction, bound evaluation, candidate
+  enumeration and filtering behaviour.
+- ``TestClusterRoundTrip``: checks export/import behaviour for cluster search
+  chunks.
+
+Design notes
+------------
+Tests keep the geometry small so the performance-sensitive code paths are
+covered without requiring large enumeration jobs.
+"""
+
 import sys, os, warnings
 import jax
 import numpy as np

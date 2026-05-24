@@ -12,21 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ------------------------------------------------------------------------------
-# Tests for the conifold bulk-EFT block in jaxvacua/conifold_utils.py.
-#
-# Covers (with conifold_basis=True):
-#   - `_ConifoldGated` conditional-loading semantics (test #8 from plan)
-#   - `conifold_fluxes` round-trip (#4)
-#   - `W_log_coeff(mode="manual") ≡ W_log_coeff(mode="autodiff")` (#1, primary)
-#   - `compute_zcf` dispatcher: mode + apply_correction + invalid mode (#2, #5)
-#   - Kähler correction composition (#3)
-#   - `zcf_handling` shape + null-mode (#6)
-#   - `DWbulk_x` slice consistency (#7)
-#   - per-period (`F_coniLCS_exp_per`) vs per-modulus (`F_coniLCS_exp`) parity (#10)
-#
-# `conifold_basis=False` parity is exercised separately in Phase 1.5.
-# ------------------------------------------------------------------------------
+"""Tests for conifold bulk-EFT utilities.
+
+Purpose
+-------
+Validate the conifold-specific bulk-EFT block, including gated method loading,
+flux splitting, log-coefficient calculations and conifold-modulus handling.
+
+Main public API
+---------------
+- ``TestConditionalLoading``: checks coniLCS-only method exposure.
+- ``TestConifoldFluxes``: checks conifold flux splitting and round-trips.
+- ``TestWLogCoeff`` and ``TestComputeZcfDispatcher``: compare log-coefficient
+  routes and dispatcher options.
+- ``TestKaehlerCorrectionComposition``, ``TestZcfHandling``,
+  ``TestDWxLight`` and ``TestPerPeriodVsPerModulus``: guard reduced-EFT and
+  prepotential consistency.
+
+Design notes
+------------
+The primary fixture uses ``conifold_basis=True``.  Non-canonical-basis parity
+is covered by the dedicated coniLCS regression tests.
+"""
 
 import os
 import sys

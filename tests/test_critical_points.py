@@ -12,9 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ------------------------------------------------------------------------------
-# Tests for critical_points.py — non-SUSY vacuum finding.
-# ------------------------------------------------------------------------------
+"""Tests for non-SUSY critical-point search workflows.
+
+Purpose
+-------
+Validate the non-SUSY ``dV = 0`` workflow now hosted on
+``FluxVacuaFinder`` after the legacy ``CriticalPointFinder`` merge.
+
+Main public API
+---------------
+- ``TestCriticalPointFinder``: regression tests for absorbed candidate
+  generation, classification, Optax/SciPy solver paths, critical-point
+  sampling and method-level search parameters.
+
+Design notes
+------------
+The tests intentionally refer to the historical critical-point workflow while
+asserting that the implementation now lives on ``FluxVacuaFinder``.
+"""
 
 import sys, os, warnings
 import jax
@@ -28,7 +43,6 @@ jax.config.update("jax_enable_x64", True)
 
 sys.path.append("./../")
 import jaxvacua
-from jaxvacua.critical_points import CriticalPointFinder
 from jaxvacua.util import PRNGSequence
 
 warnings.filterwarnings("ignore")
@@ -41,8 +55,10 @@ warnings.filterwarnings("ignore")
 class TestCriticalPointFinder(TestCase):
     r"""
     **Description:**
-    Test suite for :class:`CriticalPointFinder`, which finds critical points
-    of the scalar potential :math:`V` (both SUSY and non-SUSY).
+    Test suite for the non-SUSY critical-point sampling workflow on
+    :class:`FluxVacuaFinder` — :func:`sample_critical_points` and its
+    companion helpers (:func:`_generate_flux_candidates`,
+    :func:`_solve_dV_optax_batch`, :func:`classify_solution`).
 
     .. admonition:: Background
         :class: dropdown
@@ -59,13 +75,13 @@ class TestCriticalPointFinder(TestCase):
 
         cls.h12 = 2
         # Use maximum_degree=5 for instanton corrections (needed for Newton convergence)
-        cls.model = jaxvacua.FluxVacuaFinder(
-            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=5
+        cls.finder = jaxvacua.FluxVacuaFinder(
+            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=5,
         )
-        cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
+        cls.finder.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
 
         cls.sampler = jaxvacua.data_sampler(
-            cls.model,
+            cls.finder,
             moduli_bounds=(2., 5.),
             dilaton_bounds=(math.sqrt(3) / 2, 10.),
             axion_bounds=(-0.5, 0.5),
@@ -76,8 +92,8 @@ class TestCriticalPointFinder(TestCase):
         )
 
         cls.Nmax = 200
-        cls.n_fl = cls.model.n_fluxes
-        cls.dim_H3 = cls.model.dimension_H3
+        cls.n_fl = cls.finder.n_fluxes
+        cls.dim_H3 = cls.finder.dimension_H3
 
         # Class-level PRNGSequence threaded through every sampler call below
         # so test outcomes are independent of which earlier tests advanced the
@@ -85,33 +101,47 @@ class TestCriticalPointFinder(TestCase):
         cls.rng_key = PRNGSequence(42)
 
     # ------------------------------------------------------------------
-    # Constructor
+    # Construction / API surface
     # ------------------------------------------------------------------
 
-    def test_constructor(self):
+    def test_finder_exposes_critical_points_api(self):
         r"""
         **Description:**
-        Verify that ``CriticalPointFinder`` initialises correctly with
-        the expected attributes.
+        Verify that the merged :class:`FluxVacuaFinder` exposes the
+        critical-points workflow surface (``sample_critical_points``,
+        ``_generate_flux_candidates``, ``classify_solution``,
+        ``_solve_dV_optax_batch``, ``calibrate_priors``).
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        # Check stored attributes
-        self.assertEqual(finder.Nmax, self.Nmax)
-        self.assertEqual(finder.n_fluxes, self.n_fl)
-        self.assertEqual(finder.dimension_H3, self.dim_H3)
-        self.assertTrue(finder.noscale)
+        for name in ("sample_critical_points",
+                     "_generate_flux_candidates",
+                     "classify_solution",
+                     "_solve_dV_optax_batch",
+                     "calibrate_priors",
+                     "_estimate_sigmas",
+                     "_precompute_M_eigensystem"):
+            self.assertTrue(callable(getattr(self.finder, name, None)),
+                            msg=f"FluxVacuaFinder is missing absorbed method: {name}")
 
-    def test_constructor_noscale_false(self):
+        # Sanity-check the inherited FluxEFT attributes the workflow relies on
+        self.assertEqual(self.finder.n_fluxes,     self.n_fl)
+        self.assertEqual(self.finder.dimension_H3, self.dim_H3)
+
+    def test_sample_critical_points_accepts_noscale_kwarg(self):
         r"""
         **Description:**
-        Verify that ``noscale=False`` is stored correctly.
+        ``noscale`` is now a method-level kwarg on ``sample_critical_points``
+        (was ``CriticalPointFinder`` instance state).  Smoke-test that
+        ``noscale=False`` is accepted without raising.
         """
-        finder = CriticalPointFinder(self.model, self.sampler,
-                                     Nmax=self.Nmax, noscale=False)
-        self.assertFalse(finder.noscale)
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=1, n_batch=5, max_batches=1,
+            isd_mode="ISD-", solver="scipy", noscale=False,
+            sampler=self.sampler, verbose=False,
+        )
+        self.assertIsInstance(results, list)
 
     # ------------------------------------------------------------------
-    # Flux candidate generation
+    # Flux candidate generation (C3)
     # ------------------------------------------------------------------
 
     def test_generate_flux_candidates_F_mode(self):
@@ -120,14 +150,15 @@ class TestCriticalPointFinder(TestCase):
         Verify that ``_generate_flux_candidates`` with mode ``"F"`` produces
         valid flux candidates with correct shapes.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        
         N = 50
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
-        
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, idx = finder._generate_flux_candidates(
-            50, mod_pts, tau_pts, isd_mode="F")
+        x0, fluxes, idx = self.finder._generate_flux_candidates(
+            50, mod_pts, tau_pts, isd_mode="F",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         if len(x0) > 0:
             # x0 should have shape (N, 2*(h12+1))
@@ -141,12 +172,15 @@ class TestCriticalPointFinder(TestCase):
         Verify that mode ``"ISD-"`` produces valid candidates.
         ISD- takes [f₁|h₁] of length 2*dim_H3 as input and computes [f₂|h₂].
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
         N = 50
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, idx = finder._generate_flux_candidates(
-            50, mod_pts, tau_pts, isd_mode="ISD-")
+        x0, fluxes, idx = self.finder._generate_flux_candidates(
+            50, mod_pts, tau_pts, isd_mode="ISD-",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         # ISD- should produce many valid candidates at Nmax=200
         self.assertGreater(len(x0), 0,
@@ -157,61 +191,86 @@ class TestCriticalPointFinder(TestCase):
         **Description:**
         Verify that an invalid mode raises ``ValueError``.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
         N = 10
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
         with self.assertRaises(ValueError):
-            finder._generate_flux_candidates(10, mod_pts, tau_pts, isd_mode="INVALID")
+            self.finder._generate_flux_candidates(
+                10, mod_pts, tau_pts, isd_mode="INVALID",
+                Nmax=self.Nmax, sampler=self.sampler,
+            )
 
     # ------------------------------------------------------------------
-    # Newton solver
+    # Newton solver (FVF's `newton_method_flux_vacua` — replaces the
+    # retired CPF `_solve_dV_newton_single`)
     # ------------------------------------------------------------------
 
     @pytest.mark.slow
     def test_newton_solver_converges(self):
         r"""
         **Description:**
-        Verify that the Newton solver finds at least one critical point
-        from ISD- flux candidates at Nmax=200.
-
-        A critical point satisfies :math:`|\partial_\alpha V| < \text{tol}`.
+        Verify that the FVF Newton solver runs end-to-end on an ISD-
+        candidate at Nmax=200 and returns a real residual + same-shape x.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        
-        
         N = 20
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, _ = finder._generate_flux_candidates(
-            20, mod_pts, tau_pts, isd_mode="ISD-")
+        x0, fluxes, _ = self.finder._generate_flux_candidates(
+            20, mod_pts, tau_pts, isd_mode="ISD-",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         if len(x0) > 0:
-            # Try first candidate
-            x_sol, res, conv = finder._solve_dV_newton_single(
-                x0[0], fluxes[0], tol=1e-8, max_iters=300)
-            # Should converge for at least some candidates
-            # (not guaranteed for every single one)
+            # FVF Newton takes (moduli, tau) — derive from x0 via
+            # _convert_real_to_complex, then convert back to real coords
+            # for shape-equality assertion.
+            x0_j = jnp.asarray(x0[0])
+            mod0, _, tau0, _ = self.finder._convert_real_to_complex(x0_j)
+            mod_sol, tau_sol, res_j = self.finder.newton_method_flux_vacua(
+                mod0, tau0, jnp.asarray(fluxes[0]), mode=None,
+                step_size_Newton=1.0, tol=1e-8, max_iters=300,
+                solver_mode="real",
+            )
+            x_sol = np.asarray(self.finder._convert_complex_to_real(
+                mod_sol, jnp.conj(mod_sol), tau_sol, jnp.conj(tau_sol),
+            ))
+            res = float(jnp.abs(res_j))
             self.assertIsInstance(res, float)
             self.assertEqual(x_sol.shape, x0[0].shape)
 
     def test_newton_solver_residual_format(self):
         r"""
         **Description:**
-        Verify that the Newton solver returns the correct output format:
-        ``(x_solution, residual, converged)`` with correct types.
+        Verify the output format of the FVF Newton solver:
+        ``(moduli, tau, res)`` 3-tuple, with ``res`` convertible to a
+        Python float and ``x`` (after back-conversion) of the right shape.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        
         N = 5
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, _ = finder._generate_flux_candidates(
-            5, mod_pts, tau_pts, isd_mode="F")
+        x0, fluxes, _ = self.finder._generate_flux_candidates(
+            5, mod_pts, tau_pts, isd_mode="F",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         if len(x0) > 0:
-            x_sol, res, conv = finder._solve_dV_newton_single(
-                x0[0], fluxes[0], max_iters=10)
+            x0_j = jnp.asarray(x0[0])
+            mod0, _, tau0, _ = self.finder._convert_real_to_complex(x0_j)
+            mod_sol, tau_sol, res_j = self.finder.newton_method_flux_vacua(
+                mod0, tau0, jnp.asarray(fluxes[0]), mode=None,
+                max_iters=10, solver_mode="real",
+            )
+            x_sol = np.asarray(self.finder._convert_complex_to_real(
+                mod_sol, jnp.conj(mod_sol), tau_sol, jnp.conj(tau_sol),
+            ))
+            res = float(jnp.abs(res_j))
+            conv = bool(res < 1e-10)
             # x_sol is numpy array
             self.assertIsInstance(x_sol, np.ndarray)
             # residual is float
@@ -220,22 +279,20 @@ class TestCriticalPointFinder(TestCase):
             self.assertIsInstance(conv, bool)
 
     # ------------------------------------------------------------------
-    # Classification
+    # Classification (A2)
     # ------------------------------------------------------------------
 
     @pytest.mark.slow
     def test_classify_solution_keys(self):
         r"""
         **Description:**
-        Verify that ``_classify_solution`` returns a dict with all expected keys.
+        Verify that ``classify_solution`` returns a dict with all expected keys.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-
         # Use a random point (not necessarily a critical point)
         x = np.array([0.1, 3.0, -0.2, 2.5, -0.3, 5.0])
         fl = np.array([1., 0., -2., 0., 3., -1., 2., 1., 0., -1., 1., 0.])
 
-        info = finder._classify_solution(x, fl)
+        info = self.finder.classify_solution(x, fl)
 
         # Check all expected keys
         for key in ['V', '|DW|', 'eigenvalues', 'is_susy', 'is_minimum', 'Nflux']:
@@ -248,7 +305,7 @@ class TestCriticalPointFinder(TestCase):
         self.assertIsInstance(info['is_minimum'], bool)
 
     # ------------------------------------------------------------------
-    # Main entry point: sample_critical_points
+    # Main entry point: sample_critical_points (C8)
     # ------------------------------------------------------------------
 
     def test_sample_critical_points_newton(self):
@@ -257,10 +314,11 @@ class TestCriticalPointFinder(TestCase):
         Integration test: ``sample_critical_points`` with Newton solver
         should find at least one critical point from a small batch.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        results = finder.sample_critical_points(
-            n_target=5, n_batch=50, max_batches=2,
-            isd_mode="ISD-", solver="newton", verbose=False)
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=2,
+            isd_mode="ISD-", solver="newton",
+            sampler=self.sampler, verbose=False,
+        )
 
         # Should find at least some critical points
         self.assertIsInstance(results, list)
@@ -281,10 +339,11 @@ class TestCriticalPointFinder(TestCase):
         **Description:**
         Integration test: ``sample_critical_points`` with scipy solver.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        results = finder.sample_critical_points(
-            n_target=5, n_batch=50, max_batches=2,
-            isd_mode="ISD-", solver="scipy", verbose=False)
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=2,
+            isd_mode="ISD-", solver="scipy",
+            sampler=self.sampler, verbose=False,
+        )
 
         self.assertIsInstance(results, list)
 
@@ -295,11 +354,11 @@ class TestCriticalPointFinder(TestCase):
         Verify that at least some found critical points are non-SUSY
         (|DW| > threshold) when using ISD- mode with noscale=True.
         """
-        finder = CriticalPointFinder(self.model, self.sampler,
-                                     Nmax=self.Nmax, noscale=True)
-        results = finder.sample_critical_points(
-            n_target=10, n_batch=100, max_batches=3,
-            isd_mode="ISD-", solver="scipy", verbose=False)
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=10, n_batch=100, max_batches=3,
+            isd_mode="ISD-", solver="scipy", noscale=True,
+            sampler=self.sampler, verbose=False,
+        )
 
         if len(results) > 0:
             # At least some should be non-SUSY (from benchmarks: ~78%)
@@ -316,11 +375,11 @@ class TestCriticalPointFinder(TestCase):
         Verify that ``classify=False`` skips Hessian computation.
         Results should NOT have ``eigenvalues`` or ``is_minimum`` keys.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        results = finder.sample_critical_points(
-            n_target=3, n_batch=30, max_batches=2,
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=3, n_batch=30, max_batches=2,
             isd_mode="ISD-", solver="scipy",
-            classify=False, verbose=False)
+            classify=False, sampler=self.sampler, verbose=False,
+        )
 
         if len(results) > 0:
             r = results[0]
@@ -336,14 +395,15 @@ class TestCriticalPointFinder(TestCase):
         **Description:**
         Verify that an invalid solver name raises ``ValueError``.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
         with self.assertRaises(ValueError):
-            finder.sample_critical_points(
-                n_target=1, n_batch=10, max_batches=1,
-                solver="invalid_solver", verbose=False)
+            self.finder.sample_critical_points(
+                Nmax=self.Nmax, n_target=1, n_batch=10, max_batches=1,
+                solver="invalid_solver",
+                sampler=self.sampler, verbose=False,
+            )
 
     # ------------------------------------------------------------------
-    # Vectorised optax solver
+    # Vectorised optax solver (C6)
     # ------------------------------------------------------------------
 
     @pytest.mark.slow
@@ -353,19 +413,21 @@ class TestCriticalPointFinder(TestCase):
         Verify that ``_solve_dV_optax_batch`` returns arrays with correct
         shapes: ``(N, 2*(h12+1))``, ``(N,)``, ``(N,)``.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        
         N = 20
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
-        
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, _ = finder._generate_flux_candidates(
-            20, mod_pts, tau_pts, isd_mode="ISD-")
+        x0, fluxes, _ = self.finder._generate_flux_candidates(
+            20, mod_pts, tau_pts, isd_mode="ISD-",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         if len(x0) > 0:
             n = min(5, len(x0))
-            x_out, res_out, conv_out = finder._solve_dV_optax_batch(
-                x0[:n], fluxes[:n], n_steps=100, tol=1e-8)
+            x_out, res_out, conv_out = self.finder._solve_dV_optax_batch(
+                x0[:n], fluxes[:n], n_steps=100, tol=1e-8,
+            )
             self.assertEqual(x_out.shape, (n, 2 * (self.h12 + 1)))
             self.assertEqual(res_out.shape, (n,))
             self.assertEqual(conv_out.shape, (n,))
@@ -378,31 +440,36 @@ class TestCriticalPointFinder(TestCase):
         Verify that the vectorised Adam solver reduces residuals compared
         to the starting points (more steps → lower residuals).
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
         N = 30
-        mod_pts, tau_pts = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False, rns_key=self.rng_key)
+        mod_pts, tau_pts = self.sampler.initial_guesses(
+            N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
+        )
 
-        x0, fluxes, _ = finder._generate_flux_candidates(
-            30, mod_pts, tau_pts, isd_mode="ISD-")
+        x0, fluxes, _ = self.finder._generate_flux_candidates(
+            30, mod_pts, tau_pts, isd_mode="ISD-",
+            Nmax=self.Nmax, sampler=self.sampler,
+        )
 
         if len(x0) >= 3:
             n = min(5, len(x0))
-            x_final_100, res_100, _ = finder._solve_dV_optax_batch(
-                x0[:n], fluxes[:n], n_steps=100, tol=1e-8)
-            x_final_1000, res_1000, _ = finder._solve_dV_optax_batch(
-                x0[:n], fluxes[:n], n_steps=1000, tol=1e-8)
+            x_final_100, res_100, _ = self.finder._solve_dV_optax_batch(
+                x0[:n], fluxes[:n], n_steps=100, tol=1e-8,
+            )
+            x_final_1000, res_1000, _ = self.finder._solve_dV_optax_batch(
+                x0[:n], fluxes[:n], n_steps=1000, tol=1e-8,
+            )
 
             # Only validate residuals at points that are still inside the
             # Kähler cone after the optax scan AND pass `filter_moduli`
-            # (instanton convergence + Kähler-metric positivity). The optax
+            # (instanton convergence + Kähler-metric positivity).  The optax
             # solver is unconstrained and can wander to points with
-            # `Im(z) < 0` or otherwise singular geometry, where ``dV_x`` may
-            # legitimately produce NaN; such points are not physically
+            # ``Im(z) < 0`` or otherwise singular geometry, where ``dV_x``
+            # may legitimately produce NaN; such points are not physically
             # meaningful so should not poison the median comparison.
             def _valid_mask(x_finals):
                 mask = []
                 for xf in x_finals:
-                    z, _, tau, _ = self.model._convert_real_to_complex(jnp.asarray(xf))
+                    z, _, tau, _ = self.finder._convert_real_to_complex(jnp.asarray(xf))
                     in_cone = bool(np.all(
                         np.asarray(self.sampler._hyperplanes @ z.imag) > 0))
                     if not in_cone:
@@ -432,11 +499,11 @@ class TestCriticalPointFinder(TestCase):
         Integration test: ``sample_critical_points`` with vectorised Adam
         solver (``solver="adam_v"``) runs without error.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        results = finder.sample_critical_points(
-            n_target=5, n_batch=50, max_batches=1,
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=1,
             isd_mode="ISD-", solver="adam_v",
-            optax_steps=500, verbose=False)
+            optax_steps=500, sampler=self.sampler, verbose=False,
+        )
         self.assertIsInstance(results, list)
 
     @pytest.mark.slow
@@ -447,11 +514,11 @@ class TestCriticalPointFinder(TestCase):
         (vectorised Adam warm-start + Newton refinement) runs without error
         and can find critical points.
         """
-        finder = CriticalPointFinder(self.model, self.sampler, Nmax=self.Nmax)
-        results = finder.sample_critical_points(
-            n_target=5, n_batch=100, max_batches=2,
+        results = self.finder.sample_critical_points(
+            Nmax=self.Nmax, n_target=5, n_batch=100, max_batches=2,
             isd_mode="ISD-", solver="hybrid",
-            optax_steps=2000, verbose=False)
+            optax_steps=2000, sampler=self.sampler, verbose=False,
+        )
         self.assertIsInstance(results, list)
         # Hybrid should be able to find at least some critical points
         if len(results) > 0:

@@ -18,7 +18,7 @@ First public release.
 - **Conifold utilities** (`conifold_utils.py`): conifold-sector tools for coni-LCS models.
 - **Freezer** (`freezer.py`): reduced effective theories by integrating out heavy moduli; abstract base class + conifold implementation.
 - **Flux bounding** (`flux_bounding.py`): systematic flux enumeration within a bounded region of moduli space.
-- **One-modulus models** (`one_modulus_models.py`): self-contained hypergeometric one-modulus Calabi–Yau families.
-- **Database** (`database.py`): CYDatabase / TDFDatabase / CICYDatabase classes for loading Calabi–Yau data from HuggingFace (`aschachner/cy-database`) or local parquet shards.
+- **Hypergeometric models** (`hypergeometric_models.py`): self-contained closed-form one-modulus Calabi–Yau families.
+- **StringForge database integration**: the CY database and vacua-vault stack now lives in the sibling `stringforge` package, while JAXVacua consumes its loaded `lcs_tree` / `FluxVacuaFinder` models.
 - **CYTools interface** (`cytools_interface.py`): construction of topological data from CYTools polytope triangulations.
 - **`lcs_tree` pytree** (`lcs.py`): JAX-registered data container for all topological and geometric input data.

@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Shared test utilities for JAXVacua.
+
+Purpose
+-------
+Provide a common ``TestCase`` base class with deterministic JAX key handling
+and array assertions used throughout the test suite.
+
+Main public API
+---------------
+- ``TestCase``: extends ``chex.TestCase`` with PRNG-key helpers and
+  ``assertAllEqual``, ``assertAllClose`` and ``assertAllTrue``.
+
+Design notes
+------------
+The helpers keep individual tests concise while preserving JAX-friendly array
+comparisons.
+"""
+
 import chex
 import jax.random
 import numpy as np

@@ -12,6 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for one-modulus hypergeometric model support.
+
+Purpose
+-------
+Validate the hypergeometric model registry, prepotential builders and basic
+Newton-solver compatibility for special one-modulus limits.
+
+Main public API
+---------------
+- ``TestHypergeometricModels``: registry and construction checks.
+- ``TestHypergeometricPrepotentials``: LCS, K-point and C-point prepotential
+  behaviour.
+- ``TestNewtonSolveSmokeLCS``: smoke tests for solver compatibility.
+
+Design notes
+------------
+The tests use compact one-modulus fixtures to catch convention drift in the
+closed-form model data.
+"""
+
 import sys, os, warnings
 import jax
 import jax.numpy as jnp

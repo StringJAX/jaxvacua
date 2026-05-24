@@ -5,34 +5,32 @@
 # You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
-"""End-to-end test of the ``limit="coniLCS"`` flux-vacuum-finder pipeline.
+"""End-to-end tests for the coniLCS flux-vacuum pipeline.
 
-Mirrors the worked example in
+Purpose
+-------
+Validate the ``limit="coniLCS"`` workflow against the worked notebook fixture,
+from model construction through flux plumbing, root solving, conifold-modulus
+reconstruction and freezer integration.
+
+Main public API
+---------------
+- ``TestConiLCSModelConstruction``: checks model, basis-change and conifold
+  fixture construction.
+- ``TestConiLCSFluxPlumbing`` and ``TestConiLCSScipyRoot``: check PFV/flux
+  round-trips and root-solver convergence.
+- ``TestConiLCSZcfSolver`` and ``TestConiLCSFreezerInterface``: check
+  analytic ``z_cf`` handling and reduced-EFT consistency.
+- ``TestConiLCSMultiVacuumScan`` and
+  ``TestConiLCSVsConiLCSSeriesAgreement``: guard multi-point and cross-limit
+  regressions.
+
+Design notes
+------------
+The fixture mirrors
 ``documentation/source/notebooks/04_geometry_and_limits/13_coniLCS.ipynb``.
-The notebook fixture is a small h12=2 (CYTools h11=2) Calabi-Yau with a
-flop-conifold curve in the dual triangulation, exercising:
-
-  * model construction with ``limit="coniLCS"``,
-  * ``conifold_curve`` + ``basis_change`` + ``ncf=2`` plumbing,
-  * the LCS-side prepotential ``F_LCS_per`` evaluated through the polylog
-    ``approx="patch"`` mode (the only path used for ``limit="coniLCS"``),
-  * the PFV/seed → flux → moduli round-trip (``pfv_to_flux``,
-    ``pfv_to_moduli``, ``flux_to_pfv``),
-  * scipy.optimize.root convergence to a flux vacuum (DW = 0),
-  * the analytic z_cf solver in all three modes
-    (``manual`` / ``autodiff`` / ``pfv``) and the ``apply_correction``
-    toggle on the leading mode,
-  * the freezer-side equivalence (``ConifoldFreezer.solve_heavy``,
-    ``DW_x_light``),
-  * a small multi-vacuum scan (5 PFV pairs from the notebook) to guard
-    against single-point coincidence,
-  * cross-limit consistency: the ``coniLCS_series`` model on the same data
-    must agree with ``coniLCS`` to its truncation tolerance.
-
-This test is the regression net for *anything* that affects the coniLCS
-limit, including jaxpolylog API changes (the 0.1 → 0.2 transition was
-detected via this fixture: ``approx="patch"`` returned different values
-that broke the optimisation).  Pin a known-good ``jaxpolylog`` in CI.
+It also protects against jaxpolylog API or convention changes that alter the
+``approx="patch"`` path used by coniLCS prepotentials.
 """
 from __future__ import annotations
 

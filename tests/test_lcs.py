@@ -12,6 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for ``lcs_tree`` model-data containers.
+
+Purpose
+-------
+Validate construction, pytree behaviour and data normalisation for
+large-complex-structure model data.
+
+Main public API
+---------------
+- ``_make_h12_2_tree``: helper fixture for a minimal two-modulus tree.
+- ``TestLcsTree``: checks stored topology, invariants, basis data and pytree
+  round-tripping.
+
+Design notes
+------------
+Synthetic fixtures keep these tests independent of CYTools and external model
+files.
+"""
+
 import sys, os, warnings
 import jax
 import jax.numpy as jnp

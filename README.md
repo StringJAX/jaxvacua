@@ -6,7 +6,7 @@
 </p>
 
 
-**JAXVacua** is a Python library designed for the systematic exploration of flux vacua in string theory through the numerical analysis of supergravity scalar potentials. It leverages automatic differentiation and just-in-time compilation tools provided by the [JAX library](https://github.com/google/jax) to efficiently locate and analyze critical points of highly non-linear potentials. The package is intended to be accessible both as a high-level user-facing library and as a flexible collection of modular components that can be reused or extended for custom workflows. In particular, JAXVacua is well suited for the study of flux compactifications in string theory, where large parameter spaces and intricate scalar potentials make traditional analytic approaches challenging.
+**JAXVacua** is a Python library designed for the systematic exploration of flux vacua in string theory through the numerical analysis of supergravity scalar potentials. It leverages automatic differentiation and just-in-time compilation tools provided by the [JAX library](https://github.com/google/jax) to efficiently locate and analyse critical points of highly non-linear potentials. The package is intended to be accessible both as a high-level user-facing library and as a flexible collection of modular components that can be reused or extended for custom workflows. In particular, JAXVacua is well suited for the study of flux compactifications in string theory, where large parameter spaces and intricate scalar potentials make traditional analytic approaches challenging.
 
 
 The introduction gives a summary of the physical and mathematical context and aim of the library, which serves to give a broad overview to the structure and code of the library. The tutorials show how to use the library on a code level and give several examples.
@@ -82,7 +82,7 @@ model = db.load_model(ks_id=int(df.iloc[0]["ks_id"]),
                       include_gv=True, include_conifolds=True)
 ```
 
-For offline / HPC use, pass `offline=True`; cached shards are then served locally. Flux-vacuum solutions can be stored in a local vacua vault and, optionally, pushed to the community [`vacua_vault`](https://huggingface.co/datasets/aschachner/vacua_vault) repository. See the tutorials under [`05_database_and_infrastructure/`](documentation/source/notebooks/05_database_and_infrastructure/) for a full walkthrough.
+For offline / HPC use, pass `offline=True`; cached shards are then served locally. Flux-vacuum solutions can be stored in a local vacua vault and, optionally, pushed to the community [`vacua_vault`](https://huggingface.co/datasets/aschachner/vacua_vault) repository. The database stack, the `vacua_vault` subpackage, and the corresponding tutorials live in the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge) package — see `stringforge/documentation/source/tutorials/database_and_infrastructure/` for the full walkthrough.
 
 
 ## Repository structure
@@ -96,27 +96,27 @@ For offline / HPC use, pass `offline=True`; cached shards are then served locall
     │   ├── flux_vacua_finder.py        # FluxVacuaFinder: Newton solver, vacuum sampling
     │   ├── flux_bounding.py            # bounded_fluxes: flux enumeration, cluster parallelisation
     │   ├── flux_utils.py               # PFV algebra (flux ↔ PFV ↔ moduli)
-    │   ├── critical_points.py          # CriticalPointFinder
     │   ├── sampling.py                 # moduli / flux sampling, ISD sampling
     │   ├── freezer.py                  # Freezer / ConifoldFreezer: light-field EFT
-    │   ├── conifold_utils.py           # Conifold class, basis changes, find_conifolds
-    │   ├── one_modulus_models.py       # closed-form hypergeometric models
+    │   ├── conifold/                   # conifold-limit subpackage
+    │   │   ├── coni.py                 #   Conifold class
+    │   │   ├── coniLCS_prepotential.py #   coniLCS-limit prepotential
+    │   │   ├── conifold_utils.py       #   basis changes, find_conifolds, helpers
+    │   │   └── zcf_solver.py           #   conifold-coordinate z_cf solver
+    │   ├── hypergeometric_models.py    # closed-form hypergeometric one-modulus models
     │   ├── lcs.py                      # lcs_tree: topological data container
-    │   ├── database.py                 # CYDatabase / TDFDatabase / CICYDatabase, vacua vault API
     │   ├── cytools_interface.py        # CYTools interface
-    │   ├── util.py, utils_jaxvacua.py  # utilities
-    │   ├── vacua_vault/                # vacua vault subpackage + CLI (jaxvacua-vault)
+    │   ├── util.py                     # utilities (pytree flatten/unflatten, IO helpers)
     │   └── models/                     # bundled pre-computed model data (grouped by h12)
     ├── documentation/
     │   ├── source/
     │   │   ├── intro/                  # physics / maths background
     │   │   ├── applications/           # papers using jaxvacua
-    │   │   ├── notebooks/              # tutorials (7 thematic subdirs, see below)
+    │   │   ├── notebooks/              # tutorials (quickstart + 4 thematic subdirs)
     │   │   └── jaxvacua.*.rst          # API reference pages
     │   ├── build/                      # generated html (gitignored)
     │   └── requirements.txt
     ├── tests/                          # pytest suite (test_periods, test_css, test_flux_eft, ...)
-    ├── src/jaxpolylog/                 # companion package (poly-logarithm / hypergeometric utilities)
     ├── setup.py
     ├── environment.yml                 # conda env (CPU)
     ├── environment_metal.yml           # conda env (Apple Silicon, falls back to CPU for complex)
@@ -126,16 +126,22 @@ For offline / HPC use, pass `offline=True`; cached shards are then served locall
     ├── LICENSE
     └── README.md
 
+> [!NOTE]
+> The database stack (`TDFDatabase` / `CICYDatabase` / `LCSDatabase`) and
+> the `vacua_vault` subpackage previously lived under `jaxvacua/` but have
+> been moved to the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge)
+> umbrella package as part of the May 2026 stringjax → stringforge
+> rename. The corresponding tutorials moved with them — see
+> `stringforge/documentation/source/tutorials/database_and_infrastructure/`.
+
 Tutorials are grouped by theme under [documentation/source/notebooks/](documentation/source/notebooks/):
 
     notebooks/
+    ├── quickstart.ipynb                # shortest end-to-end workflow
     ├── 01_basics/                      # JAX intro, jaxvacua overview, CYTools interface
-    ├── 02_vacuum_finding/              # flux vacua finder, ISD sampling
-    ├── 03_flux_bounding/               # bounded fluxes, cluster parallelisation
-    ├── 04_geometry_and_limits/         # CICY, sampling, moduli limits, conifolds, monodromy, PFV
-    ├── 05_database_and_infrastructure/ # database interface, vacua vault, performance benchmarks
-    ├── 06_analysis_and_tools/          # threshold ISD, freezer, visualisation, Hessian analysis
-    └── 07_physics_pipelines/           # hypergeometric models, landscape statistics, W0 scan
+    ├── 02_vacuum_finding/              # flux vacua finder, ISD sampling, flux bounding
+    ├── 03_geometry_and_limits/         # moduli limits, conifolds, hypergeometric models
+    └── 04_analysis_and_pipelines/      # freezer, visualisation, Hessian, landscape statistics
 
 
 
@@ -165,4 +171,3 @@ If you find this software useful, please cite:
     year = "2023"
 }
 ```
-

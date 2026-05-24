@@ -1,43 +1,40 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, this
-# code must not be shared with anyone else or used for any other projects than
-# those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# Tests for the data_sampler class (jaxvacua/sampling.py).
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Each test method is executed in two environments:
-#   - NumPy backend (use_jax=False): uses np.random for random number generation.
-#   - JAX backend   (use_jax=True):  uses jax.random for random number generation.
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
 #
-# The underlying physics model is constructed once for the whole test suite using
-# a KS (Kreuzer-Skarke) geometry with h^{1,2}=2, which is the simplest example
-# that exercises all code paths (non-trivial Kähler cone, instanton corrections, ...).
-#
-# Test groups:
-#   1.  get_fluxes             – integer flux sampling, all modes and sampling_modes
-#   2.  get_moduli             – real Kähler moduli sampling, all sampling_modes
-#   3.  get_axions / get_axion – complex-structure + universal axion sampling
-#   4.  get_dilaton            – dilaton sampling
-#   5.  get_complex_tau        – combined axion + dilaton (axio-dilaton τ)
-#   6.  get_complex_moduli     – combined complex-structure moduli z^i
-#   7.  sample_sphere          – uniform sampling on/inside a sphere in moduli space
-#   8.  rescale_points         – norm-based rescaling of point arrays
-#   9.  find_interior_points   – Gurobi-based interior point finder for Kähler cone
-#   10. filter_points          – cone-membership filter + optional custom filter
-#   11. sample_interior_point  – sample a single point inside the Kähler cone
-#       sample_ray             – single random direction inside the Kähler cone
-#       sample_rays            – k random rays from the stored ray list
-#   12. initial_guesses        – joint sampler for (z, τ, fluxes)
-#   13. ISD_sampling           – Imaginary Self-Dual flux sampling (all four modes)
-#   14. filter_by_instantons   – boolean mask based on instanton/perturbative ratio
-#       filter_by_km           – boolean mask based on Kähler metric positivity
-#       filter_moduli          – composite filter applied to moduli arrays
-# ------------------------------------------------------------------------------
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Tests for ``data_sampler`` and sampling-bound parsers.
+
+Purpose
+-------
+Validate flux, moduli, axion, dilaton and combined initial-condition sampling
+in both NumPy and JAX random backends.
+
+Main public API
+---------------
+- ``TestDataSampler``: exercises integer flux sampling, Kähler-cone sampling,
+  sphere/ray sampling, ISD sampling, instanton filters, metric filters and
+  joint ``(z, tau, flux)`` initial guesses.
+- ``TestBoundsParsing``: checks standalone parsing of box bounds and
+  wall-exclusion options.
+
+Design notes
+------------
+The suite uses a small Kreuzer-Skarke geometry with ``h12=2`` so cone,
+instanton and sampling branches are all covered with manageable runtime.
+"""
 
 
 # Standard libraries
@@ -80,7 +77,7 @@ class TestDataSampler(TestCase):
         the gauge kinetic matrix is well-defined.
 
     Attributes:
-        model (jaxvacua.flux_sector): The underlying string compactification model.
+        model (jaxvacua.flux_eft.FluxEFT): The underlying string compactification model.
         N (int): Batch size used for all sampling calls (kept small for speed).
         sampler_np (data_sampler): Sampler configured with ``use_jax=False``.
         sampler_jax (data_sampler): Sampler configured with ``use_jax=True``.

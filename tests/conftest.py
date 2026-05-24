@@ -1,3 +1,23 @@
+"""Pytest session configuration for the JAXVacua test suite.
+
+Purpose
+-------
+Set test-wide JAX precision, configure local import paths and mark expensive
+JIT-compilation tests as slow.
+
+Main public API
+---------------
+- ``pytest_configure``: emits debugging information about the active
+  ``jaxpolylog`` installation.
+- ``pytest_collection_modifyitems``: applies the ``slow`` marker to tests
+  following the ``__with_jit`` naming convention.
+
+Design notes
+------------
+The float64 environment setting must happen before other test imports can
+initialise JAX.
+"""
+
 import os
 import sys
 from pathlib import Path

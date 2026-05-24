@@ -11,3 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""Test package marker for the JAXVacua test suite.
+
+Purpose
+-------
+Make ``tests`` importable for local helper modules and pytest collection.
+
+Main public API
+---------------
+- No runtime API is defined here.
+
+Design notes
+------------
+Keep this file intentionally empty apart from package metadata and this module
+description.
+"""

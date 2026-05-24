@@ -12,42 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ------------------------------------------------------------------------------
-# Tests for the flux_sector class (jaxvacua/flux_sector.py).
-#
-# Test groups:
-#   1.  test_kahler_metric       – Kähler metric shape, block-diagonal form,
-#                                  and equivalence of the two implementations
-#   2.  test_W                   – superpotential scalar, dtype, conjugation
-#   3.  test_W_gradients         – numerical gradient check for W and conj(W)
-#   4.  test_W_gauge_invariant   – gauge-invariant |W|; SL(2,Z) gauge invariance;
-#                                  value at known SUSY solution
-#   5.  test_dW                  – first derivatives ∂_z W and ∂_τ W; dW wrapper;
-#                                  real-valued F-terms; Jacobian; zero at SUSY
-#   6.  test_ddW                 – second derivatives ∂_z∂_z W, ∂_z∂_τ W; shape/dtype
-#   7.  test_DW                  – Kähler covariant derivatives D_I W; F-terms;
-#                                  F-term Jacobian; canonical form; zero at SUSY
-#   8.  test_dDW                 – first derivatives of the covariant F-terms ∂_I D_J W;
-#                                  all cross-derivatives; conjugation relations
-#   9.  test_DDW                 – second Kähler covariant derivatives D_I D_J W;
-#                                  all cross-derivatives; both conj=False/True
-#  10.  test_V                   – scalar potential V; real/imaginary parts;
-#                                  gradient and Hessian; solution tests;
-#                                  SUSY/general Hessian equivalence
-#  11.  test_tadpole             – D3-tadpole scalar, dtype, solution value
-#  12.  test_map_to_FD_tau       – SL(2,Z) fundamental domain: Im(τ)≥√3/2,
-#                                  |Re(τ)|≤1/2, |τ|≥1; flux orbit invariance
-#  13.  test_dV_complex          – complex partial derivatives of V: shape, dtype,
-#                                  conjugation, zero gradient at SUSY minimum
-#  14.  test_ddV_complex         – second complex partial derivatives of V:
-#                                  shape, dtype, self-consistency
-#  15.  test_DDW_matrix          – DDW_matrix_SUSY and DDW_matrix_general:
-#                                  shape, Hermitian, conj relations
-#  16.  test_mass_matrix         – shape, Hermitian, real non-negative
-#                                  eigenvalues at SUSY minimum
-#  17.  test_ISD_condition       – |ISD(z,τ,f)|≈0 at the SUSY solution; shape
-#  18.  test_projection_fluxes   – Hodge component shapes: (2n,) for all modes
-# ------------------------------------------------------------------------------
+"""Tests for ``FluxEFT`` flux-sector physics.
+
+Purpose
+-------
+Validate the superpotential, F-terms, scalar potential, tadpole, stability
+matrices, ISD projection and fundamental-domain behaviour of ``FluxEFT``.
+
+Main public API
+---------------
+- ``TestFluxEFT``: broad checks for metrics, ``W``, ``dW``, ``DW``, ``DDW``,
+  scalar-potential derivatives, tadpoles, ISD conditions and flux
+  projections.
+- ``TestHessianSUGRA``: checks SUGRA Hessian and mass-matrix identities.
+- ``TestMapToFD``: checks SL(2,Z) fundamental-domain mapping and flux-orbit
+  invariance.
+
+Design notes
+------------
+These tests are the main regression net for flux-EFT algebra.  They use
+known SUSY reference points to verify zero-gradient and invariance claims.
+"""
 
 
 # Standard libraries
@@ -70,11 +55,11 @@ import jaxvacua
 class TestFluxEFT(TestCase):
     r"""
     **Description:**
-    Test suite for :class:`jaxvacua.flux_sector`.
+    Test suite for :class:`jaxvacua.flux_eft.FluxEFT`.
 
     The tests verify correctness of output shapes, dtypes, algebraic identities,
     conjugation relations, and exact numerical values at a known SUSY critical
-    point for every public method of :class:`flux_sector`.
+    point for every public method of :class:`FluxEFT`.
 
     All derivative tests are run both with and without JIT compilation via the
     ``@chex.variants`` decorator.  Methods that depend on ``conj`` are tested
@@ -89,7 +74,7 @@ class TestFluxEFT(TestCase):
         only positive eigenvalues at the SUSY locus.
 
     Attributes:
-        model (jaxvacua.flux_sector): Shared physics model.
+        model (jaxvacua.flux_eft.FluxEFT): Shared physics model.
         z (jax.Array): Random complex-structure moduli, shape ``(h12,)``.
         cz (jax.Array): Complex conjugate of ``z``.
         tau (complex): Axio-dilaton scalar.
@@ -149,7 +134,7 @@ class TestFluxEFT(TestCase):
         )
 
         # SL(2,Z)-fundamental-domain map
-        cls.tau_fd, cls.f_fd = cls.model.map_to_FD_tau(cls.tau, cls.f)
+        cls.tau_fd, cls.f_fd = cls.model.map_to_fd_tau(cls.tau, cls.f)
         cls.f_fd = jnp.array(cls.f_fd).astype(float)
         cls.ctau_fd = jnp.conj(cls.tau_fd)
 
@@ -1459,10 +1444,10 @@ class TestFluxEFT(TestCase):
     # transforms accordingly so that the physics does not change.
     # ==========================================================================
 
-    def test_map_to_FD_tau(self):
+    def test_map_to_fd_tau(self):
         r"""
         **Description:**
-        Verifies that ``map_to_FD_tau`` maps an arbitrary axio-dilaton to the
+        Verifies that ``map_to_fd_tau`` maps an arbitrary axio-dilaton to the
         SL(2,Z) fundamental domain satisfying:
 
         .. math::
@@ -1477,7 +1462,7 @@ class TestFluxEFT(TestCase):
             The test uses the SL(2,Z) orbit relation
             :math:`|W_\text{gi}(z, \tau, f)| = |W_\text{gi}(z, \tau_\text{FD}, f_\text{FD})|`.
         """
-        tau_fd, f_fd = self.model.map_to_FD_tau(self.tau, self.f)
+        tau_fd, f_fd = self.model.map_to_fd_tau(self.tau, self.f)
 
         # Fundamental domain conditions
         self.assertTrue(
@@ -2199,7 +2184,7 @@ class TestHessianSUGRA(TestCase):
 class TestMapToFD(TestCase):
     r"""
     **Description:**
-    Test suite for ``map_to_FD``, ``apply_monodromy``, and ``axion_FD``.
+    Test suite for ``map_to_fd``, ``apply_monodromy``, and ``axion_fd``.
     """
 
     @classmethod
@@ -2208,66 +2193,66 @@ class TestMapToFD(TestCase):
         cls.model = jaxvacua.FluxEFT(
             h12=2, model_ID=1, maximum_degree=2, limit="LCS", model_type="KS"
         )
-        cls.lo, cls.hi = cls.model.axion_FD
+        cls.lo, cls.hi = cls.model.axion_fd
         cls.tau = 0.1 + 3j
         cls.fl = jnp.array(np.random.default_rng(42).integers(-5, 6, 12).astype(float))
 
-    def test_axion_FD_default(self):
-        r"""Default axion_FD is (-0.5, 0.5)."""
-        self.assertEqual(self.model.axion_FD, (-0.5, 0.5))
+    def test_axion_fd_default(self):
+        r"""Default axion_fd is (-0.5, 0.5)."""
+        self.assertEqual(self.model.axion_fd, (-0.5, 0.5))
 
-    def test_axion_FD_settable(self):
-        r"""axion_FD can be changed and restored."""
-        old = self.model.axion_FD
-        self.model.axion_FD = (0, 1)
-        self.assertEqual(self.model.axion_FD, (0, 1))
-        self.model.axion_FD = old
+    def test_axion_fd_settable(self):
+        r"""axion_fd can be changed and restored."""
+        old = self.model.axion_fd
+        self.model.axion_fd = (0, 1)
+        self.assertEqual(self.model.axion_fd, (0, 1))
+        self.model.axion_fd = old
 
-    def test_map_to_FD_basic_range(self):
+    def test_map_to_fd_basic_range(self):
         r"""Re(z) is in (lo, hi] after FD mapping."""
         rng = np.random.default_rng(42)
         for _ in range(30):
             z = jnp.array(rng.uniform(-5, 5, 2) + 1j * rng.uniform(1, 5, 2))
             tau = complex(rng.uniform(-3, 3), rng.uniform(1, 5))
             fl = jnp.array(rng.integers(-8, 9, 12).astype(float))
-            m, t, f = self.model.map_to_FD(z, tau, fl)
+            m, t, f = self.model.map_to_fd(z, tau, fl)
             re = np.array(m.real)
             self.assertTrue(np.all(re > self.lo - 1e-10))
             self.assertTrue(np.all(re <= self.hi + 1e-10))
 
-    def test_map_to_FD_custom_range(self):
-        r"""Custom axion_FD=(0,1) is respected."""
+    def test_map_to_fd_custom_range(self):
+        r"""Custom axion_fd=(0,1) is respected."""
         z = jnp.array([0.7 + 3j, -0.3 + 2j])
-        m, _, _ = self.model.map_to_FD(z, self.tau, self.fl, axion_FD=(0, 1))
+        m, _, _ = self.model.map_to_fd(z, self.tau, self.fl, axion_fd=(0, 1))
         self.assertTrue(np.all(np.array(m.real) > -1e-10))
         self.assertTrue(np.all(np.array(m.real) <= 1 + 1e-10))
 
     def test_boundary_snap_exact_lo(self):
         r"""Re(z) = lo maps to hi."""
         z = jnp.array([-0.5 + 3j, 0.2 + 2.5j])
-        m, _, _ = self.model.map_to_FD(z, self.tau, self.fl)
+        m, _, _ = self.model.map_to_fd(z, self.tau, self.fl)
         self.assertAlmostEqual(float(m.real[0]), 0.5, places=10)
 
     def test_boundary_snap_near_lo(self):
         r"""Re(z) within boundary_tol of lo snaps to hi."""
         z = jnp.array([-0.5 + 1e-9 + 3j, 0.2 + 2.5j])
-        m, _, _ = self.model.map_to_FD(z, self.tau, self.fl)
+        m, _, _ = self.model.map_to_fd(z, self.tau, self.fl)
         self.assertAlmostEqual(float(m.real[0]), 0.5, places=10)
 
     def test_boundary_no_snap_outside_tol(self):
         r"""Re(z) outside boundary_tol of lo is NOT snapped."""
         z = jnp.array([-0.5 + 1e-7 + 3j, 0.2 + 2.5j])
-        m, _, _ = self.model.map_to_FD(z, self.tau, self.fl)
+        m, _, _ = self.model.map_to_fd(z, self.tau, self.fl)
         self.assertAlmostEqual(float(m.real[0]), -0.5 + 1e-7, places=10)
 
     def test_boundary_custom_tol(self):
         r"""Custom boundary_tol works."""
         z = jnp.array([-0.5 + 1e-6 + 3j, 0.2 + 2.5j])
-        m, _, _ = self.model.map_to_FD(z, self.tau, self.fl, boundary_tol=1e-5)
+        m, _, _ = self.model.map_to_fd(z, self.tau, self.fl, boundary_tol=1e-5)
         self.assertAlmostEqual(float(m.real[0]), 0.5, places=10)
 
     def test_W0_gauge_invariant_preserved(self):
-        r"""|W0_gi| is preserved by map_to_FD."""
+        r"""|W0_gi| is preserved by map_to_fd."""
         rng = np.random.default_rng(42)
         max_err = 0
         for _ in range(30):
@@ -2275,31 +2260,31 @@ class TestMapToFD(TestCase):
             tau = complex(rng.uniform(-2, 2), rng.uniform(1, 5))
             fl = jnp.array(rng.integers(-5, 6, 12).astype(float))
             W0_b = float(jnp.abs(self.model.superpotential_gauge_invariant(z, tau, fl)))
-            m, t, f = self.model.map_to_FD(z, tau, fl)
+            m, t, f = self.model.map_to_fd(z, tau, fl)
             W0_a = float(jnp.abs(self.model.superpotential_gauge_invariant(m, t, f)))
             max_err = max(max_err, abs(W0_b - W0_a) / max(W0_b, 1e-30))
         self.assertLess(max_err, 1e-10)
 
     def test_tadpole_preserved(self):
-        r"""N_flux is preserved by map_to_FD."""
+        r"""N_flux is preserved by map_to_fd."""
         rng = np.random.default_rng(42)
         for _ in range(30):
             z = jnp.array(rng.uniform(-3, 3, 2) + 1j * rng.uniform(1, 5, 2))
             tau = complex(rng.uniform(-2, 2), rng.uniform(1, 5))
             fl = jnp.array(rng.integers(-5, 6, 12).astype(float))
             N_b = float(self.model.tadpole(fl))
-            _, _, f_fd = self.model.map_to_FD(z, tau, fl)
+            _, _, f_fd = self.model.map_to_fd(z, tau, fl)
             N_a = float(self.model.tadpole(f_fd))
             self.assertAlmostEqual(N_b, N_a, places=8)
 
     def test_flux_integrality(self):
-        r"""Fluxes remain integer after map_to_FD."""
+        r"""Fluxes remain integer after map_to_fd."""
         rng = np.random.default_rng(42)
         for _ in range(30):
             z = jnp.array(rng.uniform(-5, 5, 2) + 1j * rng.uniform(1, 5, 2))
             tau = complex(rng.uniform(-3, 3), rng.uniform(1, 5))
             fl = jnp.array(rng.integers(-8, 9, 12).astype(float))
-            _, _, f_fd = self.model.map_to_FD(z, tau, fl)
+            _, _, f_fd = self.model.map_to_fd(z, tau, fl)
             self.assertLess(float(jnp.max(jnp.abs(f_fd - jnp.round(f_fd)))), 1e-10)
 
     def test_idempotent(self):
@@ -2309,8 +2294,8 @@ class TestMapToFD(TestCase):
             z = jnp.array(rng.uniform(-5, 5, 2) + 1j * rng.uniform(1, 5, 2))
             tau = complex(rng.uniform(-3, 3), rng.uniform(1, 5))
             fl = jnp.array(rng.integers(-8, 9, 12).astype(float))
-            m1, t1, f1 = self.model.map_to_FD(z, tau, fl)
-            m2, t2, f2 = self.model.map_to_FD(m1, t1, f1)
+            m1, t1, f1 = self.model.map_to_fd(z, tau, fl)
+            m2, t2, f2 = self.model.map_to_fd(m1, t1, f1)
             self.assertAllClose(m1, m2, atol=1e-12)
             self.assertAlmostEqual(complex(t1), complex(t2), places=10)
             self.assertAllClose(f1, f2, atol=1e-10)

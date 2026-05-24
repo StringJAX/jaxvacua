@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for the period-sector implementation.
+
+Purpose
+-------
+Validate ``periods`` computations for period vectors, prepotentials,
+symplectic structure, Kähler potential and gauge-kinetic matrices.
+
+Main public API
+---------------
+- ``TestPeriodSector``: numerical checks for LCS-period formulas and derived
+  special-geometry quantities.
+
+Design notes
+------------
+The tests use small fixtures with known shape and symmetry expectations to
+catch regressions in low-level period algebra.
+"""
+
 import sys, os, warnings
 import jax
 import pytest
@@ -138,6 +156,60 @@ class TestPeriodSector(TestCase):
             sig[n:, n:], jnp.zeros((n, n), dtype=sig.dtype),
             rtol=1e-12, atol=1e-12,
             msg="Lower-right block of sigma must be zero")
+
+
+    def test_a_shift_monodromy(self):
+        r"""**Description:**
+
+        Verify the symplectic monodromy :math:`M(S)` returned by
+        :func:`compute_a_shift_monodromy` for an :math:`a`-matrix shift
+        :math:`a \to a + S` (see the method docstring).  Checks the unipotent
+        block structure :math:`M = \left(\begin{smallmatrix}\mathbf{1} &
+        \widehat{S}\\ 0 & \mathbf{1}\end{smallmatrix}\right)`, exact
+        symplecticity :math:`M^T\Sigma M = \Sigma` for symmetric :math:`S`,
+        reduction to the identity at :math:`S=0`, and the symmetry guard.
+        """
+        n = self.model.h12 + 1                          # half-dimension
+        h = self.model.h12
+        sig = np.asarray(self.model.sigma)
+        rng = np.random.default_rng(0)
+        Sr = rng.integers(-3, 4, (h, h))
+        S = (Sr + Sr.T).astype(float)                   # symmetric integer S
+
+        M = np.asarray(self.model.compute_a_shift_monodromy(S))
+
+        # ---- shape ----
+        chex.assert_shape(M, (2 * n, 2 * n))
+
+        # ---- unipotent block structure [[I, Shat], [0, I]] ----
+        self.assertAllClose(M[:n, :n], np.eye(n), atol=1e-12,
+                            msg="upper-left block must be I")
+        self.assertAllClose(M[n:, n:], np.eye(n), atol=1e-12,
+                            msg="lower-right block must be I")
+        self.assertAllClose(M[n:, :n], np.zeros((n, n)), atol=1e-12,
+                            msg="lower-left block must be 0 (unipotent)")
+        # off-diagonal F<-X block is Shat = [[0, 0], [0, S]] (zero X^0 row/col)
+        Shat = M[:n, n:]
+        self.assertAllClose(Shat[1:, 1:], S, atol=1e-12,
+                            msg="Shat bulk block must equal S")
+        self.assertAllClose(Shat[0, :], np.zeros(n), atol=1e-12,
+                            msg="Shat X^0 row must be zero")
+        self.assertAllClose(Shat[:, 0], np.zeros(n), atol=1e-12,
+                            msg="Shat X^0 column must be zero")
+
+        # ---- exact symplecticity for symmetric S ----
+        self.assertAllClose(M.T @ sig @ M, sig, atol=1e-12,
+                            msg="M(S) must be symplectic: M^T Sigma M = Sigma")
+
+        # ---- S = 0 gives the identity ----
+        M0 = np.asarray(self.model.compute_a_shift_monodromy(np.zeros((h, h))))
+        self.assertAllClose(M0, np.eye(2 * n), atol=1e-12,
+                            msg="M(0) must be the identity")
+
+        # ---- asymmetric S is rejected ----
+        S_asym = np.zeros((h, h)); S_asym[0, h - 1] = 1.0
+        with self.assertRaises(ValueError):
+            self.model.compute_a_shift_monodromy(S_asym)
 
 
     # ==========================================================================

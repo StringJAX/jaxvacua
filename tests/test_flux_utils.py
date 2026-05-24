@@ -12,6 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for flux-vector utility functions.
+
+Purpose
+-------
+Validate stateless helpers for PFV conversions, solution classification,
+physicality checks, deduplication keys and fundamental-domain mapping.
+
+Main public API
+---------------
+- ``TestFluxUtils``: exercises ``jaxvacua.flux_utils`` through small EFT
+  fixtures and class-delegated helper methods.
+
+Design notes
+------------
+These tests protect post-processing behaviour independently from the full
+vacuum-search workflow.
+"""
+
 import sys, os, warnings
 import jax
 import jax.numpy as jnp

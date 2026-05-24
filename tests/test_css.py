@@ -12,6 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Tests for complex-structure-sector geometry.
+
+Purpose
+-------
+Validate the ``css`` class and its Kähler-geometry, period, metric,
+monodromy and gauge-kinetic computations.
+
+Main public API
+---------------
+- ``TestCSSector``: broad numerical checks for periods, prepotential,
+  Kähler potential, metrics, derivatives and gauge-kinetic data.
+- ``TestKahlerGeometry``: focused checks for Kähler-geometric identities.
+- ``TestMonodromy``: checks monodromy and fundamental-domain behaviour.
+
+Design notes
+------------
+The tests use small Kreuzer-Skarke fixtures so expensive geometry is exercised
+without requiring large model data.
+"""
+
 import sys, os, warnings
 import jax
 import pytest
@@ -84,7 +104,7 @@ class TestCSSector(TestCase):
 
         cls.x = jnp.array(np.append(np.append([cls.z.real], [cls.z.imag], axis=0).T.flatten(), [cls.tau.real, cls.tau.imag]))
 
-        cls.tau_fd, cls.f_fd = cls.model.map_to_FD_tau(cls.tau, cls.f)
+        cls.tau_fd, cls.f_fd = cls.model.map_to_fd_tau(cls.tau, cls.f)
         cls.f_fd = jnp.array(cls.f_fd).astype(float)
         cls.ctau_fd = jnp.conj(cls.tau_fd)
 

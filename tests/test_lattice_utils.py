@@ -12,14 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ------------------------------------------------------------------------------
-# Tests for conifold_utils.py — integer / lattice algebra utilities.
-#
-# The four pure-integer functions (extended_euclidean, orthogonal_lattice,
-# get_basis_change, getAMatrix) are CYTools-independent and can be tested
-# with synthetic data.  The Conifold class and find_conifolds require CYTools
-# and are skipped when CYTools is not available.
-# ------------------------------------------------------------------------------
+"""Tests for integer and conifold lattice utilities.
+
+Purpose
+-------
+Validate the lattice algebra used by conifold basis changes and structural
+helpers.
+
+Main public API
+---------------
+- ``TestExtendedEuclidean`` and ``TestOrthogonalLattice``: pure-integer
+  lattice helper tests.
+- ``TestGetBasisChange`` and ``TestGetAMatrix``: conifold basis and
+  prepotential-matrix checks.
+
+Design notes
+------------
+Pure-integer routines are tested with synthetic data.  CYTools-dependent
+conifold discovery paths are skipped when CYTools is unavailable.
+"""
 
 import sys, os, warnings
 import numpy as np
@@ -36,7 +47,7 @@ from jaxvacua.conifold import (
     extended_euclidean,
     orthogonal_lattice,
     get_basis_change,
-    getAMatrix,
+    compute_a_matrix,
 )
 
 # Suppress warnings
@@ -378,7 +389,7 @@ class TestGetBasisChange(TestCase):
 class TestGetAMatrix(TestCase):
     r"""
     **Description:**
-    Test suite for :func:`getAMatrix`, which computes the :math:`a`-matrix from
+    Test suite for :func:`compute_a_matrix`, which computes the :math:`a`-matrix from
     the triple intersection number tensor :math:`\kappa_{ijk}`.
 
     .. admonition:: Background
@@ -401,12 +412,12 @@ class TestGetAMatrix(TestCase):
     def test_shape(self):
         r"""
         **Description:**
-        Verify that ``getAMatrix`` returns shape :math:`(n, n)` for an
+        Verify that ``compute_a_matrix`` returns shape :math:`(n, n)` for an
         :math:`(n, n, n)` intersection tensor.
         """
         for n in [2, 3, 4]:
             kappa = np.zeros((n, n, n))
-            A = getAMatrix(kappa)
+            A = compute_a_matrix(kappa)
             # a-matrix is square with same dimension as each axis of kappa
             self.assertEqual(A.shape, (n, n))
 
@@ -426,7 +437,7 @@ class TestGetAMatrix(TestCase):
         kappa[0, 1, 1] = kappa[1, 0, 1] = kappa[1, 1, 0] = 1
         kappa[1, 1, 1] = 2
 
-        A = getAMatrix(kappa)
+        A = compute_a_matrix(kappa)
 
         # a[0,0] = kappa[0,0,0]/2 = 3 (i >= j, so kappa_{iij}/2)
         self.assertAllClose(A[0, 0], 3.0)
@@ -455,7 +466,7 @@ class TestGetAMatrix(TestCase):
                     key = tuple(sorted([i, j, k]))
                     kappa[i, j, k] = hash(key) % 10
 
-        A = getAMatrix(kappa)
+        A = compute_a_matrix(kappa)
         # a-matrix must be symmetric for symmetric kappa
         self.assertAllClose(A, A.T, atol=1e-14)
 
@@ -464,7 +475,7 @@ class TestGetAMatrix(TestCase):
         **Description:**
         Verify that zero intersection numbers give a zero :math:`a`-matrix.
         """
-        A = getAMatrix(np.zeros((3, 3, 3)))
+        A = compute_a_matrix(np.zeros((3, 3, 3)))
         # All entries must be zero
         self.assertAllClose(A, np.zeros((3, 3)))
 
