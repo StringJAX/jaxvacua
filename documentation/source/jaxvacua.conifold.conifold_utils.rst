@@ -20,7 +20,7 @@ Lattice / basis algebra
     :toctree: _autosummary
 
     get_basis_change
-    getAMatrix
+    compute_a_matrix
     get_projection
 
 

@@ -25,13 +25,38 @@ and modular reduction along the
 lattice operations; phase 5 produces the actual vacua via per-batch
 ISD completion and multi-start Newton refinement.
 
-In the diagram, the inherited :class:`FluxEFT` instance is shown
+In the diagram, the inherited :class:`jaxvacua.flux_eft.FluxEFT` instance is shown
 light grey, the user-supplied :math:`N_{\max}` and the moduli
 samples for the eigenvalue bounds are shown dashed (external), and
 the deduplicated output catalogue is highlighted in orange.
 
 .. raw:: html
    :file: _static/figures/f7_flux_bounding.html
+
+
+Cluster-scale execution
+-----------------------
+
+Large flux-bounding runs can be split into independent chunk files and
+processed on a cluster.  ``export_cluster_job`` prepares the search once,
+serialises the pipeline state to ``pipeline.npz`` and ``config.json``, writes
+pre-filtered ``h``-flux chunks under ``chunks/``, and creates a worker script.
+With ``generate_slurm=True`` it also writes a SLURM array submission script.
+
+Each worker calls ``process_chunk_from_disk`` for one chunk.  The worker
+reconstructs the saved pipeline, ISD-completes and filters that chunk, and
+writes a compressed result file under ``results/``.  Since chunks are
+independent, failed or slow array tasks can be rerun without repeating the
+export step.
+
+After the array finishes, ``merge_cluster_results`` reads the result files,
+reports missing chunk IDs, deduplicates flux vectors, and optionally maps
+solutions to the fundamental domain before comparison.  If a model is supplied
+it can Newton-refine the merged candidates; if a database handle is supplied
+it can write the merged batch through the database integration hooks.
+
+.. raw:: html
+   :file: _static/figures/f11_cluster_parallel.html
 
 
 Bounded fluxes class
@@ -48,7 +73,6 @@ Bounding box computation
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     bounded_fluxes.compute_bounding_box
     bounded_fluxes.get_h_box
@@ -63,18 +87,26 @@ Flux enumeration
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     bounded_fluxes.enumerate_fluxes
     bounded_fluxes.sample_bounded_fluxes
     bounded_fluxes.get_h_candidates
 
 
+Cluster execution API
+-----------------------------------
+
+.. autosummary::
+
+    bounded_fluxes.export_cluster_job
+    bounded_fluxes.process_chunk_from_disk
+    bounded_fluxes.merge_cluster_results
+
+
 Batch flux checking
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     bounded_fluxes.check_bounds_batch
     bounded_fluxes.compute_tadpole_batch
@@ -86,7 +118,6 @@ Flux bounds
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     bounded_fluxes.bound_h1_local
     bounded_fluxes.bound_h1_global
@@ -108,7 +139,6 @@ Flux utilities
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     bounded_fluxes.get_nflux
     bounded_fluxes.get_fh

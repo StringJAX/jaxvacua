@@ -93,7 +93,7 @@ $$
 $$ (eq:PFV)
 
 
-## Racetrack stabilization
+## Racetrack stabilisation
 
 Along the flat direction $z^a = p^a \tau$, the flux superpotential reduces to
 $W_{\text{exp}}$ in {eq}`eq:WfluxInst`, which takes the form
@@ -112,7 +112,7 @@ $$
 \langle \tau \rangle = \frac{1}{2\pi i} \frac{1}{p^1 - p^2} \ln\!\left(-A \frac{p^2}{p^1}\right)\;,
 $$
 
-and the stabilized superpotential is
+and the stabilised superpotential is
 
 $$
 W_{\text{eff}}(\langle \tau \rangle) = c \, \frac{p^2 - p^1}{p^2} \left(-A \frac{p^2}{p^1}\right)^{\frac{p^1}{p^1 - p^2}}\;,
@@ -146,7 +146,7 @@ with $|W_0| = 2.037 \times 10^{-8}$.
 
 ## Conifold PFVs
 
-The PFV mechanism can be extended to stabilize moduli near a *conifold singularity*,
+The PFV mechanism can be extended to stabilise moduli near a *conifold singularity*,
 engineering a warped Klebanov-Strassler throat in a compact flux compactification
 [[2004.10740](https://arxiv.org/abs/2004.10740)].
 
@@ -205,7 +205,7 @@ $$
 K' = K - g_s \widetilde{\kappa}_{1a\beta} M^a \text{Im}(z^\beta)\;.
 $$ (eq:Kprime)
 
-Provided $K'/M > 0$, the conifold modulus is stabilized at an exponentially small value,
+Provided $K'/M > 0$, the conifold modulus is stabilised at an exponentially small value,
 giving rise to a warped throat region.
 The D3-brane charge stored in the throat is
 
@@ -217,7 +217,7 @@ Importantly, $K'$ differs from the naive product $K \cdot M$ by corrections from
 bulk moduli {eq}`eq:Kprime` — a crucial effect absent in the non-compact
 Klebanov-Strassler solution.
 
-The bulk moduli are stabilized via the **conifold PFV conditions**:
+The bulk moduli are stabilised via the **conifold PFV conditions**:
 
 $$
 \det N \neq 0\;, \quad \vec{p} \in \mathcal{K}_{\text{cf}}\;, \quad K_\alpha p^\alpha = 0\;, \quad \tilde{a}_{\alpha b} M^b \in \mathbb{Z}\;, \quad \tilde{c}'_a M^a \in 24\mathbb{Z}\;,

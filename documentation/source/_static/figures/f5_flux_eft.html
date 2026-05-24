@@ -93,7 +93,7 @@
       <div class="bx gh f5-tadpole-inline" id="f5-tadpole">
         <div class="t">tadpole &nbsp;$N_{\rm flux}$</div>
         <div class="d">
-          $N_{\rm flux} = \tfrac{1}{2}\, G_3 \cdot \Sigma \cdot \bar G_3$<br>
+          $N_{\rm flux} = f^T \Sigma\, h$ for flux vector $(f,h)$<br>
           $\Longrightarrow\; N_{\rm flux} \leq Q_{\rm O3}$ (D3-charge)<br>
           <code>FluxEFT.tadpole</code>
         </div>
@@ -128,10 +128,10 @@
     </div>
     <div class="f5-V-wrap">
       <div class="bx lb2" id="f5-V">
-        <div class="t">$V \;=\; e^{K}\!\left( K^{I\bar J}\, D_I W\, \overline{D_J W} - 3\,|W|^2 \right)$</div>
+        <div class="t">$V_{\rm ns} \;=\; e^{K}\, K^{I\bar J}\, D_I W\, \overline{D_J W}$</div>
         <div class="d">
-          Inverse Kähler metric on the full $(z^i, \tau)$ sector,&nbsp;
-          $K^{I\bar J} = \bigl(\partial_I \partial_{\bar J} K\bigr)^{-1}$<br>
+          Default no-scale flux potential on the $(z^i,\tau)$ sector; set <code>noscale=False</code>
+          to include the full supergravity $-3|W|^2$ term<br>
           <code>FluxEFT.scalar_potential</code>&nbsp;&middot;&nbsp;<code>FluxEFT.V</code>
         </div>
       </div>
@@ -151,14 +151,14 @@
         <div class="d">
           Gradient of the scalar potential<br>
           (target for gradient-flow vacuum search)<br>
-          <code>FluxEFT.ddV</code>&nbsp;<span style="color:#9EC5E8;">(via</span>&nbsp;<code>jax.grad</code><span style="color:#9EC5E8;">)</span>
+          <code>FluxEFT.dV</code>&nbsp;&middot;&nbsp;<code>FluxEFT.dV_x</code>
         </div>
       </div>
       <div class="bx db" id="f5-Hess">
         <div class="t">$\partial_I \partial_J V$</div>
         <div class="d">
           Full Hessian on the moduli + axio-dilaton sector<br>
-          <code>FluxEFT.hessian</code>&nbsp;<span style="color:#9EC5E8;">(via</span>&nbsp;<code>jax.hessian</code><span style="color:#9EC5E8;">)</span>
+          <code>FluxEFT.hessian</code>&nbsp;&middot;&nbsp;<code>FluxEFT.ddV</code>
         </div>
       </div>
       <div class="bx db" id="f5-Mass">

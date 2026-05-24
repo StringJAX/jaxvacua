@@ -22,17 +22,18 @@ relations are
             = \bigl(F - \tau H\bigr) \cdot \Pi(z), \\[2pt]
        D_I W &= \partial_I W + (\partial_I K)\, W,
            \quad I = (z^i,\, \tau), \\[2pt]
-       V &= e^{K}\!\left(
+       V_{\rm ns} &= e^{K}\!\left(
               g^{i\bar\jmath}\, D_i W\, \overline{D_j W}
               + (\operatorname{Im}\tau)^{-2} |D_\tau W|^2
-              - 3\, |W|^2
            \right), \\[2pt]
-       N_{\text{flux}} &= \tfrac{1}{2}\, G_3 \cdot \Sigma \cdot \bar G_3,
+       N_{\text{flux}} &= f^T \Sigma\, h,
    \end{align*}
 
 with :math:`G_3 = F_3 - \tau H_3` the complex three-form flux and
 :math:`\Sigma` the symplectic intersection form on
-:math:`H^3(X, \mathbb{Z})`.
+:math:`H^3(X, \mathbb{Z})`.  The full supergravity
+:math:`-3|W|^2` contribution can be included by setting
+``noscale=False``.
 
 The diagram below splits the inputs into two visually distinct
 groups: those *inherited* from the upstream period and complex-structure
@@ -58,7 +59,6 @@ Superpotential and F-terms
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxEFT.superpotential
     FluxEFT.superpotential_gauge_invariant
@@ -75,7 +75,6 @@ Scalar potential
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxEFT.scalar_potential
     FluxEFT.V
@@ -90,7 +89,6 @@ ISD condition
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxEFT.ISD_condition
     FluxEFT.ISD_matrix
@@ -101,9 +99,8 @@ Flux utilities
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
-    FluxEFT.map_to_FD_tau
+    FluxEFT.map_to_fd_tau
     FluxEFT.tadpole
     FluxEFT.flux_to_pfv
     FluxEFT.pfv_to_flux

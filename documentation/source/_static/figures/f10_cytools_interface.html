@@ -1,0 +1,94 @@
+<div class="jx-fig mathjax_process" id="f10-cytools">
+<style>
+  .jx-fig#f10-cytools .jx-chart { width: 900px; }
+  .jx-fig#f10-cytools .f10-row4 {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  }
+  .jx-fig#f10-cytools .f10-row3 {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .jx-fig#f10-cytools .f10-row5 {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+  }
+  .jx-fig#f10-cytools .f10-block { padding: 0 90px; }
+  .jx-fig#f10-cytools .f10-arrow {
+    text-align: center; color: #3A7D5A; font-weight: 700;
+    font-size: 18px; line-height: 1; margin: 10px 0 8px;
+  }
+  .jx-fig#f10-cytools .f10-row5 .bx { min-height: 82px; }
+</style>
+
+<div class="jx-chart" id="f10-chart">
+  <div class="jx-title">jaxvacua.cytools_interface &mdash; CYTools input bridge</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">CYTools-side objects</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f10-row4">
+      <div class="bx lb"><div class="t">Polytope</div><div class="d">ambient toric data</div></div>
+      <div class="bx lb"><div class="t">Triangulation</div><div class="d">phase choice</div></div>
+      <div class="bx lb"><div class="t">CalabiYau</div><div class="d">intersection and Chern data</div></div>
+      <div class="bx lb"><div class="t">Cone / facet</div><div class="d">Mori and K&auml;hler information</div></div>
+    </div>
+  </div>
+
+  <div class="f10-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Extraction and normalisation</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f10-row3">
+      <div class="bx lg">
+        <div class="t">intersection data</div>
+        <div class="d"><code>compute_intersection_numbers_coo</code><br><code>remove_zeros</code></div>
+      </div>
+      <div class="bx lg">
+        <div class="t">model dictionary</div>
+        <div class="d"><code>cytools_model_data_init</code><br>Hodge, Chern, cone and metadata</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">instanton data</div>
+        <div class="d"><code>cytools_instanton_data_init</code><br>GV / GW data when available</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f10-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">JAXVacua model construction</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f10-block">
+      <div class="bx dg">
+        <div class="t">lcs_tree and downstream models</div>
+        <div class="d">
+          <code>lcs_tree.from_dict</code> / <code>lcs_tree.from_cytools</code>
+          &rarr; <code>periods</code> &rarr; <code>css</code> &rarr; <code>FluxEFT</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-sm"></div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Round-trip adapters from an EFT</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f10-row5">
+      <div class="bx lb-alt"><div class="t">polytope</div><div class="d"><code>eft_to_poly</code></div></div>
+      <div class="bx lb-alt"><div class="t">CY</div><div class="d"><code>eft_to_cy</code></div></div>
+      <div class="bx lb-alt"><div class="t">conifold curve</div><div class="d"><code>eft_to_coninop</code><br>basis + curve</div></div>
+      <div class="bx lb-alt"><div class="t">cone</div><div class="d"><code>eft_to_cone</code></div></div>
+      <div class="bx lb-alt"><div class="t">facet</div><div class="d"><code>eft_to_facet</code></div></div>
+    </div>
+  </div>
+</div>
+</div>

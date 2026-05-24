@@ -1,15 +1,71 @@
 JAXVacua -- String Vacua with JAX
 ==================================
 
-**JAXVacua** is a python library for numerically finding minima of supergravity scalar potentials
-using automatic differentation tools implemented in the `JAX library <https://github.com/google/jax>`_.
-It is meant to be accessible both as a top-level library as well as a toolkit of modular functions.
-As of now, this implementation is limited to Type IIB flux vacua.
-A generalisation to a wider class of applications is work in progress.
+**JAXVacua** is a Python library for constructing Type IIB flux-vacuum
+models and numerically finding vacua with JAX-based automatic
+differentiation.  It is intended both as a high-level workflow for
+sampling flux vacua and as a modular toolkit for period computations,
+effective field theory evaluation, flux sampling, and post-processing.
 
+The documentation is organised by how users usually approach the package:
+first the physics and geometry background, then executable tutorials, then
+the API reference for individual modules.
 
-The introduction gives a summary of the physical and mathematical context and aim of the library. The tutorials show how to use the library on a code level and give several examples.
+How to navigate
+---------------
 
+.. grid:: 1 1 2 2
+   :gutter: 2
+
+   .. grid-item-card:: New to the physics
+      :link: intro/index
+      :link-type: doc
+
+      Start with the introduction chapters.  They explain the Type IIB
+      compactification setup, Calabi-Yau input data, periods, moduli
+      stabilisation, and perturbatively flat vacua.
+
+   .. grid-item-card:: New to the code
+      :link: tutorials
+      :link-type: doc
+
+      Use the tutorial catalogue.  It separates quickstart, basic usage,
+      vacuum finding, geometry limits, and analysis workflows into a
+      guided sequence of notebooks.
+
+   .. grid-item-card:: Looking for a module
+      :link: jaxvacua
+      :link-type: doc
+
+      Go to the API reference when you already know which object or
+      function you need.  The module pages include workflow figures and
+      curated member indexes.
+
+   .. grid-item-card:: Looking for examples from papers
+      :link: applications/nonSUSY_vacua2023
+      :link-type: doc
+
+      The application notes connect package workflows to concrete research
+      use cases, including non-SUSY vacua, :math:`W_0` distributions, and
+      deep-observation pipelines.
+
+Recommended first path
+----------------------
+
+For a first pass through the documentation, read:
+
+1. :doc:`Introduction <intro/index>` for the conceptual map.
+2. :doc:`Tutorials <tutorials>` for executable notebooks.
+3. :doc:`API documentation <jaxvacua>` once you need precise class and
+   function signatures.
+
+The :doc:`quickstart notebook <notebooks/quickstart>` is the shortest route
+to a working example.  The :doc:`JAXVacua overview notebook
+<notebooks/01_basics/02_jaxvacua_overview>` gives a broader end-to-end
+walkthrough.
+
+Citing JAXVacua
+---------------
 
 If you find this work useful, please cite::
 
@@ -26,112 +82,38 @@ If you find this work useful, please cite::
         year = "2023"
     }
 
-
-Table of contents
------------------
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Introduction
-
-    intro/index
-    intro/sugra
-    intro/geometries
-    intro/flux_compactifications
-    intro/moduli_stabilisation
-    intro/periods
-    intro/pfv
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Basics
-
-    notebooks/01_basics/01_jax_introduction
-    notebooks/01_basics/02_jaxvacua_overview
-    notebooks/01_basics/03_cytools_interface
-    notebooks/01_basics/04_sampling_module
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Vacuum Finding
-
-    notebooks/02_vacuum_finding/05_finding_flux_vacua
-    notebooks/02_vacuum_finding/06_ISD_sampling_principle
-    notebooks/02_vacuum_finding/07_ISD_sampling
-    notebooks/02_vacuum_finding/8_ISD_sampling_wrapper
-    notebooks/02_vacuum_finding/9_sampling_vacua_from_fluxes
-    notebooks/02_vacuum_finding/19_non_susy_sampling
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Flux Bounding
-
-    notebooks/03_flux_bounding/10_flux_bounding
-    notebooks/03_flux_bounding/10b_stochastic_flux_search
-    notebooks/03_flux_bounding/10c_sample_bounded_fluxes_stepbystep
-    notebooks/03_flux_bounding/26_recovering_dataset_B
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Geometry and Limits
-
-    notebooks/04_geometry_and_limits/12_moduli_space_limits
-    notebooks/04_geometry_and_limits/13_coniLCS
-    notebooks/04_geometry_and_limits/14_period_input
-    notebooks/04_geometry_and_limits/15_hypergeometric_models
-
-.. note::
-
-    The **database, vacua-vault, and cluster-parallelisation** tutorials
-    have moved to the StringForge umbrella package, which now hosts the
-    shared catalog I/O and storage layer (see ``stringforge.cy_io``,
-    ``stringforge.lcs_database``, ``stringforge.vacua_writer``).
-    The tutorials live at
-    `<https://stringforge.readthedocs.io/en/latest/tutorials/database_and_infrastructure/>`_.
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Analysis and Tools
-
-    notebooks/06_analysis_and_tools/11_threshold_ISD
-    notebooks/06_analysis_and_tools/16_freezer
-    notebooks/06_analysis_and_tools/18_sampling_comparison
-    notebooks/06_analysis_and_tools/18_visualisation_cookbook
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Tutorials — Physics Pipelines
-
-    notebooks/07_physics_pipelines/19_mass_spectrum_hessian
-    notebooks/07_physics_pipelines/20_pfv_conifold_pipeline
-    notebooks/07_physics_pipelines/21_landscape_statistics
-    notebooks/07_physics_pipelines/22_performance_benchmarking
-    notebooks/07_physics_pipelines/27_hessian_SUGRA
-
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Applications
-
-    applications/nonSUSY_vacua2023
-    applications/W0_distribution2023
-    applications/deep_observations2025
-
-    
-    
-
-.. toctree::
-    :maxdepth: 3
-    :caption: API Documentation
-    
-    jaxvacua
-    
-    
-    
-
-
-Indices and tables
-------------------
+Reference lookup
+----------------
 
 * :ref:`genindex`
 * :ref:`modindex`
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Start here
+
+   intro/index
+   tutorials
+   jaxvacua
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Introduction
+
+   intro/sugra
+   intro/geometries
+   intro/flux_compactifications
+   intro/moduli_stabilisation
+   intro/periods
+   intro/pfv
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+   :caption: Applications
+
+   applications/nonSUSY_vacua2023
+   applications/W0_distribution2023
+   applications/deep_observations2025

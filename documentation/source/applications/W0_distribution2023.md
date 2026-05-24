@@ -18,9 +18,9 @@ In [2307.15749](https://arxiv.org/abs/2307.15749), we explore the distribution o
 
 The large-scale sampling of ISD flux vacua underlying this paper uses the [`jaxvacua.sampling`](../jaxvacua.sampling) module. The relevant tutorials are:
 
-- **[Tutorial 7: ISD flux sampling](../notebooks/02_vacuum_finding/7_ISD_sampling_flux_vacua)** — constructs SUSY flux vacua via imaginary self-dual flux sampling.
-- **[Tutorial 8: ISD sampling wrapper](../notebooks/02_vacuum_finding/8_ISD_sampling_wrapper)** — higher-level interface for systematic flux scans.
-- **[Tutorial 9: Sampling vacua from fluxes](../notebooks/02_vacuum_finding/9_sampling_vacua_from_fluxes)** — full pipeline from flux samples to vacuum solutions.
+- **[NB06: ISD sampling principle](../notebooks/02_vacuum_finding/06_ISD_sampling_principle.ipynb)** — derives the ISD completion step for a single vacuum.
+- **[NB07: ISD sampling](../notebooks/02_vacuum_finding/07_ISD_sampling.ipynb)** — large-scale SUSY and non-SUSY sampling workflows.
+- **[NB15: Landscape statistics](../notebooks/04_analysis_and_pipelines/15_landscape_statistics.ipynb)** — post-processing and distribution diagnostics for vacuum ensembles.
 
 To cite our work, please use:
 
@@ -38,5 +38,4 @@ To cite our work, please use:
     year = "2024"
 }
 ```
-
 

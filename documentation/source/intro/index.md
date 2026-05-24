@@ -10,7 +10,7 @@ end-to-end user workflow at a glance.
 
 The diagram below traces the typical use of the package from
 geometric input to vacuum analysis. The four numbered stages map
-onto the section captions of [this overview tutorial](../notebooks/01_basics/2_jaxvacua_overview).
+onto the section captions of [this overview tutorial](../notebooks/01_basics/02_jaxvacua_overview).
 
 ```{raw} html
 <div class="jx-fig mathjax_process" id="f1-workflow">
@@ -135,7 +135,7 @@ onto the section captions of [this overview tutorial](../notebooks/01_basics/2_j
             F-terms $D_I W = \partial_I W + (\partial_I K)\,W$<br>
             Scalar potential $V$
             &nbsp;&middot;&nbsp;
-            Tadpole $N_{\rm flux} = \tfrac12 |f^T \Sigma\, h|$
+            Tadpole $N_{\rm flux} = f^T \Sigma\, h$
             &nbsp;&middot;&nbsp;
             D3-charge constraint $N_{\rm flux} \leq Q_{\rm O3}$
           </div>
@@ -229,7 +229,8 @@ onto the section captions of [this overview tutorial](../notebooks/01_basics/2_j
             <code>FluxVacuaFinder.newton_method_flux_vacua()</code>
             &nbsp;&middot;&nbsp;
             <code>scipy.optimize.root</code><br>
-            Hessian / mass matrix via <code>jax.hessian</code>
+            Hessian / mass matrix via <code>FluxEFT.hessian</code>
+            and <code>FluxEFT.mass_matrix</code>
           </div>
         </div>
       </div>
@@ -241,7 +242,7 @@ onto the section captions of [this overview tutorial](../notebooks/01_basics/2_j
         Flux vacua $(z^*,\, \tau^*,\, f,\, h)$,&nbsp;
         residual,&nbsp; $|W_0|$,&nbsp; $g_s$,&nbsp; tadpole,&nbsp; mass spectrum,&nbsp; EFT validity checks
         &nbsp;&middot;&nbsp;
-        persisted to <code>vacua_vault</code> (stringforge).
+        optionally written to the stringforge vacua storage layer.
       </div>
     </div>
 

@@ -119,7 +119,7 @@ Mirror symmetry implies that the LCS monodromies in Type IIB on $X$ equal the
 large-volume monodromies of Type IIA on $\widetilde{X}$, which are determined by the
 intersection form of $\widetilde{X}$.
 Using these monodromies to fix all integration constants and adopting a suitable
-normalization, one obtains the periods in an integral symplectic basis:
+normalisation, one obtains the periods in an integral symplectic basis:
 
 $$
 \Pi(\psi) = \frac{1}{\varpi_0} \begin{pmatrix}

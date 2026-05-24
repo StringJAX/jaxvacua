@@ -52,7 +52,6 @@ Coordinate transformations
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     css.moduli_to_periods
     css.periods_to_moduli
@@ -62,7 +61,6 @@ Prepotential
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     css.prepot
     css.dF
@@ -70,15 +68,14 @@ Prepotential
     css.F_LCS_poly
     css.F_inst
     css.F_LCS
-    css.F_coniLCS_bulk
-    css.F_coniLCS_series
+    ~jaxvacua.conifold.coniLCS_prepotential.F_coniLCS_bulk
+    ~jaxvacua.conifold.coniLCS_prepotential.F_coniLCS_series
 
 
 Kähler potential
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     css.mirror_volume
     css.kahler_potential
@@ -94,13 +91,10 @@ Kähler metric
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     css.kahler_metric
     css.inverse_kahler_metric
     css.inverse_kahler_metric_grad
-    css._kahler_metric_general
-    css._kahler_metric_block_diagonal
     css.ddK_z_cz
     css.ddK_cz_z
     css.ddK_z_tau
@@ -118,7 +112,6 @@ Gauge kinetic matrix and ISD matrix
 --------------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     css.gauge_kinetic_matrix
     css.ISD_matrix

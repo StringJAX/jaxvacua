@@ -252,12 +252,12 @@ V_{\rm flux} = e^K K^{a\bar{b}} D_a W_{\rm flux}\, D_{\bar{b}}\overline{W}_{\rm 
 $$ (eq:VfluxCS)
 
 summing over complex structure and axio-dilaton indices $a, \bar b$ only.
-This potential is minimized (to zero) at the ISD locus $D_a W_{\rm flux} = 0$,
+This potential is minimised (to zero) at the ISD locus $D_a W_{\rm flux} = 0$,
 which fixes $z^i$ and $\tau$ while leaving the Kähler moduli as flat directions.
 
 For a detailed discussion of fluxes, tadpole cancellation, and the ISD condition
 see {doc}`flux_compactifications`.
-For Kähler moduli stabilization see {doc}`moduli_stabilisation`.
+For Kähler moduli stabilisation see {doc}`moduli_stabilisation`.
 
 
 ### Implementation in `jaxvacua.flux_eft`
@@ -267,7 +267,7 @@ For Kähler moduli stabilization see {doc}`moduli_stabilisation`.
 
 .. autosummary::
 
-    FluxEFT.map_to_FD_tau
+    FluxEFT.map_to_fd_tau
     FluxEFT.superpotential
     FluxEFT.DW
     FluxEFT.scalar_potential
@@ -280,7 +280,5 @@ For Kähler moduli stabilization see {doc}`moduli_stabilisation`.
 Note that python (and thus the code here) uses [zero-based indexing](https://en.wikipedia.org/wiki/Zero-based_numbering) while mathematical notation usually uses one-based indexing.
 For consistency, the indexing in the notes here also starts at $0$.
 ```
-
-
 
 

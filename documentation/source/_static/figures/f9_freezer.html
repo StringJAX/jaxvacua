@@ -1,0 +1,106 @@
+<div class="jx-fig mathjax_process" id="f9-freezer">
+<style>
+  .jx-fig#f9-freezer .jx-chart { width: 860px; }
+  .jx-fig#f9-freezer .f9-row3 {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .jx-fig#f9-freezer .f9-row2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 70px;
+  }
+  .jx-fig#f9-freezer .f9-block { padding: 0 100px; }
+  .jx-fig#f9-freezer .f9-arrow {
+    text-align: center; color: #3A7D5A; font-weight: 700;
+    font-size: 18px; line-height: 1; margin: 10px 0 8px;
+  }
+</style>
+
+<div class="jx-chart" id="f9-chart">
+  <div class="jx-title">jaxvacua.freezer &mdash; heavy/light reduction</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Full EFT inputs</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f9-row3">
+      <div class="bx lb">
+        <div class="t">full model</div>
+        <div class="d"><code>FluxEFT</code> data for $W$, $D_IW$, $V$ and derivatives</div>
+      </div>
+      <div class="bx lb-alt">
+        <div class="t">flux vector</div>
+        <div class="d">integral $(F_3,H_3)$ data held fixed during reduction</div>
+      </div>
+      <div class="bx lb-alt">
+        <div class="t">light fields</div>
+        <div class="d">$z_{\rm light}$ and $\tau$, or real vector $x_{\rm light}$</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f9-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Index split</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f9-row2">
+      <div class="bx lb2">
+        <div class="t">heavy_indices</div>
+        <div class="d">moduli solved away analytically<br><code>n_heavy</code></div>
+      </div>
+      <div class="bx lb2">
+        <div class="t">light_indices</div>
+        <div class="d">remaining moduli kept in the reduced EFT<br><code>n_light</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f9-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Heavy-field equation of motion</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f9-block">
+      <div class="bx lg">
+        <div class="t">solve_heavy</div>
+        <div class="d">
+          For <code>ConifoldFreezer</code>, compute $z_{\rm cf}$ from
+          <code>compute_zcf</code> / <code>zcf_handling</code><br>
+          optional K&auml;hler-covariant correction included through the coniLCS solver
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f9-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Reduced evaluation path</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f9-row2">
+      <div class="bx lg">
+        <div class="t">reconstruct_full_moduli</div>
+        <div class="d">insert $z_{\rm heavy}(z_{\rm light},\tau,\mathrm{flux})$ back into the full vector</div>
+      </div>
+      <div class="bx dg">
+        <div class="t">light-field EFT</div>
+        <div class="d"><code>superpotential</code>, <code>DW_light</code>, <code>DW_x_light</code>, <code>V_x_light</code>, derivatives</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-sm"></div>
+
+  <div class="jx-out-bar">
+    <strong>Output:</strong>&nbsp;
+    a lower-dimensional Newton or analysis problem on $2\,n_{\rm light}+2$
+    real fields, with heavy moduli solved consistently at each evaluation.
+  </div>
+</div>
+</div>

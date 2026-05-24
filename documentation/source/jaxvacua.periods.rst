@@ -70,7 +70,6 @@ Prepotential
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     periods.prepot_per
     periods.prepot_grad_per
@@ -82,7 +81,6 @@ Period vector and derivatives
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     periods.period_vector_per
     periods.grad_period_vector_per
@@ -97,19 +95,18 @@ Mirror dual volume and Kähler potential
 ----------------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     periods.A_per
     periods.kahler_potential_per
     periods.grad_kahler_potential_per
     periods.sigma
+    periods.compute_a_shift_monodromy
 
 
 Gauge kinetic matrix
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     periods.gauge_kinetic_matrix
     periods.gauge_kinetic_matrix_periods
@@ -120,6 +117,5 @@ ISD matrix
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     periods.ISD_matrix

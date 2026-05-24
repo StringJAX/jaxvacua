@@ -32,9 +32,10 @@ mass-squared spectrum,
    M^2_{IJ} = \frac{\partial^2 V}{\partial \phi^I \partial \phi^J}
    \Big|_{D_I W = 0},
 
-via ``jax.hessian`` on the scalar potential :math:`V`. Inherited
-input (the upstream :class:`FluxEFT` instance) is shown light grey;
-the diamond is the convergence filter; orange callouts are the
+via :meth:`jaxvacua.flux_eft.FluxEFT.hessian` and
+:meth:`jaxvacua.flux_eft.FluxEFT.mass_matrix`. Inherited input (the
+upstream :class:`jaxvacua.flux_eft.FluxEFT` instance) is shown light
+grey; the diamond is the convergence filter; orange callouts are the
 public outputs of the layer.
 
 .. raw:: html
@@ -51,11 +52,10 @@ Flux vacua finder
     FluxVacuaFinder
 
 
-Newton minimization
+Newton minimisation
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxVacuaFinder.newton_method_flux_vacua
     FluxVacuaFinder.compute_residual
@@ -65,7 +65,6 @@ Linearised shifts
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxVacuaFinder.linearised_shifts
     FluxVacuaFinder.linearised_shifts_ISD
@@ -77,9 +76,40 @@ Flux vacuum sampling
 -----------------------------------
 
 .. autosummary::
-    :toctree: _autosummary
 
     FluxVacuaFinder.fterm_solver
     FluxVacuaFinder.sample_SUSY_flux_vacua
     FluxVacuaFinder.sample_SUSY_vacua_from_fluxes
-    FluxVacuaFinder.CheckConstraints
+    FluxVacuaFinder.deduplicate_vacua
+
+
+Critical-point sampling (non-SUSY)
+-----------------------------------
+
+The non-SUSY workflow — sampling Gaussian-M-prior fluxes, ISD-completing
+them, refining via Newton / optax / scipy, and filtering — lives directly
+on :class:`FluxVacuaFinder` post-merge.  
+
+.. autosummary::
+
+    FluxVacuaFinder.sample_critical_points
+    FluxVacuaFinder.run_calibration
+    FluxVacuaFinder.calibrate_priors
+    FluxVacuaFinder.save_calibration
+    FluxVacuaFinder.load_calibration
+    FluxVacuaFinder.from_model
+
+
+Shared finder utilities
+-----------------------------------
+
+Thin delegators over the stateless helpers in
+:mod:`jaxvacua.flux_utils`.  Useful for post-hoc analysis of any
+converged candidate, regardless of which solver produced it.
+
+.. autosummary::
+
+    FluxVacuaFinder.dedup_key
+    FluxVacuaFinder.classify_solution
+    FluxVacuaFinder.is_physical
+    FluxVacuaFinder.to_fd

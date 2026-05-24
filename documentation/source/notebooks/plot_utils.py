@@ -1,5 +1,20 @@
-"""
-plot_utils.py — Shared plotting utilities for JAXVacua tutorial notebooks.
+"""Shared plotting utilities for JAXVacua tutorial notebooks.
+
+Purpose
+-------
+Provide compact plotting helpers used by example notebooks to inspect sampled
+flux-vacuum data.
+
+Main public API
+---------------
+- ``make_overview_plots``: creates overview scatter plots for moduli,
+  axio-dilaton, superpotential values and flux tadpoles.
+
+Design notes
+------------
+Notebook helpers should remain lightweight and presentation-focused.  They
+assume the supplied model exposes the standard ``FluxEFT`` superpotential and
+tadpole methods.
 """
 import numpy as np
 import seaborn as sn

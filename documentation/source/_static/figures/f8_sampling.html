@@ -1,0 +1,130 @@
+<div class="jx-fig mathjax_process" id="f8-sampling">
+<style>
+  .jx-fig#f8-sampling .jx-chart { width: 900px; }
+  .jx-fig#f8-sampling .f8-row3 {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .jx-fig#f8-sampling .f8-row2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 0 70px;
+  }
+  .jx-fig#f8-sampling .f8-mode-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  }
+  .jx-fig#f8-sampling .f8-block { padding: 0 80px; }
+  .jx-fig#f8-sampling .f8-arrow {
+    text-align: center; color: #3A7D5A; font-weight: 700;
+    font-size: 18px; line-height: 1; margin: 10px 0 8px;
+  }
+  .jx-fig#f8-sampling .f8-mode-grid .bx { min-height: 112px; }
+</style>
+
+<div class="jx-chart" id="f8-chart">
+  <div class="jx-title">jaxvacua.sampling.data_sampler &mdash; seed-generation workflow</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Inputs</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f8-row3">
+      <div class="bx lb">
+        <div class="t">model data</div>
+        <div class="d">K&auml;hler cone, rays, periods, ISD matrix<br><code>FluxEFT</code> / <code>FluxVacuaFinder</code></div>
+      </div>
+      <div class="bx lb-alt">
+        <div class="t">sampling bounds</div>
+        <div class="d">moduli, axions, dilaton, flux box or radius<br><code>moduli_bounds</code>, <code>flux_bounds</code></div>
+      </div>
+      <div class="bx lb-alt">
+        <div class="t">random state</div>
+        <div class="d">JAX / NumPy draw control<br><code>seed</code>, <code>PRNGSequence</code></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f8-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Geometry-aware sampling</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f8-row2">
+      <div class="bx lb2">
+        <div class="t">moduli samples</div>
+        <div class="d">
+          cone / stretched-cone / ray / box modes<br>
+          <code>get_moduli</code>, <code>sample_ray</code>, <code>filter_moduli</code>
+        </div>
+      </div>
+      <div class="bx lb2">
+        <div class="t">axio-dilaton samples</div>
+        <div class="d">
+          axions and $s=\operatorname{Im}\tau$<br>
+          <code>get_axions</code>, <code>get_dilaton</code>, <code>get_complex_tau</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f8-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Two seed-generation routes</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f8-row2">
+      <div class="bx lg">
+        <div class="t">generic random seeds</div>
+        <div class="d">
+          draw full fluxes independently<br>
+          <code>get_fluxes</code> &rarr; <code>initial_guesses</code>
+        </div>
+      </div>
+      <div class="bx lg">
+        <div class="t">ISD-informed seeds</div>
+        <div class="d">
+          draw half the flux data, solve the rest from ISD<br>
+          <code>ISD_sampling</code> &rarr; <code>initial_guesses_ISD</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f8-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">ISD modes</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f8-mode-grid">
+      <div class="bx lg">
+        <div class="t">ISD+</div>
+        <div class="d">given $(f_2,h_2)$<br>solve $(f_1,h_1)$ via $\overline{\mathcal{N}}$</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">ISD-</div>
+        <div class="d">given $(f_1,h_1)$<br>solve $(f_2,h_2)$ via $\overline{\mathcal{N}}^{-1}$</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">F</div>
+        <div class="d">given RR flux $f$<br>solve NSNS flux $h$</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">H</div>
+        <div class="d">given NSNS flux $h$<br>solve RR flux $f$</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-sm"></div>
+
+  <div class="jx-out-bar">
+    <strong>Output:</strong>&nbsp;
+    batched starting points $(z_0,\tau_0,\mathrm{flux}_0)$ for Newton refinement,
+    bounded searches, or exploratory filtering.
+  </div>
+</div>
+</div>

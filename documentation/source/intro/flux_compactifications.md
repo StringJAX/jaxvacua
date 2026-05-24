@@ -3,7 +3,7 @@
 In this note we discuss three-form flux compactifications of Type IIB string theory on
 Calabi-Yau orientifolds $X_3/\mathcal{O}$ (see {doc}`geometries` for the construction of
 these geometries).
-The fluxes generate a scalar potential that stabilizes the complex structure moduli and
+The fluxes generate a scalar potential that stabilises the complex structure moduli and
 the axio-dilaton through the mechanism reviewed here.
 
 
@@ -118,9 +118,9 @@ satisfied by the classical Kähler potential $K_K = -2\log\mathcal{V}$:
 the Kähler moduli F-term contributions exactly cancel the $-3|W|^2$ term in
 {eq}`eq:Vtot`, yielding the positive semi-definite expression {eq}`eq:Vflux`.
 
-The potential {eq}`eq:Vflux` is minimized (to zero) at the ISD locus $D_a W_{\rm flux} = 0$.
+The potential {eq}`eq:Vflux` is minimised (to zero) at the ISD locus $D_a W_{\rm flux} = 0$.
 This fixes $z^i$ and $\tau$, while the Kähler moduli remain as flat directions.
-Their stabilization requires quantum corrections and is discussed in {doc}`moduli_stabilisation`.
+Their stabilisation requires quantum corrections and is discussed in {doc}`moduli_stabilisation`.
 
 
 ## The flux landscape

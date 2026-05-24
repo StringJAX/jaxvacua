@@ -3,7 +3,6 @@
    -------------------------------------------------------------------------
    Shared stylesheet for the HTML+SVG figures embedded via `raw` HTML in
    the workflow page (`intro/index.md`) and the per-module API pages.
-   Ported from `private/userflow.html` (Andreas Schachner, March 2026).
 
    All rules are scoped under `.jx-fig` so the styles do not bleed into
    the surrounding Sphinx theme. Each individual figure on a page should

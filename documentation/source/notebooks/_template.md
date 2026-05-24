@@ -1,3 +1,7 @@
+---
+orphan: true
+---
+
 # Tutorial-notebook layout template
 
 Every tutorial notebook under `documentation/source/notebooks/` ships with
@@ -136,8 +140,9 @@ result = ...
 * Inline math in `$...$`; display math in `$$...$$`.  No `\begin{align}`
   blocks unless multi-line equations are unavoidable (Sphinx + nbconvert
   render both, but `$$` is more portable).
-* **First use** of every recurring symbol gets a short definition (see
-  the planned cross-notebook glossary at `notebooks/_glossary.md`).
+* **First use** of every recurring symbol gets a short definition and, where
+  useful, a link to the cross-notebook glossary at
+  `notebooks/_glossary.md`.
   Recurring symbols: `W₀`, `z_cf`, `g_s`, `N_flux`, ISD, AISD, PFV, AFV.
 
 ### Cross-references
@@ -176,10 +181,9 @@ the equivalent section there first.
 
 ## Glossary
 
-`notebooks/_glossary.md` (to be created in S0 follow-up) holds the
-canonical one-line definitions of recurring symbols.  Notebooks should
-link to entries from the abstract paragraph rather than redefining
-inline.
+`notebooks/_glossary.md` holds the canonical short definitions of recurring
+symbols.  Notebooks should link to entries from the abstract paragraph or
+first-use prose rather than repeatedly redefining the same notation inline.
 
 ## Sign-off checklist (per-notebook)
 

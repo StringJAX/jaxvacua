@@ -17,18 +17,18 @@ $$
 V_{\rm flux} = e^K K^{a\bar b} D_a W_{\rm flux}\, D_{\bar b}\overline{W}_{\rm flux} \geq 0
 $$
 
-that stabilizes $z^i$ and $\tau$ at the ISD locus.
+that stabilises $z^i$ and $\tau$ at the ISD locus.
 However, the Kähler moduli $T_\alpha$ (which control the volumes of four-cycles
 in $X_3$) remain flat directions at the classical level due to the no-scale structure.
-Their stabilization requires quantum corrections — perturbative or non-perturbative.
+Their stabilisation requires quantum corrections — perturbative or non-perturbative.
 
 
 ## KKLT scenario
 
 The **KKLT scenario** [[hep-th/0301240](https://arxiv.org/abs/hep-th/0301240)] achieves
-complete moduli stabilization in two steps, followed by an uplifting procedure.
+complete moduli stabilisation in two steps, followed by an uplifting procedure.
 
-**Step 1: Flux stabilization.**
+**Step 1: Flux stabilisation.**
 Choose fluxes such that the no-scale minimum sits at
 
 $$
@@ -81,7 +81,7 @@ quantization in the throat.
 The **Large Volume Scenario**
 [[hep-th/0502058](https://arxiv.org/abs/hep-th/0502058),
 [hep-th/0505076](https://arxiv.org/abs/hep-th/0505076)]
-stabilizes Kähler moduli using $\alpha'$ corrections to the Kähler potential.
+stabilises Kähler moduli using $\alpha'$ corrections to the Kähler potential.
 
 For a Calabi-Yau with at least two Kähler moduli — a *large* modulus $\tau_b$
 controlling the overall volume $\mathcal{V} \sim \tau_b^{3/2}$ and a *small* modulus
@@ -137,7 +137,7 @@ For a comprehensive and pedagogical treatment of these mechanisms, including rec
 constructed explicit candidate de Sitter vacua, see the TASI lectures by McAllister and
 Schachner [[arXiv:2512.17095](https://arxiv.org/abs/2512.17095)] and references therein.
 
-JAXVacua currently focuses on finding **SUSY flux vacua** (ISD solutions minimizing
+JAXVacua currently focuses on finding **SUSY flux vacua** (ISD solutions minimising
 $V_{\rm flux}$) and **non-SUSY vacua** (local minima of the full scalar potential).
 For implementations see {doc}`../jaxvacua.flux_eft` and
 {doc}`../applications/nonSUSY_vacua2023`.

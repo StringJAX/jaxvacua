@@ -21,6 +21,31 @@ dedicated page.
     jaxvacua.conifold.zcf_solver
 
 
+Typical coniLCS workflow
+------------------------
+
+1. Find or choose conifold data with ``find_conifolds``, ``Conifold``, and the
+   projection or basis helpers in ``conifold_utils``.
+2. Use the coniLCS prepotential pieces through the attached period and
+   complex-structure-sector methods.
+3. Compute the heavy conifold modulus with the ``zcf_solver`` functions or the
+   corresponding methods attached to ``FluxEFT``.
+4. Use ``jaxvacua.freezer.ConifoldFreezer`` when the conifold modulus should
+   be integrated out and the remaining light-field EFT should be evaluated.
+
+
+Choosing a subpage
+------------------
+
+* :doc:`jaxvacua.conifold.coni` documents conifold descriptors and discovery.
+* :doc:`jaxvacua.conifold.conifold_utils` covers basis changes, projections,
+  lattice helpers, and conifold flux manipulations.
+* :doc:`jaxvacua.conifold.coniLCS_prepotential` documents the prepotential
+  pieces used in the coniLCS limit.
+* :doc:`jaxvacua.conifold.zcf_solver` documents the ``z_cf`` equation of
+  motion and the bulk effective-theory building blocks.
+
+
 ``_ConifoldGated`` — gating descriptor
 ---------------------------------------
 
@@ -69,6 +94,6 @@ See also
 * General-purpose lattice helpers — ``extended_euclidean``,
   ``orthogonal_lattice`` — live in :doc:`jaxvacua.util` (they have non-
   conifold callers and are re-exported here only for convenience).
-* :doc:`jaxvacua.freezer` — :class:`ConifoldFreezer` consumes ``compute_zcf``
+* :doc:`jaxvacua.freezer` — :class:`jaxvacua.freezer.ConifoldFreezer` consumes ``compute_zcf``
   and ``zcf_handling`` from this subpackage to provide the light-field EFT
   interface (``DW_x_light``, ``dDW_x_light``).

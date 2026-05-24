@@ -17,8 +17,8 @@ In [2308.15525](https://arxiv.org/abs/2308.15525) we construct large ensembles o
 
 The minimisation of the full scalar potential (beyond the ISD approximation) uses [`jaxvacua.css`](../jaxvacua.css) and [`jaxvacua.flux_eft`](../jaxvacua.flux_eft). The relevant tutorials are:
 
-- **[Tutorial 5: Finding flux vacua](../notebooks/02_vacuum_finding/5_finding_flux_vacua)** — introduces scalar potential minimisation and the Newton refinement step used to locate exact vacua.
-- **[Tutorial 6: Sampling module](../notebooks/02_vacuum_finding/6_sampling_module)** — batch flux sampling pipeline used for large-ensemble construction.
+- **[NB05: Finding flux vacua](../notebooks/02_vacuum_finding/05_finding_flux_vacua.ipynb)** — introduces scalar potential minimisation and Newton refinement.
+- **[NB07: ISD sampling](../notebooks/02_vacuum_finding/07_ISD_sampling.ipynb)** — includes the non-SUSY `sample_critical_points` workflow.
 
 To cite our work, please use:
 

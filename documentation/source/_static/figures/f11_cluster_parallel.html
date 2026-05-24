@@ -1,0 +1,85 @@
+<div class="jx-fig mathjax_process" id="f11-cluster">
+<style>
+  .jx-fig#f11-cluster .jx-chart { width: 900px; }
+  .jx-fig#f11-cluster .f11-block { padding: 0 95px; }
+  .jx-fig#f11-cluster .f11-row3 {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .jx-fig#f11-cluster .f11-arrow {
+    text-align: center; color: #3A7D5A; font-weight: 700;
+    font-size: 18px; line-height: 1; margin: 10px 0 8px;
+  }
+  .jx-fig#f11-cluster .f11-dir {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px; color: #777;
+  }
+</style>
+
+<div class="jx-chart" id="f11-chart">
+  <div class="jx-title">bounded_fluxes cluster execution &mdash; prepare, process, merge</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr blue">
+      <span class="lbl">Phase 1 &nbsp;&mdash;&nbsp; prepare on the head node</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f11-block">
+      <div class="bx lb">
+        <div class="t">export_cluster_job</div>
+        <div class="d">
+          precompute ISD pipeline, serialise config, generate filtered $h$-chunks<br>
+          <span class="f11-dir">pipeline.npz &middot; config.json &middot; worker.py &middot; chunks/*.npy</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f11-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 2 &nbsp;&mdash;&nbsp; process independent chunks</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f11-row3">
+      <div class="bx lg">
+        <div class="t">worker 0</div>
+        <div class="d"><code>process_chunk_from_disk(0)</code><br>ISD-complete and filter chunk 0</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">worker 1</div>
+        <div class="d"><code>process_chunk_from_disk(1)</code><br>same saved pipeline, different file</div>
+      </div>
+      <div class="bx lg">
+        <div class="t">worker N</div>
+        <div class="d">SLURM array or manual rerun<br>failed chunks are isolated</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="f11-arrow">&darr;</div>
+
+  <div class="jx-step">
+    <div class="jx-step-hdr green">
+      <span class="lbl">Phase 3 &nbsp;&mdash;&nbsp; merge on the head node</span>
+      <span class="rl"></span>
+    </div>
+    <div class="f11-block">
+      <div class="bx dg">
+        <div class="t">merge_cluster_results</div>
+        <div class="d">
+          read <span class="f11-dir">results/result_*.npz</span>, report missing chunk IDs,
+          deduplicate fluxes, optionally map to FD, Newton-refine, and write database batches
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="gap-sm"></div>
+
+  <div class="jx-out-bar">
+    <strong>Output:</strong>&nbsp;
+    final deduplicated vacua list or catalogue, assembled without rerunning the export step.
+  </div>
+</div>
+</div>

@@ -29,6 +29,7 @@
         ~periods.Q_inv_per
         ~periods.Q_per
         ~periods.__init__
+        ~periods.compute_a_shift_monodromy
         ~periods.dM
         ~periods.dM_c
         ~periods.dN

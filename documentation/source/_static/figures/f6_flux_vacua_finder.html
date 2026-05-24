@@ -86,8 +86,8 @@
       <div class="bx lg" id="f6-newton">
         <div class="t">Newton step</div>
         <div class="d">
-          residual&nbsp; $r_I = D_I W$&nbsp; (SUSY)&nbsp; or&nbsp; $r_I = \partial_I V$&nbsp; (general critical point)<br>
-          Jacobian&nbsp; $J_{IJ} = \partial_J\, D_I W$&nbsp; or&nbsp; $J_{IJ} = \partial_I\, \partial_J V$<br>
+          SUSY residual&nbsp; $r_I = D_I W$; non-SUSY searches use $r_I = \partial_I V$<br>
+          Jacobian&nbsp; $J_{IJ} = \partial_J\, D_I W$, or the scalar-potential Hessian for critical points<br>
           shift $\Delta = -J^{-1} r$,&nbsp; update $(z, \tau) \mathrel{+}= \Delta$<br>
           <code>FluxVacuaFinder.newton_method_flux_vacua()</code>&nbsp;&middot;&nbsp;
           <code>scipy.optimize.root(method='hybr')</code>
@@ -137,7 +137,7 @@
         <div class="t">Hessian / mass matrix</div>
         <div class="d">
           $M^2_{IJ} = \partial_I \partial_J V \big|_{D_I W = 0}$,&nbsp;
-          $m^2 = \operatorname{eig}(M^2)$ via <code>jax.hessian(FluxEFT.scalar_potential)</code><br>
+          with metric-normalised eigenvalues for the mass spectrum<br>
           <code>FluxEFT.mass_matrix</code>&nbsp;&middot;&nbsp;<code>FluxEFT.hessian</code>
         </div>
       </div>
@@ -233,8 +233,8 @@
     }
 
     if (conv && newt) {
-      var gut = conv.r + 36;
-      elbow(conv.r + ',' + conv.cy + ' ' + gut + ',' + conv.cy + ' ' + gut + ',' + (newt.cy + 6) + ' ' + (newt.r + 2) + ',' + (newt.cy + 6), 'f6-ag');
+      var gut = Math.max(conv.r, newt.r) + 36;
+      elbow(conv.r + ',' + conv.cy + ' ' + gut + ',' + conv.cy + ' ' + gut + ',' + (newt.cy + 6) + ' ' + newt.r + ',' + (newt.cy + 6), 'f6-ag');
       txt(conv.r + 4, conv.cy - 6, 'no', '#3A7D5A', 'italic');
       txt(gut + 4, (conv.cy + newt.cy) / 2 + 4, 'iterate', '#888', 'italic');
     }
