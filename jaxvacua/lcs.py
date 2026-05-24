@@ -1,17 +1,44 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, 
-# this code must not be shared with anyone else or used for any other projects 
-# than those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds functions and classes to work with Calabi-Yau trees. A LCS-tree
-# object contains global information about the orientifold, the Calabi-Yau threefold
-# and the Gopakumar-Vafa invariants.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Calabi-Yau model-data container for large-complex-structure workflows.
+
+Purpose
+-------
+Define ``lcs_tree``, the JAX-pytree data container that gathers the
+topological, cone, enumerative and conifold data needed to build periods and
+flux EFTs.
+
+Main public API
+---------------
+- ``coo_to_intnums``: convert sparse symmetric intersection-number data to a
+  dense tensor.
+- ``lcs_tree``: stores Hodge data, intersection numbers, Chern data,
+  Gopakumar-Vafa/Gromov-Witten invariants, cone information, basis changes,
+  conifold descriptors and metadata.
+- Constructors and import helpers for dictionaries, saved model files and
+  CYTools-derived geometries.
+
+Design notes
+------------
+``lcs_tree`` is the shared geometry object passed into ``periods``, ``css``,
+``FluxEFT`` and search classes.  It should remain lightweight to flatten and
+stable across JAX transformations.
+"""
 
 
 # Important standard libraries
@@ -26,7 +53,7 @@ from jax.tree_util import register_pytree_node
 import jax.numpy as jnp
 from jax.scipy.special import zeta
 from jax import Array
-from .conifold import getAMatrix, get_basis_change, Conifold
+from .conifold import compute_a_matrix, get_basis_change, Conifold
 from .cytools_interface import compute_intersection_numbers_coo, cytools_model_data_init
 from .util import load_zipped_pickle,flatten_func,unflatten_func_class
 
@@ -546,7 +573,7 @@ class lcs_tree(object):
         else:
             if self.limit!="LCS":
                 # Recompute a_matrix to match with conventions in paper
-                self.a_matrix = jnp.array(getAMatrix(self.intnums))
+                self.a_matrix = jnp.array(compute_a_matrix(self.intnums))
             else:
                 a_matrix = np.zeros((self.h12, self.h12))
                 
@@ -556,8 +583,12 @@ class lcs_tree(object):
                             a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
                         elif I1<I2:
                             a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
+                            
+                            
                 
                 self.a_matrix = jnp.array(a_matrix)
+                
+                
                 
         # Take same convention as in https://inspirehep.net/files/d2f57319d398cfe81212b19c7f9d109f for CP11169
         if self.h12==2 and self.model_ID==1:
@@ -668,8 +699,10 @@ class lcs_tree(object):
             if invariants.shape[0] != charges.shape[0]:
                 raise ValueError(f"Number of invariant values does not match number of charge entries! Expected {charges.shape[0]} invariant values, but got {invariants.shape[0]} instead!")
             
-            if self.grading_vector.shape[0] != self.h12:
-                raise ValueError(f"Grading vector has wrong shape! Expected first dimension of size {self.h12}, but got {self.grading_vector.shape[0]} instead!")
+            if self.grading_vector is not None:
+                
+                if self.grading_vector.shape[0] != self.h12:
+                    raise ValueError(f"Grading vector has wrong shape! Expected first dimension of size {self.h12}, but got {self.grading_vector.shape[0]} instead!")
         
         
         

@@ -1,16 +1,43 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, 
-# this code must not be shared with anyone else or used for any other projects 
-# than those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds functions to compute periods and derived objects in CY threefold 
-# compactifications.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Period and prepotential machinery for Calabi-Yau threefolds.
+
+Purpose
+-------
+Define the ``periods`` class, the low-level object that evaluates period
+vectors, prepotentials and derived special-geometry data in supported regions
+of complex-structure moduli space.
+
+Main public API
+---------------
+- ``periods``: loads or constructs model data from ``lcs_tree``, dictionaries,
+  saved model files, CYTools input or custom period/prepotential callables.
+- LCS, coniLCS and one-modulus hypergeometric period/prepotential
+  implementations, including polynomial and instanton contributions.
+- Period vectors, derivatives, gauge-kinetic matrices and projective/affine
+  coordinate conversions consumed by ``css`` and ``FluxEFT``.
+
+Design notes
+------------
+This is the numerical core below the geometry classes.  It is JAX-pytree
+compatible and keeps model data in forms suitable for JIT-compiled downstream
+calculations.
+"""
 
 
 # Important standard libraries
@@ -184,7 +211,10 @@ class periods:
         else:
             self.include_mirror_wsi = True
             
-        if limit in ["coniLCS_series","coniLCS_bulk","coniLCS"]:
+        # coniLCS limits need a conifold basis choice; default to the aligned
+        # (conifold-at-index-0) basis, but honour an explicit conifold_basis=False
+        # so a general (non-aligned) basis can be requested.
+        if limit in ["coniLCS_series","coniLCS_bulk","coniLCS"] and conifold_basis is None:
             conifold_basis = True
         
         # Set lcs_tree from input or construct it from provided data or CYTools interface. The lcs_tree object holds all the relevant data of the CY model and is used as input for the period calculations. If no lcs_tree_input is provided, we construct the lcs_tree object from the provided data or using the CYTools interface. If an lcs_tree_input is provided, we use it directly.
@@ -477,9 +507,86 @@ class periods:
         Block2=jnp.identity(2*(self.h12+1),dtype=jnp.int32)[self.h12+1:]
 
         return jnp.concatenate((Block2,Block1))
-    
-    
-    
+
+    def compute_a_shift_monodromy(self, shift: Array) -> Array:
+        r"""
+        **Description:**
+        Symplectic monodromy matrix induced by a shift of the prepotential
+        :math:`a`-matrix, :math:`a \to a + S`.
+
+        .. admonition:: Details
+            :class: dropdown
+
+            The LCS prepotential carries a quadratic term
+            :math:`\tfrac{1}{2}\, a_{ij}\, X^i X^j`, so under :math:`a \to a + S`
+            it gains :math:`\tfrac{1}{2}\, S_{ij}\, X^i X^j`.  The dual periods
+            :math:`\mathcal{F}_I = \partial_I F` then transform as
+
+            .. math::
+                \mathcal{F}_i \to \mathcal{F}_i + S_{ij}\, X^j
+                \quad (i,j=1,\ldots,h^{1,2})\,, \qquad
+                \mathcal{F}_0 \to \mathcal{F}_0\,,
+
+            while every :math:`X^I` is unchanged (the :math:`\mathcal{F}_0` term
+            is invariant because the degree-two piece cancels by Euler's
+            theorem).  On the period vector :math:`\Pi = (\mathcal{F}_I,\, X^I)`
+            (dual periods first, see :func:`period_vector_per`) this is the
+            unipotent transformation
+
+            .. math::
+                M(S) = \begin{pmatrix} \mathbb{1} & \widehat{S} \\
+                                       0 & \mathbb{1} \end{pmatrix}\,, \qquad
+                \widehat{S} = \begin{pmatrix} 0 & 0 \\ 0 & S \end{pmatrix}\,,
+
+            where :math:`\widehat{S}` embeds the :math:`h^{1,2}\times h^{1,2}`
+            shift :math:`S` with a zero :math:`X^0` row and column.  :math:`M(S)`
+            is symplectic (:math:`M^T \Sigma M = \Sigma`, with :math:`\Sigma`
+            from :func:`sigma`) **iff** :math:`S` is symmetric — which every
+            :math:`a`-matrix from :func:`jaxvacua.conifold.compute_a_matrix`
+            satisfies (:math:`a_{ij} = \kappa_{ijj}/2 = a_{ji}`) — and integer
+            iff :math:`S` is integer.
+
+            Periods, fluxes and the full flux vector all transform by the
+            **same** :math:`M(S)` (:math:`\Pi \to M\Pi`,
+            :math:`\text{flux} \to M\,\text{flux}`), leaving the Kähler
+            potential :math:`e^{-K} = i\,\Pi^\dagger \Sigma \Pi` and the
+            superpotential :math:`W = (f - \tau h)\cdot \Sigma \cdot \Pi`
+            invariant.  This makes :math:`M(S)` the dictionary between two
+            :math:`a`-conventions (equivalently two integral flux bases), e.g.
+            the ``conifold_basis=True`` and ``conifold_basis=False`` descriptions
+            of the same geometry.
+
+        Args:
+            shift (Array): Symmetric :math:`(h^{1,2}, h^{1,2})` shift matrix
+                :math:`S = a' - a`.
+
+        Returns:
+            Array: The :math:`(2(h^{1,2}+1), 2(h^{1,2}+1))` symplectic monodromy
+            matrix :math:`M(S)`.
+
+        See also: :func:`sigma`, :func:`period_vector_per`,
+            :func:`jaxvacua.conifold.compute_a_matrix`
+        """
+        S = np.asarray(shift)
+        if S.ndim != 2 or S.shape[0] != S.shape[1]:
+            raise ValueError(f"a-shift S must be a square matrix; got shape {S.shape}.")
+        if S.shape[0] != self.h12:
+            raise ValueError(
+                f"a-shift S must be ({self.h12}, {self.h12}) to match h12={self.h12}; "
+                f"got shape {S.shape}."
+            )
+        if not np.allclose(S, S.T):
+            raise ValueError("a-shift S must be symmetric for M(S) to be symplectic.")
+
+        h = self.h12
+        S_jnp = jnp.asarray(S)
+        S_hat = jnp.zeros((h + 1, h + 1), dtype=S_jnp.dtype).at[1:, 1:].set(S_jnp)
+        identity = jnp.eye(h + 1, dtype=S_jnp.dtype)
+        zero = jnp.zeros((h + 1, h + 1), dtype=S_jnp.dtype)
+        return jnp.block([[identity, S_hat], [zero, identity]])
+
+
+
     ###################################################################################################################################
     #################################### PREPOTENTIAL ETC. AS FUNCTIONS OF PERIODS FOR LCS ############################################
     ###################################################################################################################################
@@ -619,6 +726,7 @@ class periods:
         
         if self.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
             approx="inf"
+            #approx="patch"
         elif self.limit == "coniLCS":
             approx="patch"
         else:

@@ -15,19 +15,30 @@
 # You should have received a copy of the GNU General Public License
 # along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-"""
-**Description:**
-JAXVacua: A library for analysing string compactifications and constructing string vacua.
+"""Top-level package interface for JAXVacua.
 
-Sub-modules:
-	periods: Contains `periods` class implementing standard formulas in terms of the periods.
-	css: Contains `css` class containing functions to handle
-		the Kähler geometry of the complex structure sector.
-	flux_eft: Contains `FluxEFT` class for computations of the flux scalar potential induced by
-		3-form flux backgrounds and EFT conditions.
-	flux_vacua_finder: Contains `FluxVacuaFinder` class for searching and constructing flux vacua.
-	util: Contains utility functions.
+Purpose
+-------
+Configure JAX precision and expose the main public classes for analysing
+Calabi-Yau compactifications, flux effective field theories, and flux vacua.
 
+Main public API
+---------------
+- ``set_precision`` plus the module-level ``precision``, ``FLOAT`` and
+  ``COMPLEX`` aliases used throughout the package.
+- Geometry and periods: ``lcs_tree``, ``periods``, ``css``.
+- Flux physics and searches: ``FluxEFT``, ``FluxVacuaFinder``,
+  ``bounded_fluxes`` and ``data_sampler``.
+- Reduced EFT and special-model helpers: ``Freezer``, ``ConifoldFreezer`` and
+  ``HypergeometricModels``.
+- Conifold, CYTools, utility and flux helper functions re-exported for common
+  interactive workflows.
+
+Import notes
+------------
+Precision is configured before importing the rest of JAXVacua.  The package
+defaults to ``float64`` unless ``JAXVACUA_PRECISION`` is set, while Apple Metal
+is redirected to CPU because the current calculations require complex numbers.
 """
 
 # ── Precision detection ───────────────────────────────────────────────────

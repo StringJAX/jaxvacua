@@ -1,22 +1,57 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, this 
-# code must not be shared with anyone else or used for any other projects than 
-# those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds the class to sample fluxes and moduli values.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Random and structured sampling utilities for flux-vacuum searches.
+
+Purpose
+-------
+Define ``data_sampler`` and supporting parsers for generating flux vectors,
+axio-dilaton values and complex-structure moduli initial data used by
+``FluxVacuaFinder`` and related workflows.
+
+Main public API
+---------------
+- ``_parse_box_bounds`` and ``_parse_exclude_walls``: normalise sampling
+  bounds and wall-exclusion options with clear validation errors.
+- ``data_sampler``: samples integer fluxes, Kähler-cone-compatible moduli,
+  axio-dilaton values, ISD/PFV-inspired seeds and batched initial conditions.
+- JAX and NumPy random helpers integrated with ``PRNGSequence`` from
+  ``jaxvacua.util``.
+
+Design notes
+------------
+Sampling routines are performance-sensitive but user-facing.  Bounds and
+shape handling are kept explicit so failed runs report input problems near
+the source rather than inside compiled search kernels.
+"""
 
 
 #Standard libraries
 import os, sys, warnings, time, getopt, itertools
 import numpy as np
 from functools import partial
-import gurobipy as gp
+
+# gurobipy is an optional dependency (requires a Gurobi licence) used only by
+# `find_interior_points`.  Guard the import so `import jaxvacua` still works
+# without it; the clear error is deferred to the point of use.
+try:
+    import gurobipy as gp
+except ImportError:
+    gp = None
 
 # Import jax modules
 import jax
@@ -230,7 +265,7 @@ class data_sampler():
         A class to sample initial data for the construction of flux vacua.
 
         Args:
-            self.model (jaxvacua.flux_sector.flux_sector): Model class for flux compactifications.
+            self.model (jaxvacua.flux_eft.FluxEFT): Model class for flux compactifications.
             flux_bounds (Tuple[float, float]): Bounds for fluxes.
             axion_bounds (Tuple[float, float]): Bounds for axions.
             dilaton_bounds (Tuple[float, float]): Bounds for dilaton.
@@ -676,6 +711,12 @@ class data_sampler():
             RuntimeError: If the optimization fails.
         """
         
+        if gp is None:
+            raise ImportError(
+                "find_interior_points requires the optional dependency `gurobipy` "
+                "(a Gurobi licence is needed). Install it with `pip install gurobipy`."
+            )
+
         # Retrieve hyperplanes defining the Kähler cone
         H = self._hyperplanes
 
@@ -2166,5 +2207,3 @@ class data_sampler():
         
 
     
-
-

@@ -1,14 +1,44 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
-"""``jaxvacua.util`` — general-purpose utilities used across the package.
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Contents are grouped into thematic sections separated by banners; see the
-section headings below for the layout.  The companion Sphinx page is
-``documentation/source/jaxvacua.util.rst``.
+"""General-purpose utility functions used across JAXVacua.
+
+Purpose
+-------
+Collect package-wide helpers that are intentionally independent of the
+physics class hierarchy, including random-number handling, batching,
+serialisation, diagnostics and integer-lattice routines.
+
+Main public API
+---------------
+- Random helpers: ``PRNGSequence``, ``random_uniform``, ``random_integer`` and
+  related sampling utilities.
+- JAX helpers: vectorisation, caching, flatten/unflatten adapters and small
+  wrappers for compiled workflows.
+- IO and diagnostics: pickle helpers, timing/timeout utilities and progress
+  helpers used by search scripts.
+- Integer and lattice helpers such as ``extended_euclidean`` and
+  ``orthogonal_lattice``.
+
+Design notes
+------------
+The file is organised into thematic sections separated by banners.  Functions
+kept here should remain generic enough to be reused without importing the
+large geometry or flux-EFT modules.
 """
 
 # ==============================================================================
@@ -72,10 +102,10 @@ class PRNGSequence:
                 that becomes the initial internal state.  Defaults to ``42``.
 
         Example:
-            ```python
-            rns = PRNGSequence(42)
-            key = next(rns)
-            ```
+            .. code-block:: python
+
+                rns = PRNGSequence(42)
+                key = next(rns)
         """
         if isinstance(seed, int):
             self._key = jax.random.PRNGKey(seed)
@@ -336,10 +366,10 @@ def jit_with_static_args(
         Callable: JIT-compiled wrapper around ``func``.
 
     Example:
-        ```python
-        def f(x, y, n): return x + y + n
-        jit_f = jit_with_static_args(f, static_argnums=(2,))
-        ```
+        .. code-block:: python
+
+            def f(x, y, n): return x + y + n
+            jit_f = jit_with_static_args(f, static_argnums=(2,))
     """
     @partial(jax.jit, static_argnums=static_argnums)
     def wrapped_func(*args, **kwargs):
@@ -412,10 +442,10 @@ def subsets(
         list or itertools.combinations: All size-``n`` subsets.
 
     Example:
-        ```python
-        subsets(range(4), n=2)
-        # [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
-        ```
+        .. code-block:: python
+
+            subsets(range(4), n=2)
+            # [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]
     """
     if as_list:
         return list(itertools.combinations(iterable, n))
@@ -446,11 +476,11 @@ def flatten(
         ValueError: If both ``as_gen`` and ``as_np_arr`` are ``True``.
 
     Example:
-        ```python
-        A = np.asarray(range(2**3)).reshape(2, 2, 2)
-        flatten(A)                    # [0, 1, 2, 3, 4, 5, 6, 7]
-        flatten(A, as_np_arr=True)    # array([0, 1, 2, 3, 4, 5, 6, 7])
-        ```
+        .. code-block:: python
+
+            A = np.asarray(range(2**3)).reshape(2, 2, 2)
+            flatten(A)                    # [0, 1, 2, 3, 4, 5, 6, 7]
+            flatten(A, as_np_arr=True)    # array([0, 1, 2, 3, 4, 5, 6, 7])
     """
     if as_gen and as_np_arr:
         raise ValueError("Either as_gen OR as_np_arr can be true...")
@@ -489,11 +519,11 @@ def flatten_top(
         list | np.ndarray:  ``arr`` with its top ``N`` levels flattened.
 
     Example:
-        ```python
-        A = np.asarray(range(2**3)).reshape(2, 2, 2)
-        flatten_top(A.tolist())       # [[0, 1], [2, 3], [4, 5], [6, 7]]
-        flatten_top(A.tolist(), N=2)  # [0, 1, 2, 3, 4, 5, 6, 7]
-        ```
+        .. code-block:: python
+
+            A = np.asarray(range(2**3)).reshape(2, 2, 2)
+            flatten_top(A.tolist())       # [[0, 1], [2, 3], [4, 5], [6, 7]]
+            flatten_top(A.tolist(), N=2)  # [0, 1, 2, 3, 4, 5, 6, 7]
     """
     if N > 1:
         return flatten_top(flatten_top(arr, as_list=as_list, N=1),
@@ -652,13 +682,13 @@ def is_outlier(
         below the lower or above the upper percentile.
 
     Example:
-        ```python
-        cols = df.columns.to_list()
-        all_outliers = np.logical_or.reduce(
-            [is_outlier(df, c) for c in cols]
-        )
-        df_reduced = df.loc[~all_outliers]
-        ```
+        .. code-block:: python
+
+            cols = df.columns.to_list()
+            all_outliers = np.logical_or.reduce(
+                [is_outlier(df, c) for c in cols]
+            )
+            df_reduced = df.loc[~all_outliers]
     """
     # Lazy pandas import — keep `util` cheap to load when pandas is unused.
     try:
@@ -741,11 +771,11 @@ def exit_after(s: int) -> Callable:
         Callable: A decorator.
 
     Example:
-        ```python
-        @exit_after(5)
-        def slow():
-            ...
-        ```
+        .. code-block:: python
+
+            @exit_after(5)
+            def slow():
+                ...
     """
     def outer(fn):
         """Wrap `fn` with a timeout timer."""
@@ -838,6 +868,26 @@ _STATIC_KEYS: Tuple[str, ...] = (
 )
 
 
+# Attributes excluded from the pytree entirely — neither traced children nor
+# static aux.  These are pure caches / scratch state that the JIT'd math
+# kernels never read (they are used only by eager methods: the ``sampler``
+# property, ``_precompute_M_eigensystem``, ``calibrate_priors``,
+# ``_estimate_sigmas``).  Excluding them keeps the treedef stable:
+#   * the lazy ``_sampler`` (None -> data_sampler on first access) no longer
+#     perturbs the treedef, so jit'd kernels are not recompiled after the
+#     sampler is built, and finders sharing geometry share compiled kernels;
+#   * the calibration dict / numpy arrays never enter aux_data, removing the
+#     hazard of an unhashable / ambiguously-comparable treedef.
+# On a pytree round-trip (inside a jit trace) the transient reconstructed
+# object simply lacks these attributes; that is safe because the traced
+# kernels never touch them, and the user's original instance is unchanged.
+_PYTREE_IGNORE: frozenset = frozenset((
+    "_sampler", "_sampler_kwargs",
+    "_calibrated_sigmas", "_M_eigvecs", "_M_scales", "_calibration_isd_modes",
+    "_s_min", "_tr_Minv_median", "_M_cond",
+))
+
+
 def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
     r"""
     **Description:**
@@ -849,8 +899,10 @@ def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
       * ``aux_data`` — names of those children, plus a flat list of
         ``(key, value)`` pairs for static (non-traced) attributes.
 
-    The classification is: a value is **static** iff its Python type is
-    ``str`` / ``bool`` or its key appears in :data:`_STATIC_KEYS`.
+    The classification is: a key in :data:`_PYTREE_IGNORE` is dropped entirely
+    (cache / scratch state, not part of the pytree); otherwise a value is
+    **static** iff its Python type is ``str`` / ``bool`` or its key appears in
+    :data:`_STATIC_KEYS`; everything else is a traced child.
 
     Args:
         obj (Any): Instance to flatten.  Any class registered with
@@ -863,6 +915,8 @@ def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
     aux_data: List[Any] = []
     static: List[Tuple[str, Any]] = []
     for key, value in obj.__dict__.items():
+        if key in _PYTREE_IGNORE:
+            continue
         if isinstance(value, (str, bool)) or key in _STATIC_KEYS:
             static.append((key, value))
         else:

@@ -1,36 +1,44 @@
-# ==============================================================================
-# hypergeometric_models.py
+# Copyright 2022-2026 Andreas Schachner
 #
-# Hardcoded registry of one-modulus Calabi-Yau models from arXiv:2306.01059
-# (Bastian, van de Heisteeg, Schlechter). Provides closed-form prepotentials
-# at each of three moduli-space points:
-#   - LCS    (Large Complex Structure / MUM, at z → 0)
-#   - Kpoint (finite-order monodromy, at z → ∞ for K-type models)
-#   - Cpoint (conifold singularity)
+# This file is part of JAXVacua.
 #
-# Public API
-# ----------
-# >>> import jaxvacua as jvc
-# >>> jvc.HypergeometricModels.list()              # available labels
-# >>> m = jvc.HypergeometricModels.build("X33", limit="LCS")    # standard FluxVacuaFinder
-# >>> m = jvc.HypergeometricModels.build("X33", limit="Kpoint") # at K-point
-# >>> m.DW_x(x0, flux); m.dDW_x(x0, flux)          # standard Newton-solve API
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Or, going through FluxVacuaFinder directly (periods auto-detects the model):
-# >>> m = jvc.FluxVacuaFinder(h12=1, model_ID="X33", limit="Kpoint")
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
 #
-# Low-level escape hatches for users defining custom one-modulus models:
-# >>> from jaxvacua import make_prepot_LCS, make_prepot_Kpoint, make_prepot_Cpoint
-#
-# Conventions: the K-point formula reproduces eqs. (1060–1063) of [1] exactly;
-# the C-point formula reproduces eqs. (846–849) of [1] in a convention where
-# the instanton normalization absorbs a factor of (8π)⁻¹ into A₁.
-#
-# References
-# ----------
-# [1] Bastian, van de Heisteeg, Schlechter, arXiv:2306.01059
-# [2] AESZ database: Almkvist, Enckevort, van Straten, Zudilin
-# ==============================================================================
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""One-modulus hypergeometric Calabi-Yau model registry.
+
+Purpose
+-------
+Provide hard-coded one-modulus models from Bastian, van de Heisteeg and
+Schlechter, arXiv:2306.01059, together with closed-form prepotentials at
+large-complex-structure, K-point and C-point limits.
+
+Main public API
+---------------
+- ``HypergeometricModels`` and ``list_hypergeometric_models`` for listing and
+  constructing supported models.
+- Prepotential builders ``make_prepot_LCS``, ``make_prepot_Kpoint`` and
+  ``make_prepot_Cpoint`` for low-level custom workflows.
+- Registry dictionaries for hypergeometric, non-hypergeometric and special
+  point data.
+
+Design notes
+------------
+The K-point formula follows equations (1060-1063) of the reference.  The
+C-point formula follows equations (846-849) with the package convention that
+the instanton normalisation absorbs a factor of ``(8*pi)^-1`` into ``A1``.
+Models built through this registry use the standard ``FluxVacuaFinder`` API.
+"""
 
 from functools import partial
 import numpy as np

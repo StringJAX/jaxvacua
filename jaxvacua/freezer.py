@@ -1,16 +1,42 @@
-# ==============================================================================
-# freezer — freeze out heavy moduli from the flux EFT.
+# Copyright 2022-2026 Andreas Schachner
 #
-# When a subset of moduli is parametrically heavier than the rest, one can
-# solve their leading-order equations of motion as functions of the light
-# fields and substitute back to obtain a reduced EFT with fewer degrees of
-# freedom.
+# This file is part of JAXVacua.
 #
-# This module provides:
-#   - Freezer: abstract base class defining the interface
-#   - ConifoldFreezer: concrete implementation for freezing out the
-#     conifold modulus z_cf in coniLCS models
-# ==============================================================================
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Reduced EFT interfaces for integrating out heavy moduli.
+
+Purpose
+-------
+Provide abstractions for solving heavy-field equations of motion and
+evaluating a reduced flux EFT on the remaining light fields.
+
+Main public API
+---------------
+- ``Freezer``: abstract base class defining the reduced-EFT interface,
+  including heavy/light index bookkeeping, reconstruction and light-field
+  derivatives.
+- ``ConifoldFreezer``: concrete implementation for freezing the conifold
+  modulus ``z_cf`` in coniLCS models.
+
+Design notes
+------------
+Freezers wrap an existing flux model.  They do not own the underlying
+geometry; instead they solve heavy fields as functions of light moduli,
+axio-dilaton and fluxes, then reuse the model's superpotential and derivative
+methods on the reconstructed full field point.
+"""
 
 import jax
 import jax.numpy as jnp

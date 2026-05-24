@@ -1,23 +1,44 @@
-"""``jaxvacua.conifold`` — conifold subsystem.
+# Copyright 2022-2026 Andreas Schachner
+#
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Phase 2 split (2026-05-01): the contents of the old monolithic
-``jaxvacua/conifold_utils.py`` are now distributed across:
+"""Conifold subsystem public interface.
 
-    - :mod:`jaxvacua.conifold.conifold_utils`        — structural helpers
-      (basis-change algebra, flux splitting, index manipulation).
-    - :mod:`jaxvacua.conifold.coni`                  — :class:`Conifold` class
-      + ``find_conifolds`` + pytree registration.
-    - :mod:`jaxvacua.conifold.coniLCS_prepotential`  — coniLCS prepotential
-      family (per-period + per-modulus, no flux dependence).
-    - :mod:`jaxvacua.conifold.zcf_solver`            — z_cf physics
-      (W_log_coeff, compute_zcf, zcf_handling, …).
+Purpose
+-------
+Expose the conifold-specific data structures, structural helpers,
+prepotential functions and conifold-modulus solvers used by the main
+``periods``, ``css`` and ``FluxEFT`` classes.
 
-This ``__init__.py`` defines the :class:`_ConifoldGated` descriptor and
-re-exports the public symbols.  **Method attachment to the consumer classes
-(``periods``, ``css``, ``FluxEFT``) lives in the consumer modules themselves**
-— each consumer imports the symbols it needs from this package and runs its
-own ``setattr`` block.  The locality matches the pre-split convention and
-avoids load-order coupling between the conifold subpackage and the consumers.
+Main public API
+---------------
+- ``Conifold`` and ``find_conifolds`` for representing and discovering
+  conifold limits.
+- Basis and flux helpers from ``conifold_utils`` such as ``get_basis_change``,
+  ``compute_a_matrix``, ``get_projection``, ``conifold_fluxes`` and
+  ``delete_coni_index``.
+- coniLCS prepotential functions from ``coniLCS_prepotential``.
+- ``z_cf`` physics helpers from ``zcf_solver`` such as ``W_log_coeff``,
+  ``compute_zcf`` and ``zcf_handling``.
+
+Design notes
+------------
+The ``_ConifoldGated`` descriptor exposes attached methods only for coniLCS
+limits.  Consumer modules attach the methods they need locally, which avoids
+load-order coupling between this subpackage and the main physics classes.
 """
 
 from types import MethodType
@@ -70,7 +91,7 @@ from jaxvacua.conifold.conifold_utils import (        # noqa: E402,F401
     extended_euclidean,
     orthogonal_lattice,
     get_basis_change,
-    getAMatrix,
+    compute_a_matrix,
     get_projection,
     conifold_fluxes,
     delete_coni_index,
@@ -176,7 +197,7 @@ __all__ = [
     "Conifold", "find_conifolds",
     # Structural helpers
     "extended_euclidean", "orthogonal_lattice",
-    "get_basis_change", "getAMatrix", "get_projection",
+    "get_basis_change", "compute_a_matrix", "get_projection",
     "conifold_fluxes", "delete_coni_index",
     # z_cf physics (attached as methods to FluxEFT)
     "compute_zcf", "compute_zcf_x", "zcf_handling",

@@ -1,20 +1,45 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
-"""``jaxvacua.conifold.coni`` — geometric layer.
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Contents:
-    - :class:`Conifold`               — data class for a conifold limit
-    - ``_flatten_conifold`` / ``_unflatten_conifold`` + JAX pytree registration
-    - :func:`find_conifolds`          — discovery routine over CY triangulations
+"""Conifold geometry and discovery routines.
 
-Lives one level above :mod:`jaxvacua.conifold.conifold_utils` (uses
-``get_basis_change`` and ``get_projection`` from there).  Cytools is required
-at import time.
+Purpose
+-------
+Represent conifold limits in complex-structure moduli space and discover
+candidate conifold transitions from CYTools triangulations.
+
+Main public API
+---------------
+- ``Conifold``: stores the conifold curve, canonical-basis charge, GV
+  invariant, basis-change data and optional CYTools geometry references.
+- ``find_conifolds``: searches triangulations for conifold/flop data.
+- JAX pytree flattening and reconstruction helpers for ``Conifold`` objects.
+
+Design notes
+------------
+The class separates persistent numerical state from optional CYTools objects.
+After a JAX pytree round-trip the numerical data survives, while heavy CYTools
+references may be absent.  Basis-change and projection routines live in
+``jaxvacua.conifold.conifold_utils``.
 """
+
+# Defer annotation evaluation (PEP 563) so the optional cytools type hints
+# (Polytope / Triangulation) need not be importable at module-import time.
+from __future__ import annotations
 
 from typing import List, Optional
 
@@ -23,10 +48,18 @@ import jax.numpy as jnp
 from jax import Array
 from jax.tree_util import register_pytree_node
 
-from cytools import Polytope
-from cytools.triangulation import Triangulation
+# cytools is an optional dependency: only needed to construct a Conifold from
+# toric geometry (Polytope / Triangulation).  Guard the import so importing the
+# conifold subpackage (and hence `jaxvacua`) works without cytools installed;
+# the clear error is raised at the point of use.
+try:
+    from cytools import Polytope
+    from cytools.triangulation import Triangulation
+except ImportError:
+    Polytope = None
+    Triangulation = None
 
-from jaxvacua.conifold.conifold_utils import get_basis_change, get_projection
+from jaxvacua.conifold.conifold_utils import get_basis_change, get_projection, get_embedding
 
 
 class Conifold:
@@ -78,7 +111,8 @@ class Conifold:
                  one_face_divisors:  Optional[Array]         = None,
                  polytope:           Optional[Polytope]      = None,
                  dual_triangulation: Optional[Triangulation] = None,
-                 projection: Optional[Array] = None):
+                 projection: Optional[Array] = None,
+                 embedding: Optional[Array] = None):
         r"""
         **Description:**
         Low-level keyword-only constructor; prefer :meth:`from_geometry` or
@@ -95,8 +129,12 @@ class Conifold:
         # Cytools refs — dropped at the JAX pytree boundary by the custom flatten.
         self._polytope           = polytope
         self._dual_triangulation = dual_triangulation
-        #self.projection = projection
-        self.projection = 0
+        # Bulk projection (q @ w_proj = 0) and conifold embedding (q · e_q = 1).
+        # Both are required for the conifold_basis=False code paths (flux/charge
+        # splitting and full-moduli reconstruction); previously `projection` was
+        # silently discarded as the integer 0, which broke those paths.
+        self.projection = projection
+        self.embedding = embedding
 
     def __repr__(self):
         r"""
@@ -243,6 +281,7 @@ class Conifold:
         curve0 = curve @ bc.T                              # = (1,0,...,0)
 
         projection = get_projection(curve)
+        embedding  = get_embedding(curve)
 
         return cls(
             ncf=int(ncf),
@@ -253,7 +292,8 @@ class Conifold:
             one_face_divisors=jnp.asarray(one_face_divisors),
             polytope=polytope,
             dual_triangulation=dual_triangulation,
-            projection=projection
+            projection=projection,
+            embedding=embedding
         )
 
     @classmethod
@@ -278,8 +318,8 @@ class Conifold:
         if cc0 is None and cc is not None and bc is not None:
             kwargs["conifold_curve0"] = jnp.asarray(cc) @ jnp.asarray(bc).T
 
-        projection = get_projection(cc)
-        kwargs["projection"] = projection
+        kwargs["projection"] = get_projection(cc)
+        kwargs["embedding"]  = get_embedding(cc)
         return cls(**kwargs)
 
 
@@ -298,8 +338,6 @@ class Conifold:
         # Warm the basis_change cache while geometry is still loaded.
         _ = self.basis_change()
 
-        projection = get_projection(self.conifold_curve)
-
         return Conifold.from_data(
             ncf=self.ncf,
             conifold_curve=self.conifold_curve,
@@ -307,7 +345,6 @@ class Conifold:
             basis_change=self._basis_change,
             flop_edge=self._flop_edge,
             one_face_divisors=self._one_face_divisors,
-            projection=projection
         )
 
 
@@ -321,7 +358,7 @@ class Conifold:
 
 _CONIFOLD_DYNAMIC_KEYS = (
     # Hot-path attributes (plain names)
-    'conifold_curve', 'conifold_curve0','projection',
+    'conifold_curve', 'conifold_curve0','projection','embedding',
     # Lazy-getter backing storage (underscore-prefixed)
     '_basis_change', '_flop_edge', '_one_face_divisors',
 )

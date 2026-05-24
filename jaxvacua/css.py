@@ -1,16 +1,43 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, 
-# this code must not be shared with anyone else or used for any other projects 
-# than those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds functions to construct complex structure moduli sector of
-# Type IIB compactifications.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Complex-structure-sector geometry for Type IIB compactifications.
+
+Purpose
+-------
+Define the ``css`` class, the geometry layer built on top of
+``jaxvacua.periods.periods``.  It evaluates the Kähler geometry of complex
+structure moduli space and provides the tensors used by the flux EFT.
+
+Main public API
+---------------
+- ``css``: constructs period data and exposes affine/projective coordinates,
+  Kähler potential, metric, inverse metric, connection, curvature and
+  covariant-derivative helpers.
+- Gauge-kinetic and ISD-sector matrices used by ``FluxEFT`` and
+  ``FluxVacuaFinder``.
+- Conifold-limit methods attached when ``limit`` is in the coniLCS family.
+
+Design notes
+------------
+The class is a JAX pytree and keeps expensive model data on the nested
+``periods`` object.  Methods are written for JIT/vectorisation where possible,
+so callers should prefer the class API over rebuilding period data manually.
+"""
 
 
 # Important standard libraries
@@ -288,6 +315,7 @@ class css:
         """
         if self.periods.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
             approx="inf"
+            #approx="patch"
         elif self.periods.limit == "coniLCS":
             approx="patch"
         else:
@@ -2521,4 +2549,3 @@ unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, child
 register_pytree_node(css, flatten_func, unflatten_func)
 
        
-

@@ -1,22 +1,42 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
-"""``jaxvacua.conifold.conifold_utils`` — structural helpers for the conifold subsystem.
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Contents:
-    - lattice / basis algebra: ``get_basis_change``, ``getAMatrix``, ``get_projection``
-    - flux & index helpers (attached to ``periods`` / ``FluxEFT``):
-      ``conifold_fluxes``, ``delete_coni_index``
-    - re-exports of general-purpose number theory: ``extended_euclidean``,
-      ``orthogonal_lattice`` (live in :mod:`jaxvacua.util`).
+"""Structural helpers for the conifold subsystem.
 
-These are the *structural* helpers of the conifold subsystem — anything that
-operates on basis transformations, flux index splitting or topological
-projection without invoking z_cf physics.  The flux-EFT solvers themselves
-live in :mod:`jaxvacua.conifold.zcf_solver`.
+Purpose
+-------
+Collect conifold-specific lattice, basis-change, projection, flux-splitting
+and index-manipulation helpers that do not involve the dynamics of the
+conifold modulus.
+
+Main public API
+---------------
+- Lattice and basis algebra: ``get_basis_change``, ``compute_a_matrix`` and
+  ``get_projection``.
+- Flux and index helpers attached to ``periods`` or ``FluxEFT``:
+  ``conifold_fluxes`` and ``delete_coni_index``.
+- Compatibility re-exports of ``extended_euclidean`` and
+  ``orthogonal_lattice`` from ``jaxvacua.util``.
+
+Design notes
+------------
+This module is intentionally limited to structural operations.  The
+``z_cf`` F-term, log-coefficient and bulk-EFT routines live in
+``jaxvacua.conifold.zcf_solver``.
 """
 
 from functools import partial
@@ -79,10 +99,19 @@ def get_basis_change(coninop):
 
     matrix = matrix + orthogonal_lattice([coninop])
 
-    return np.array(matrix)
+    matrix = np.array(matrix)
+
+    # Guard the orientation: ensure Λ q = (+1, 0, …, 0), not (−1, 0, …, 0).
+    # extended_euclidean uses a positive-gcd convention so this is normally a
+    # no-op, but flip the Bézout row if a future change yields the −1 sign,
+    # which would otherwise sign-flip the conifold modulus / embedding.
+    if int(np.asarray(coninop) @ matrix[0]) == -1:
+        matrix[0] = -matrix[0]
+
+    return matrix
 
 
-def getAMatrix(intnumstensor):
+def compute_a_matrix(intnumstensor):
     r"""
     **Description:**
     Computes the :math:`a`-matrix from the triple intersection number tensor.
@@ -127,7 +156,52 @@ def getAMatrix(intnumstensor):
 
 
 def get_projection(q):
+    r"""
+    **Description:**
+    Bulk projection/embedding matrix :math:`w_{\rm proj}` for the conifold
+    charge :math:`q`: the last :math:`h^{1,2}-1` rows of the unimodular matrix
+    :math:`\Lambda` (from :func:`extended_euclidean`), transposed to shape
+    :math:`(h^{1,2}, h^{1,2}-1)`.
+
+    Its columns span :math:`\ker(q)` (so :math:`q \cdot w_{\rm proj} = 0`),
+    giving the bulk directions orthogonal to the conifold curve.  Used both to
+    project charges/fluxes onto the bulk (``charge @ w_proj``) and to embed bulk
+    moduli into the full moduli space (``w_proj @ z_bulk``), which carries zero
+    conifold component by construction.
+
+    Args:
+        q (Array): Integer conifold charge vector of length :math:`h^{1,2}`.
+
+    Returns:
+        Array: Bulk projection matrix of shape :math:`(h^{1,2}, h^{1,2}-1)`.
+
+    See also: :func:`get_embedding`, :func:`get_basis_change`
+    """
     return jnp.asarray(extended_euclidean(q)[2][1:len(q)]).T
+
+
+def get_embedding(q):
+    r"""
+    **Description:**
+    Conifold embedding direction :math:`e_q` for the charge :math:`q`: the
+    Bézout vector (first row of :math:`\Lambda` from
+    :func:`extended_euclidean`), satisfying :math:`q \cdot e_q = 1`.
+
+    Used to reconstruct a full modulus vector from the conifold modulus and the
+    bulk moduli: :math:`z_{\rm full} = z_{\rm cf}\, e_q + w_{\rm proj} z_{\rm bulk}`,
+    which equals :math:`\Lambda^T (z_{\rm cf}, z_{\rm bulk})` and so inverts the
+    basis change consistently with :func:`get_projection`.  In the conifold-aligned
+    basis (:math:`q = (1,0,\ldots,0)`) this reduces to :math:`(1,0,\ldots,0)`.
+
+    Args:
+        q (Array): Integer conifold charge vector of length :math:`h^{1,2}`.
+
+    Returns:
+        Array: Embedding vector of length :math:`h^{1,2}` with :math:`q\cdot e_q = 1`.
+
+    See also: :func:`get_projection`, :func:`get_basis_change`
+    """
+    return jnp.asarray(extended_euclidean(q)[0])
 
 
 # ---------------------------------------------------------------------------
@@ -155,14 +229,17 @@ def conifold_fluxes(self, flux):
         Kalpha = h1[2:]
 
     else:
-        q = self.lcs_tree.conifold.conifold_curve
-        # Ensure projection is cached before the JIT-compiled solver tries to access it.
+        # The conifold-direction flux components (charge-like) project with the
+        # embedding e_q (q·e_q = 1), NOT the charge q (q·q ≠ 1).  The bulk
+        # components project with w_proj (q·w_proj = 0).  Both reduce to the
+        # aligned index-0 / [1:] slices when e_q=(1,0,…), w_proj=[0;I].
+        e_q = self.lcs_tree.conifold.embedding
         w_proj = self.lcs_tree.conifold.projection
 
-        M1 = f2[1:] @ q
-        H1 = h2[1:] @ q
-        P1 = f1[1:] @ q
-        K1 = h1[1:] @ q
+        M1 = f2[1:] @ e_q
+        H1 = h2[1:] @ e_q
+        P1 = f1[1:] @ e_q
+        K1 = h1[1:] @ e_q
 
         Malpha = f2[1:] @ w_proj
         Halpha = h2[1:] @ w_proj

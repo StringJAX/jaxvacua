@@ -1,38 +1,45 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
-"""``jaxvacua.conifold.zcf_solver`` — z_cf physics (bulk EFT after integrating out the conifold modulus).
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Mathematical structure (notes/main.tex eq:Wtilde1Explicit, eq:zcf_corrected)::
+"""Conifold-modulus solver and bulk-EFT helpers.
 
-    ∂_zcf W_coni = log_prefactor · ln(-2πi·z_cf) + W_log_coeff + O(z_cf)
-    log_prefactor = (M¹ - τH¹) · n_cf / (2πi)
-    log_prefactor · ln(-2πi·z_cf) + W_log_coeff [+ log_coeff_K_corr] = 0
-    ⟹ z_cf = -(1/2πi) · exp(-(W_log_coeff [+ log_coeff_K_corr]) / log_prefactor)
+Purpose
+-------
+Implement the ``z_cf`` physics used after integrating out the conifold
+modulus in coniLCS models, including bulk superpotential terms,
+log-coefficient evaluation and reconstruction of the conifold modulus.
 
-Layout (top to bottom: building blocks → log-coeff routines → dispatcher):
-    - ``W_bulk``, ``dK_cf_bulk``, ``log_prefactor`` — F-term ingredients.
-    - ``_split_conifold_bulk`` — bulk/conifold projection of topological data.
-    - ``_W_log_coeff_pfv`` / ``_W_log_coeff_manual`` / ``_W_log_coeff_autodiff``
-      — three independent W̃₁ routes (manual & autodiff agree numerically; pfv
-      is a deliberate racetrack approximation).
-    - ``W_log_coeff`` — public dispatcher.
-    - ``log_coeff_K_corr``, ``_zcf_from_log_coeff`` — Kähler correction +
-      final exponentiation.
-    - ``compute_zcf`` / ``compute_zcf_x`` / ``zcf_handling`` — top-level
-      entries (complex-coord, real-coord, real-coord with no-op mode).
+Main public API
+---------------
+- Building blocks: ``W_bulk``, ``dK_cf_bulk`` and ``log_prefactor``.
+- Topological splitting and log-coefficient routes:
+  ``_split_conifold_bulk``, ``_W_log_coeff_pfv``,
+  ``_W_log_coeff_manual``, ``_W_log_coeff_autodiff`` and
+  ``W_log_coeff``.
+- Kähler-covariant correction and reconstruction helpers:
+  ``log_coeff_K_corr``, ``_zcf_from_log_coeff``, ``compute_zcf``,
+  ``compute_zcf_x`` and ``zcf_handling``.
 
-The deprecated ``DWbulk_x`` / ``dDWbulk_x`` were hard-removed on 2026-05-01
-once ``private/promotion/vacuum_promotion.py`` was migrated to the
-:class:`jaxvacua.freezer.ConifoldFreezer` interface (``DW_x_light`` /
-``dDW_x_light``).
-
-All public functions take ``flux`` and are written as plain ``def``s of
-``self``; method attachment to ``FluxEFT`` lives in
-:mod:`jaxvacua.conifold` (the package ``__init__.py``).
+Design notes
+------------
+The leading F-term equation has the form
+``log_prefactor * log(-2*pi*i*z_cf) + W_log_coeff = 0``, optionally with the
+Kähler correction added to the log coefficient.  Public functions are plain
+``self`` methods attached to ``FluxEFT`` by the conifold package.
 """
 
 from functools import partial
@@ -165,14 +172,18 @@ def _split_conifold_bulk(self):
         a01 = a_coni[1:]
         b_coni = self.lcs_tree.b_vector[0]
     else:
-        q = self.lcs_tree.conifold.conifold_curve
+        # The intersection/a/b tensors contract with the moduli via the embedding
+        # z = z_cf·e_q + w_proj·z_bulk, so the conifold direction is e_q (q·e_q=1),
+        # NOT q.  Bulk directions project with w_proj.  Reduces to the aligned
+        # kappa[0,1:,1:] etc slices when e_q=(1,0,…), w_proj=[0;I].
+        e_q = self.lcs_tree.conifold.embedding
         w_proj = self.lcs_tree.conifold.projection
-        kappa_011 = jnp.einsum("ijk,i,jl,km", kappa, q, w_proj, w_proj)
-        kappa_001 = jnp.einsum("ijk,i,j,km", kappa, q, q, w_proj)
-        a_coni = self.lcs_tree.a_matrix @ q
-        a00 = a_coni @ q
+        kappa_011 = jnp.einsum("ijk,i,jl,km", kappa, e_q, w_proj, w_proj)
+        kappa_001 = jnp.einsum("ijk,i,j,km", kappa, e_q, e_q, w_proj)
+        a_coni = self.lcs_tree.a_matrix @ e_q
+        a00 = a_coni @ e_q
         a01 = a_coni @ w_proj
-        b_coni = self.lcs_tree.b_vector @ q
+        b_coni = self.lcs_tree.b_vector @ e_q
     return kappa_011, kappa_001, a00, a01, b_coni
 
 
@@ -261,13 +272,17 @@ def _W_log_coeff_manual(self, z, tau, flux, conj=False):
             bulk_charges_proj = jnp.asarray(bulk_charges[:, 1:])
             etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
         else:
-            q = self.lcs_tree.conifold.conifold_curve
-            beta1 = jnp.asarray(bulk_charges @ q)
-            w_proj = self.lcs_tree.conifold.projection
-            raise NotImplementedError("ISSUE HERE!!!")
-            #bulk_charges_proj = jnp.asarray(bulk_charges @ w_proj)
-            bulk_charges_proj = jnp.asarray(bulk_charges)
-            etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, w_proj @ zbulk))
+            # General basis: mirror the aligned slices via projection.  The
+            # conifold-direction charge (q̃₁) is bulk_charges·e_q (q·e_q=1), NOT
+            # bulk_charges·q; the bulk charges are bulk_charges·w_proj; the
+            # worldsheet-instanton phase contracts the projected bulk charges
+            # with the bulk moduli (zero conifold component).  Reduces to the
+            # aligned [:,0]/[:,1:] slices when e_q=(1,0,…,0), w_proj=[0;I].
+            e_q = jnp.asarray(self.lcs_tree.conifold.embedding, dtype=bulk_charges.dtype)
+            w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=bulk_charges.dtype)
+            beta1 = jnp.asarray(bulk_charges @ e_q)
+            bulk_charges_proj = jnp.asarray(bulk_charges @ w_proj)
+            etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
 
         Li1 = jax_polylog_vmap(etpz, 1, self.periods.prange)
         F2b  += -1 / coeff * jnp.sum(bulk_invs * beta1**2 * Li1)

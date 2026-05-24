@@ -1,14 +1,43 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file implements the flux-bounding algorithm of arXiv:2501.03984 for
-# systematic enumeration of Type IIB flux vacua in finite regions of moduli space.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Flux-bounding algorithm for finite-region vacuum enumeration.
+
+Purpose
+-------
+Implement the flux-bounding strategy of arXiv:2501.03984 for systematic
+enumeration of Type IIB flux candidates in bounded regions of moduli space.
+
+Main public API
+---------------
+- Module-level JIT kernels for processing NSNS-flux batches and ISD-completed
+  flux candidates without recompiling per ``bounded_fluxes`` instance.
+- ``bounded_fluxes``: computes local/global eigenvalue bounds, enumerates or
+  samples admissible fluxes, applies tadpole and dilaton constraints, and
+  refines candidates with the vacuum solver.
+- Cluster/export helpers for splitting large enumeration jobs and merging
+  results.
+
+Design notes
+------------
+The implementation is performance-oriented.  Expensive kernels are kept at
+module scope with static shape arguments so models with matching dimensions
+can share compiled XLA code.
+"""
 
 import math
 import time
@@ -509,7 +538,7 @@ class bounded_fluxes:
                 :math:`\mu_{\min}` and :math:`\tilde\mu_{\min}`.
                 Defaults to ``1.5``.  Set to ``1`` to disable.
             map_to_fd (bool, optional): If ``True`` and *model* has
-                ``map_to_FD``, map each vacuum to the fundamental domain
+                ``map_to_fd``, map each vacuum to the fundamental domain
                 (monodromy + SL(2,Z)) before deduplicating and returning.
                 Defaults to ``False``.
 
@@ -537,7 +566,7 @@ class bounded_fluxes:
         """
         self.model   = model
         self.sampler = sampler
-        self._map_to_fd = map_to_fd and hasattr(model, 'map_to_FD')
+        self._map_to_fd = map_to_fd and hasattr(model, 'map_to_fd')
 
         # Flux-vector dimensions
         self.n_fluxes     = model.n_fluxes       # = 2*(h12+1)
@@ -616,7 +645,7 @@ class bounded_fluxes:
         r"""Map a single (flux, moduli, tau) to the fundamental domain.
 
         If ``_map_to_fd`` is ``False``, returns the inputs unchanged.
-        Otherwise calls ``self.model.map_to_FD`` to apply monodromy and
+        Otherwise calls ``self.model.map_to_fd`` to apply monodromy and
         SL(2,Z) transformations.
 
         Returns:
@@ -624,7 +653,7 @@ class bounded_fluxes:
         """
         if not self._map_to_fd:
             return flux, moduli, tau
-        moduli_fd, tau_fd, fluxes_fd = self.model.map_to_FD(
+        moduli_fd, tau_fd, fluxes_fd = self.model.map_to_fd(
             jnp.asarray(moduli), complex(tau), jnp.asarray(flux),
         )
         return np.asarray(fluxes_fd, dtype=np.int32), np.asarray(moduli_fd), complex(tau_fd)
@@ -5656,7 +5685,7 @@ bounded_fluxes.process_chunk_from_disk(
             method (str): Method label for database catalog.
             tags (list): Searchable tags for database catalog.
             verbose (bool): Print progress.
-            map_to_fd (bool): If ``True`` and *model* has ``map_to_FD``,
+            map_to_fd (bool): If ``True`` and *model* has ``map_to_fd``,
                 map each vacuum to the fundamental domain before
                 deduplicating.  Defaults to ``False``.
             designate (bool): If True, also promote the merged results
@@ -5723,12 +5752,12 @@ bounded_fluxes.process_chunk_from_disk(
                   f"from {n_processed_total:,} h-vectors")
 
         # Deduplicate (optionally map to FD first)
-        _do_fd = map_to_fd and model is not None and hasattr(model, 'map_to_FD')
+        _do_fd = map_to_fd and model is not None and hasattr(model, 'map_to_fd')
         seen = set()
         keep = []
         for i in range(len(fluxes)):
             if _do_fd:
-                moduli_fd, tau_fd, fluxes_fd = model.map_to_FD(
+                moduli_fd, tau_fd, fluxes_fd = model.map_to_fd(
                     jnp.asarray(moduli[i]), complex(taus[i]), jnp.asarray(fluxes[i]),
                 )
                 fluxes[i] = np.asarray(fluxes_fd, dtype=np.int32)

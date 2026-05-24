@@ -1,15 +1,44 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, 
-# this code must not be shared with anyone else or used for any other projects 
-# than those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds functions to interface with CYTools. 
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""CYTools interoperability helpers.
+
+Purpose
+-------
+Convert CYTools polytopes, triangulations and Calabi-Yau objects into the
+model-data dictionaries consumed by ``lcs_tree`` and provide adapters back
+from JAXVacua EFT objects to selected CYTools geometry objects.
+
+Main public API
+---------------
+- ``cytools_model_data_init`` and ``cytools_instanton_data_init`` for
+  extracting intersection data, Chern data, cone data and optional
+  Gopakumar-Vafa/Gromov-Witten invariants.
+- Sparse/dense intersection helpers such as
+  ``compute_intersection_numbers_coo`` and ``remove_zeros``.
+- Geometry adapters ``eft_to_poly``, ``eft_to_cy``, ``eft_to_coninop``,
+  ``eft_to_cone`` and ``eft_to_facet``.
+
+Design notes
+------------
+CYTools is an optional but heavy dependency.  This module should remain the
+boundary layer for CYTools-specific objects so the core package can operate on
+plain dictionaries and ``lcs_tree`` instances once model data has been loaded.
+"""
 
 ## Important standard libraries
 import os, sys, warnings
@@ -322,12 +351,10 @@ def cytools_model_data_init(
         # by from_geometry. to_data() drops cytools refs so the result can be
         # carried through JIT.
         conifolds_data = tuple(c.to_data() for c in conifolds)
-        active = conifolds_data[0]
     else:
         conifolds_data = None
-        active = None
 
-    model_data["conifold"]  = active             # singular, the active conifold
+    model_data["conifold"]  = None               # singular, the active conifold
     model_data["conifolds"] = conifolds_data     # plural, full enumeration (optional)
     
     # Save to file if requested
@@ -539,5 +566,3 @@ def eft_to_facet(fluxeft):
     
     # Return a Cone object constructed from the filtered generators_facet
     return Cone(generators_facet)
-
-

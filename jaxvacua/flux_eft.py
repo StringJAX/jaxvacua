@@ -1,15 +1,43 @@
-# ==============================================================================
-# This code is written by Andreas Schachner. Without the author's permission, this 
-# code must not be shared with anyone else or used for any other projects than 
-# those involving the author directly.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu or at a.schachner@lmu.de.
-# ==============================================================================
+# This file is part of JAXVacua.
 #
-# ------------------------------------------------------------------------------
-# This file holds the class to construct flux vacua.
-# ------------------------------------------------------------------------------
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
+
+"""Flux effective field theory for Type IIB compactifications.
+
+Purpose
+-------
+Define ``FluxEFT``, the flux-physics layer above ``css``.  It evaluates the
+Gukov-Vafa-Witten superpotential, F-terms, scalar potential, tadpole and
+stability data for integer three-form flux backgrounds.
+
+Main public API
+---------------
+- ``FluxEFT``: extends ``css`` with flux splitting, superpotential,
+  Kähler-covariant derivatives, real-coordinate derivatives, Hessians and mass
+  matrices.
+- Tadpole, ISD and physicality helpers used by the vacuum-search algorithms.
+- Fundamental-domain and monodromy utilities used to compare equivalent
+  solutions.
+
+Design notes
+------------
+This module contains the reusable EFT model.  Search, sampling and
+classification workflows live in ``jaxvacua.flux_vacua_finder`` and operate
+directly on this class through inheritance.
+"""
 
 
 # Important standard libraries
@@ -128,7 +156,7 @@ class FluxEFT(css):
             self.D3_tadpole = Q
 
         self.n_fluxes = self._dimension_H3_tot
-        self.axion_FD = kwargs.get("axion_FD", (-0.5, 0.5))
+        self.axion_fd = kwargs.get("axion_fd", (-0.5, 0.5))
         
         
 
@@ -142,7 +170,7 @@ class FluxEFT(css):
         """
         return f"Flux sector with h12={self.h12} complex structure moduli in the {self.periods.limit} limit."
             
-    def map_to_FD_tau(
+    def map_to_fd_tau(
         self, 
         tau: complex, 
         fluxes: Array,
@@ -215,7 +243,7 @@ class FluxEFT(css):
         expected_len = 2 * self.n_fluxes
         if len(fluxes) != expected_len:
             return _fail(
-                f"map_to_FD_tau: fluxes has length {len(fluxes)}, "
+                f"map_to_fd_tau: fluxes has length {len(fluxes)}, "
                 f"expected {expected_len}."
             )
 
@@ -226,7 +254,7 @@ class FluxEFT(css):
         try:
             tau_py = complex(tau)
         except (TypeError, ValueError) as exc:
-            return _fail(f"map_to_FD_tau: tau cannot be cast to complex: {exc}.")
+            return _fail(f"map_to_fd_tau: tau cannot be cast to complex: {exc}.")
 
         tau1 = tau_py.real
         tau2 = tau_py.imag
@@ -234,14 +262,14 @@ class FluxEFT(css):
         # Guard against non-finite input (NaN, ±inf)
         if not (jnp.isfinite(tau1) and jnp.isfinite(tau2)):
             return _fail(
-                f"map_to_FD_tau: tau is not finite "
+                f"map_to_fd_tau: tau is not finite "
                 f"(Re={tau1}, Im={tau2}). Skipping."
             )
 
         # SL(2,Z) action requires Im(tau) > 0
         if tau2 <= 0.0:
             return _fail(
-                f"map_to_FD_tau: Im(tau) = {tau2} is non-positive. "
+                f"map_to_fd_tau: Im(tau) = {tau2} is non-positive. "
                 "SL(2,Z) fundamental domain requires Im(tau) > 0."
             )
 
@@ -269,25 +297,25 @@ class FluxEFT(css):
             # safety: detect divergence or non-convergence
             if count > 10_000:
                 return _fail(
-                    f"map_to_FD_tau: did not converge after {count} iterations. "
+                    f"map_to_fd_tau: did not converge after {count} iterations. "
                     "Stopping."
                 )
 
             if not (jnp.isfinite(tau1) and jnp.isfinite(tau2)):
                 return _fail(
-                    f"map_to_FD_tau: tau became non-finite "
+                    f"map_to_fd_tau: tau became non-finite "
                     f"(Re={tau1}, Im={tau2}) after {count} iterations."
                 )
 
             if tau1 > cutoff or tau2 > cutoff:
                 return _fail(
-                    f"map_to_FD_tau: tau components exceeded cutoff {cutoff} "
+                    f"map_to_fd_tau: tau components exceeded cutoff {cutoff} "
                     f"after {count} iterations."
                 )
 
             if tau2 < 0.0:
                 return _fail(
-                    f"map_to_FD_tau: Im(tau) became negative ({tau2}) "
+                    f"map_to_fd_tau: Im(tau) became negative ({tau2}) "
                     f"after {count} iterations."
                 )
 
@@ -332,7 +360,7 @@ class FluxEFT(css):
             if jnp.sqrt(norm_p_sq) < 1.0:
                 if norm_p_sq == 0.0:
                     return _fail(
-                        f"map_to_FD_tau: |tau| = 0 encountered after "
+                        f"map_to_fd_tau: |tau| = 0 encountered after "
                         f"{count} iterations; inversion undefined."
                     )
                 FFlux_old = FFlux.copy()
@@ -367,12 +395,12 @@ class FluxEFT(css):
         return tau_out, fluxes_out
 
 
-    def map_to_FD(
+    def map_to_fd(
         self,
         moduli: Array,
         tau: complex,
         fluxes: Array,
-        axion_FD: Optional[Tuple[float, float]] = None,
+        axion_fd: Optional[Tuple[float, float]] = None,
         boundary_tol: float = 1e-8,
     ) -> Tuple[Array, complex, Array]:
         r"""
@@ -380,7 +408,7 @@ class FluxEFT(css):
         Maps a vacuum solution ``(moduli, tau, fluxes)`` to the fundamental domain by:
 
         1. Mapping the axio-dilaton :math:`\tau` to the :math:`\text{SL}(2,\mathbb{Z})`
-           fundamental domain via :func:`map_to_FD_tau`.
+           fundamental domain via :func:`map_to_fd_tau`.
         2. Shifting the axion :math:`\text{Re}(z^a)` into the range ``(lo, hi]`` via
            integer monodromy transformations :math:`z^a \to z^a + n^a`.
         3. Snapping values within ``boundary_tol`` of the excluded boundary ``lo``
@@ -394,9 +422,9 @@ class FluxEFT(css):
             moduli (Array): Complex structure moduli values.
             tau (complex): Axio-dilaton value.
             fluxes (Array): Flux vector.
-            axion_FD (tuple, optional): Range ``(lo, hi)`` for :math:`\text{Re}(z^a)`.
+            axion_fd (tuple, optional): Range ``(lo, hi)`` for :math:`\text{Re}(z^a)`.
                 Convention: :math:`\text{Re}(z^a) \in (lo, hi]`.
-                If ``None``, uses ``self.axion_FD`` (default ``(-0.5, 0.5)``).
+                If ``None``, uses ``self.axion_fd`` (default ``(-0.5, 0.5)``).
             boundary_tol (float): Points within this tolerance of the excluded
                 boundary ``lo`` are snapped to ``hi``. Default ``1e-8``.
 
@@ -404,13 +432,13 @@ class FluxEFT(css):
             Tuple[Array, complex, Array]: ``(moduli_fd, tau_fd, fluxes_fd)``
                 mapped to the fundamental domain.
 
-        See also: :func:`map_to_FD_tau`, :func:`monodromy_matrix`
+        See also: :func:`map_to_fd_tau`, :func:`monodromy_matrix`
         """
 
-        lo, hi = axion_FD if axion_FD is not None else self.axion_FD
+        lo, hi = axion_fd if axion_fd is not None else self.axion_fd
 
         # Step 1: Map tau to SL(2,Z) fundamental domain
-        result_tau = self.map_to_FD_tau(tau, fluxes)
+        result_tau = self.map_to_fd_tau(tau, fluxes)
         if result_tau[0] is None:
             return moduli, tau, fluxes
         tau_fd = result_tau[0]
@@ -435,7 +463,7 @@ class FluxEFT(css):
             if not _conifold_basis:
                 import warnings
                 warnings.warn(
-                    "map_to_FD: conifold_basis=False — cannot identify the conifold "
+                    "map_to_fd: conifold_basis=False — cannot identify the conifold "
                     "direction in coordinate basis. Skipping monodromy shifts for all "
                     "moduli. Set conifold_basis=True for proper FD mapping."
                 )
@@ -2306,7 +2334,7 @@ class FluxEFT(css):
             DTauDMod=W_mod_tau.reshape(self.h12,1)-jnp.outer(K_Z,K_tau)*W_val
             DModDTau=W_mod_tau-jnp.outer(K_tau,K_Z)[0]*W_val
         else:
-            warnings.warn("TODO: NOT TESTED!")
+            warnings.warn("This method is not tested! Use with caution!")
             DDTau=(K_tau_tau-K_tau*K_tau)*W_val
             DTauDMod=W_mod_tau.reshape(self.h12,1)+(ddK_z_tau-jnp.outer(K_Z,K_tau))*W_val
             DModDTau=W_mod_tau+(ddK_z_tau-jnp.outer(K_tau,K_Z)[0])*W_val
@@ -4191,6 +4219,4 @@ for _name in _cf._FLUXEFT_METHODS:
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 
 register_pytree_node(FluxEFT, flatten_func, unflatten_func)
-
-
 

@@ -1,25 +1,41 @@
-# ==============================================================================
-# This code is written by Andreas Schachner.
+# Copyright 2022-2026 Andreas Schachner
 #
-# If any questions arise, please feel free to reach out to me (Andreas) either at
-# andreas.schachner@gmx.net or at as3475@cornell.edu .
-# ==============================================================================
-"""``jaxvacua.conifold.coniLCS_prepotential`` — coniLCS prepotential family.
+# This file is part of JAXVacua.
+#
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
-Two layers, both pure-math (no flux dependence):
+"""coniLCS prepotential functions.
 
-1. **Per-period (X-coordinate) family** — attached to :class:`periods`:
-   ``F_coniLCS_bulk_per``, ``F_coniLCS_poly_split_per``, ``F_coni_per``,
-   ``F_inst_per_coni``, ``F_coniLCS_exp_per``, ``F_coniLCS_series_per``,
-   plus 1st–4th derivatives ``dF_/ddF_/dddF_/ddddF_coniLCS_poly_per``.
+Purpose
+-------
+Provide the prepotential family used near conifold large-complex-structure
+limits, split into period-coordinate and affine-modulus-coordinate layers.
 
-2. **Per-modulus (z-coordinate) family** — attached to :class:`css`:
-   ``F_coniLCS_bulk``, ``F_coniLCS_exp``, ``dF_coniLCS_exp``,
-   ``F_coniLCS_series``.
+Main public API
+---------------
+- Per-period functions attached to ``periods``: ``F_coniLCS_bulk_per``,
+  ``F_coniLCS_poly_split_per``, ``F_coni_per``, ``F_inst_per_coni``,
+  ``F_coniLCS_exp_per`` and ``F_coniLCS_series_per``.
+- First through fourth derivatives of the per-period polynomial part.
+- Per-modulus functions attached to ``css``: ``F_coniLCS_bulk``,
+  ``F_coniLCS_exp``, ``dF_coniLCS_exp`` and ``F_coniLCS_series``.
 
-Functions are written as plain ``def``s taking ``self`` as the first argument;
-they are attached to the appropriate classes by :mod:`jaxvacua.conifold` (the
-package ``__init__.py``).
+Design notes
+------------
+The functions are pure prepotential calculations and have no flux dependence.
+They are defined as plain functions taking ``self`` first so consumer modules
+can attach them to the relevant classes.
 """
 
 from functools import partial
@@ -91,7 +107,17 @@ def F_coniLCS_poly_split_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bo
         complex: Value of the polynomial contribution :math:`F_{\mathrm{poly}}` to the LCS prepotential :math:`F_{\mathrm{LCS}}`.
 
     """
-    XPer = jnp.append(jnp.array([X0,Xcf]),Xbulk)
+    # Reconstruct the full period vector from (X^0, X^cf, X^bulk).  Aligned basis:
+    # conifold at index 1 -> [X0, Xcf, *Xbulk].  General basis: embed via
+    # X_mod = Xcf·e_q + w_proj·Xbulk (conifold direction e_q, bulk columns w_proj),
+    # so ∂/∂Xcf correctly picks up the conifold direction for the derivatives.
+    if self.lcs_tree.conifold_basis:
+        XPer = jnp.append(jnp.array([X0, Xcf]), Xbulk)
+    else:
+        e_q    = jnp.asarray(self.lcs_tree.conifold.embedding,  dtype=Xbulk.dtype)
+        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=Xbulk.dtype)
+        X_mod  = Xcf * e_q + w_proj @ Xbulk
+        XPer   = jnp.append(jnp.array([X0]), X_mod)
 
     return self.F_LCS_poly_per(XPer,conj=conj)
 
@@ -265,7 +291,18 @@ def F_inst_per_coni(self, X0: complex, XPerBulk: Array, conj: bool = False, n: i
             bulk_invs = self.delete_coni_index(self.lcs_tree.gv_invariants, self.lcs_tree.coni_index)
             bulk_charges = self.delete_coni_index(self.lcs_tree.gv_charges, self.lcs_tree.coni_index)
 
-    XPer = jnp.append(X0,jnp.append(0.+1j*0.,XPerBulk))
+    # Reconstruct the full period at the conifold locus (X^cf = 0).  Aligned:
+    # [X0, 0, *XPerBulk].  General: embed the bulk periods via w_proj (conifold
+    # component is zero), and identify the conifold-direction charge (q̃₁) as
+    # bulk_charges·e_q (the embedding, q·e_q=1) instead of the index-0 column.
+    if self.lcs_tree.conifold_basis:
+        XPer  = jnp.append(X0, jnp.append(0.+1j*0., XPerBulk))
+        beta1 = bulk_charges[:, 0]
+    else:
+        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=XPerBulk.dtype)
+        e_q    = jnp.asarray(self.lcs_tree.conifold.embedding,  dtype=bulk_charges.dtype)
+        XPer   = jnp.append(X0, w_proj @ XPerBulk)
+        beta1  = bulk_charges @ e_q
 
     coeff = 2.*Pi*1j
 
@@ -281,7 +318,7 @@ def F_inst_per_coni(self, X0: complex, XPerBulk: Array, conj: bool = False, n: i
     Li_val = jax_polylog_vmap(z,3-n,self.prange,approx="patch")
 
     # Compute sum over curves
-    res = jnp.matmul(bulk_invs*(bulk_charges[:,0]**n),Li_val)
+    res = jnp.matmul(bulk_invs*(beta1**n),Li_val)
 
     # Add numerical prefactor
     return -res/(coeff)**(3-n)*XPer[0]**(2-n)
@@ -324,10 +361,17 @@ def F_coni_per(self, X: Array, conj: bool = False) -> complex:
         complex: Value of the conifold part :math:`F_{\mathrm{conifold}}` of the LCS prepotential :math:`F_{\mathrm{LCS}}`.
 
     """
+    # Conifold period X^cf: the period selected by the conifold charge.  In the
+    # aligned basis (conifold_curve0 = (1,0,…,0)) this is X[1]; in a general basis
+    # it is the contraction conifold_curve · X[1:].  Both reduce identically when
+    # qcf = (1,0,…,0).
+    qcf = (self.lcs_tree.conifold.conifold_curve0 if self.lcs_tree.conifold_basis
+           else self.lcs_tree.conifold.conifold_curve)
+    Xcf = jnp.asarray(qcf, dtype=X.dtype) @ X[1:]
     if conj:
-        return self.lcs_tree.conifold.ncf*(X[1])**2/(-4*jnp.pi*1j)*jnp.log(2*jnp.pi*1j*X[1]/X[0])
+        return self.lcs_tree.conifold.ncf*(Xcf)**2/(-4*jnp.pi*1j)*jnp.log(2*jnp.pi*1j*Xcf/X[0])
     else:
-        return self.lcs_tree.conifold.ncf*(X[1])**2/(4*jnp.pi*1j)*jnp.log(-2*jnp.pi*1j*X[1]/X[0])
+        return self.lcs_tree.conifold.ncf*(Xcf)**2/(4*jnp.pi*1j)*jnp.log(-2*jnp.pi*1j*Xcf/X[0])
 
 
 @partial(jit, static_argnums = (4,5,))
@@ -523,15 +567,27 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     # This includes the logarithmic term:
     #   F_coni ~ (X_cf)^2 log(X_cf / X0)
     # and captures the singular behavior at the conifold point
-    val = self.F_coni_per(XPer[:2], conj=conj)
+    # F_coni_per is basis-aware (identifies X^cf via the conifold charge), so
+    # pass the full period vector rather than the index-0/1 slice.
+    val = self.F_coni_per(XPer, conj=conj)
 
     # ----------------------------------------
-    # Extract periods
+    # Extract periods (basis-aware)
     # ----------------------------------------
-    # XPer = (X^0, X_cf, X^2, ..., X^{h^{1,2}})
-    XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
-    XConi    = XPer[1]    # Conifold period X_cf
-    X0       = XPer[0]    # Fundamental period X^0
+    # Aligned basis: conifold at index 1 -> plain slices (bit-identical).
+    # General basis: identify the conifold period via the conifold charge and
+    # project the bulk periods onto ker(q) via the stored projection w_proj
+    # (= get_projection(conifold_curve), which is [0;I] only in the aligned frame
+    # — hence the explicit branch).
+    X0 = XPer[0]    # Fundamental period X^0
+    if self.lcs_tree.conifold_basis:
+        XConi    = XPer[1]    # Conifold period X_cf
+        XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
+    else:
+        qcf    = jnp.asarray(self.lcs_tree.conifold.conifold_curve, dtype=XPer.dtype)
+        w_proj = jnp.asarray(self.lcs_tree.conifold.projection,     dtype=XPer.dtype)
+        XConi    = qcf @ XPer[1:]
+        XPerBulk = XPer[1:] @ w_proj
 
 
     # ----------------------------------------
@@ -638,7 +694,11 @@ def F_coniLCS_bulk(self, moduli: Array, conj: bool = False) -> complex:
 
     """
 
-    return self.F_LCS(moduli,conj=conj)+self.lcs_tree.conifold.ncf*self.lcs_tree.conifold.conifold_curve0@moduli/24.
+    # The added term is ncf · z_cf / 24, with z_cf the conifold modulus = the
+    # conifold-charge contraction of the moduli (moduli[0] in the aligned basis).
+    qcf = (self.lcs_tree.conifold.conifold_curve0 if self.lcs_tree.conifold_basis
+           else self.lcs_tree.conifold.conifold_curve)
+    return self.F_LCS(moduli,conj=conj)+self.lcs_tree.conifold.ncf*jnp.asarray(qcf,dtype=moduli.dtype)@moduli/24.
 
 
 @partial(jit, static_argnums = (2,3,))
@@ -671,13 +731,22 @@ def F_coniLCS_exp(self,
     See also: :func:`F_coniLCS_series`
     """
     # ----------------------------------------
-    # Extract periods
+    # Extract periods (basis-aware)
     # ----------------------------------------
-    # XPer = (X^0, X_cf, X^2, ..., X^{h^{1,2}})
-    moduli = jnp.append(jnp.zeros(1), bulk_moduli)
-    XPer = self.moduli_to_periods(moduli,conj=conj)
-    XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
-    XConi    = 1. + 0*1j    # Conifold period X_cf
+    # bulk_moduli are the (h12-1) bulk coordinates; embed into full moduli with
+    # zero conifold component.  Aligned: prepend a zero (conifold at index 0) and
+    # take XPer[2:] for the bulk.  General: embed via w_proj and project the bulk
+    # periods via w_proj.  Both reduce identically when w_proj=[0;I].
+    if self.lcs_tree.conifold_basis:
+        moduli = jnp.append(jnp.zeros(1), bulk_moduli)
+        XPer = self.moduli_to_periods(moduli,conj=conj)
+        XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
+    else:
+        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=bulk_moduli.dtype)
+        moduli = w_proj @ bulk_moduli
+        XPer = self.moduli_to_periods(moduli,conj=conj)
+        XPerBulk = XPer[1:] @ w_proj
+    XConi    = 1. + 0*1j    # Conifold period X_cf (normalisation marker)
     X0       = XPer[0]    # Fundamental period X^0
 
     return self.periods.F_coniLCS_exp_per(X0, XConi, XPerBulk, conj=conj, n=n)
