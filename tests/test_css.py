@@ -1138,6 +1138,52 @@ class TestCSSector(TestCase):
         self.assertAllClose(N_c, jnp.conj(N), rtol=1e-11, atol=1e-11,
                             msg="gauge_kinetic_matrix(conj=True) must equal conj(gauge_kinetic_matrix(conj=False))")
 
+    def test_seeded_sample_geometry_properties(self):
+        r"""**Description:**
+        Check representative Kähler and gauge-kinetic identities on a small
+        deterministic ensemble.  This complements the fixed class fixture while
+        keeping the sample reproducible and non-JIT.
+        """
+        rng = np.random.default_rng(20260525)
+
+        for _ in range(4):
+            z = jnp.asarray(
+                rng.uniform(-0.35, 0.35, self.model.h12)
+                + 1j * rng.uniform(2.0, 4.5, self.model.h12)
+            )
+            cz = jnp.conj(z)
+            tau = complex(
+                rng.uniform(-0.4, 0.4),
+                rng.uniform(2.5, 7.0),
+            )
+            ctau = jnp.conj(tau)
+
+            X = self.model.moduli_to_periods(z, conj=False)
+            self.assertAllClose(
+                self.model.periods_to_moduli(X),
+                z,
+                rtol=1e-12,
+                atol=1e-12,
+            )
+
+            K = self.model.kahler_potential(z, cz, tau, ctau)
+            KM = self.model.kahler_metric(z, cz, tau, ctau)
+            self.assertAllClose(jnp.imag(K), 0.0, rtol=1e-11, atol=1e-11)
+            self.assertAllClose(KM, jnp.conj(KM.T), rtol=1e-10, atol=1e-10)
+            self.assertTrue(
+                jnp.all(jnp.linalg.eigvalsh(jnp.real(KM)) > 0.0),
+                msg="Seeded sample produced a non-positive Kähler metric eigenvalue",
+            )
+
+            N = self.model.gauge_kinetic_matrix(z, cz, conj=False)
+            N_c = self.model.gauge_kinetic_matrix(z, cz, conj=True)
+            self.assertAllClose(N, N.T, rtol=1e-10, atol=1e-10)
+            self.assertAllClose(N_c, jnp.conj(N), rtol=1e-10, atol=1e-10)
+            self.assertTrue(
+                jnp.all(jnp.linalg.eigvalsh(jnp.imag(N)) <= 1e-8),
+                msg="Seeded sample produced a positive Im(N) eigenvalue",
+            )
+
 
     # ==========================================================================
     #  11. Kahler Metric from Second Derivatives

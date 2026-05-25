@@ -1434,6 +1434,42 @@ class TestFluxEFT(TestCase):
             )
         )
 
+    def test_seeded_sample_superpotential_flux_linearity(self):
+        r"""
+        **Description:**
+        The flux superpotential is linear in the flux vector.  Check this on a
+        small deterministic ensemble of moduli, axio-dilaton and flux samples.
+        The fixed class fixture catches exact regressions at one point; this
+        seeded sample guards the public linearity contract more broadly.
+        """
+        rng = np.random.default_rng(20260525)
+
+        for _ in range(4):
+            z = jnp.asarray(
+                rng.uniform(-0.35, 0.35, self.model.h12)
+                + 1j * rng.uniform(2.0, 4.5, self.model.h12)
+            )
+            tau = complex(
+                rng.uniform(-0.4, 0.4),
+                rng.uniform(2.5, 7.0),
+            )
+            f1 = jnp.asarray(
+                rng.integers(-4, 5, 2 * self.model.n_fluxes),
+                dtype=float,
+            )
+            f2 = jnp.asarray(
+                rng.integers(-4, 5, 2 * self.model.n_fluxes),
+                dtype=float,
+            )
+
+            W1 = self.model.superpotential(z, tau, f1)
+            W2 = self.model.superpotential(z, tau, f2)
+            W_sum = self.model.superpotential(z, tau, f1 + f2)
+            W_neg = self.model.superpotential(z, tau, -f1)
+
+            self.assertAllClose(W_sum, W1 + W2, rtol=1e-11, atol=1e-11)
+            self.assertAllClose(W_neg, -W1, rtol=1e-11, atol=1e-11)
+
     # ==========================================================================
     #  12.  SL(2,Z) fundamental domain map
     # ==========================================================================

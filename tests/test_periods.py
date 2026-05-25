@@ -764,6 +764,44 @@ class TestPeriodSector(TestCase):
             jnp.all(eigvals <= 1e-8),
             msg="Im(N) must be negative semidefinite: all eigenvalues <= 0")
 
+    def test_seeded_sample_special_geometry_properties(self):
+        r"""**Description:**
+
+        Check the core period-sector identities on a small deterministic
+        ensemble of LCS points.  The fixed class fixture catches exact
+        regressions at one representative point; this seeded sample guards
+        against accidental point-specific success without introducing
+        non-reproducible CI behaviour.
+        """
+        rng = np.random.default_rng(20260525)
+        sig = self.model.sigma
+
+        for _ in range(4):
+            X = jnp.asarray(
+                rng.uniform(-0.4, 0.4, self.model.h12 + 1)
+                + 1j * rng.uniform(2.0, 5.0, self.model.h12 + 1)
+            )
+            X = X.at[0].set(1.0 + 0.0j)
+            cX = jnp.conj(X)
+
+            Pi = self.model.period_vector_per(X, conj=False)
+            Pi_c = self.model.period_vector_per(cX, conj=True)
+            iso = jnp.dot(Pi, jnp.matmul(sig, Pi))
+            A = self.model.A_per(X, cX)
+            A_from_Pi = -1j * jnp.dot(Pi_c, jnp.matmul(sig, Pi))
+            self.assertAllClose(iso, 0.0 + 0.0j, rtol=1e-10, atol=1e-10)
+            self.assertAllClose(A_from_Pi, A, rtol=1e-10, atol=1e-10)
+
+            N = self.model.gauge_kinetic_matrix(X, cX, conj=False)
+            N_c = self.model.gauge_kinetic_matrix(X, cX, conj=True)
+            self.assertAllClose(N, N.T, rtol=1e-10, atol=1e-10)
+            self.assertAllClose(N_c, jnp.conj(N), rtol=1e-10, atol=1e-10)
+            eigvals = jnp.linalg.eigvalsh(jnp.imag(N))
+            self.assertTrue(
+                jnp.all(eigvals <= 1e-8),
+                msg=f"Seeded sample produced positive Im(N) eigenvalue: {eigvals}",
+            )
+
 
     # ==========================================================================
     # Period vector — covariant derivative

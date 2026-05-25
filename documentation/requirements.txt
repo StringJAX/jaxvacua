@@ -10,5 +10,6 @@ sphinxcontrib-mermaid
 myst-nb
 nbsphinx
 Pygments
+matplotlib
 jax
 jaxlib
