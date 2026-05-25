@@ -639,6 +639,7 @@ class TestConiLCSMultiVacuumScan(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         cls.model = _MODEL
+        cls._run_cache = {}
 
     def _run_one(self, fp):
         r"""Drive scipy.root from the seed; if hybr stalls (e.g. vacuum #2),
@@ -646,6 +647,11 @@ class TestConiLCSMultiVacuumScan(TestCase):
         M = np.asarray(fp["M"])
         K = np.asarray(fp["K"])
         gs = float(fp["gs"])
+        key = (tuple(M.tolist()), tuple(K.tolist()), gs)
+        cache = type(self)._run_cache
+        if key in cache:
+            return cache[key]
+
         tau0 = 1j / gs
         flux = self.model.pfv_to_flux(M, K)
         z0 = self.model.pfv_to_moduli(M, K, tau0)
@@ -666,7 +672,9 @@ class TestConiLCSMultiVacuumScan(TestCase):
             except Exception:                                              # noqa: BLE001
                 pass
         z1, _, t1, _ = self.model._convert_real_to_complex(x1)
-        return res, x1, z1, t1, flux
+        out = (res, x1, z1, t1, flux)
+        cache[key] = out
+        return out
 
     def _close(self, got, expected, label, idx):
         r"""Complex-number proximity helper: return None on PASS, str on FAIL."""

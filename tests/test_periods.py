@@ -56,8 +56,8 @@ class TestPeriodSector(TestCase):
     Attributes:
         model (jaxvacua.periods): Period model with :math:`h^{1,2}=2`,
             model ID 1, KS type at LCS, truncated at degree 5.
-        z (jax.Array): Random generic test point in period coordinate space,
-            shape ``(h12+1,)``, with :math:`X^0 = 1` fixed.
+        z (jax.Array): Fixed representative test point in period coordinate
+            space, shape ``(h12+1,)``, with :math:`X^0 = 1` fixed.
         cz (jax.Array): Complex conjugate of ``z``.
         z0 (jax.Array): Large complex structure point :math:`X^0=1`,
             :math:`X^i=0`, shape ``(h12+1,)``.
@@ -80,9 +80,14 @@ class TestPeriodSector(TestCase):
         h12 = 2
 
         cls.model = jaxvacua.periods(h12=h12, model_ID=1, model_type="KS", maximum_degree=5)
-        # periods takes X^I coordinates: X^0=1 fixed, then free z^i
-        cls.z = jnp.array(np.random.uniform(-1, 1, h12 + 1) + 1j * np.random.uniform(0, 10, h12 + 1))
-        cls.z = cls.z.at[0].set(1. + 0. * 1j)   # fix X^0 = 1
+        # periods takes X^I coordinates: X^0=1 fixed, then free z^i.
+        # Use a deterministic interior LCS-style point so sign-sensitive
+        # matrix tests are reproducible across sessions and CI runs.
+        cls.z = jnp.array([
+            1.0 + 0.0j,
+            0.37 + 3.25j,
+            -0.42 + 2.75j,
+        ])
         cls.cz = jnp.conj(cls.z)
         # LCS point (all z^i = 0, X^0 = 1)
         cls.z0 = jnp.zeros(h12 + 1, dtype=complex)
@@ -259,8 +264,15 @@ class TestPeriodSector(TestCase):
             exactly due to the block structure of :math:`\mathcal{N}`.
         """
 
-        # ---- evaluate ISD matrix ----
-        M = self.variant(self.model.ISD_matrix)(self.z, self.cz)
+        def _isd_bundle(x, y):
+            return (
+                self.model.ISD_matrix(x, y),
+                self.model.dM(x, y),
+                self.model.dM_c(x, y),
+            )
+
+        # ---- evaluate ISD matrix and derivatives in one variant call ----
+        M, dM, dM_c = self.variant(_isd_bundle)(self.z, self.cz)
 
         # must be complex type internally (imaginary part vanishes)
         chex.assert_type(M, complex)
@@ -285,10 +297,6 @@ class TestPeriodSector(TestCase):
             jnp.linalg.inv(M), jnp.matmul(sig.T, jnp.matmul(M, sig)),
             rtol=1e-11, atol=1e-11,
             msg="ISD matrix inverse must equal sigma^T M sigma")
-
-        # ---- derivatives: shape and conjugation ----
-        dM = self.variant(self.model.dM)(self.z, self.cz)
-        dM_c = self.variant(self.model.dM_c)(self.z, self.cz)
 
         chex.assert_type(dM, complex)
         chex.assert_shape(dM, (2 * (self.model.h12 + 1),
@@ -342,11 +350,32 @@ class TestPeriodSector(TestCase):
             None
         """
 
-        # ---- conj=False ----
-        conj = False
-        N = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=conj))(self.z, self.cz)
-        N_periods = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_periods(x, y, conj=conj))(self.z, self.cz)
-        N_prepotential = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_prepotential(x, y, conj=conj))(self.z, self.cz)
+        def _gauge_kinetic_bundle(x, y):
+            return (
+                self.model.gauge_kinetic_matrix(x, y, conj=False),
+                self.model.gauge_kinetic_matrix_periods(x, y, conj=False),
+                self.model.gauge_kinetic_matrix_prepotential(x, y, conj=False),
+                self.model.dN(x, y, conj=False),
+                self.model.dN_c(x, y, conj=False),
+                self.model.gauge_kinetic_matrix(x, y, conj=True),
+                self.model.gauge_kinetic_matrix_periods(x, y, conj=True),
+                self.model.gauge_kinetic_matrix_prepotential(x, y, conj=True),
+                self.model.dN(x, y, conj=True),
+                self.model.dN_c(x, y, conj=True),
+            )
+
+        (
+            N,
+            N_periods,
+            N_prepotential,
+            dN_X,
+            dN_cX,
+            N_c,
+            N_periods_c,
+            N_prepotential_c,
+            dN_X_c,
+            dN_cX_c,
+        ) = self.variant(_gauge_kinetic_bundle)(self.z, self.cz)
 
         # N from gauge_kinetic_matrix must be complex-valued
         chex.assert_type(N, complex)
@@ -361,10 +390,6 @@ class TestPeriodSector(TestCase):
         # N_prepotential must have the same (h12+1) x (h12+1) shape
         chex.assert_shape(N_prepotential, (self.model.h12 + 1, self.model.h12 + 1))
 
-        # holomorphic and anti-holomorphic derivatives
-        dN_X = self.variant(lambda x, y: self.model.dN(x, y, conj=conj))(self.z, self.cz)
-        dN_cX = self.variant(lambda x, y: self.model.dN_c(x, y, conj=conj))(self.z, self.cz)
-
         # Holomorphic derivative dN/dX must be complex-valued
         chex.assert_type(dN_X, complex)
         # dN/dX must be a rank-3 tensor of shape (h12+1, h12+1, h12+1)
@@ -373,12 +398,6 @@ class TestPeriodSector(TestCase):
         chex.assert_type(dN_cX, complex)
         # dN/dcX must have the same rank-3 shape as dN/dX
         chex.assert_shape(dN_cX, (self.model.h12 + 1, self.model.h12 + 1, self.model.h12 + 1))
-
-        # ---- conj=True ----
-        conj = True
-        N_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix(x, y, conj=conj))(self.z, self.cz)
-        N_periods_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_periods(x, y, conj=conj))(self.z, self.cz)
-        N_prepotential_c = self.variant(lambda x, y: self.model.gauge_kinetic_matrix_prepotential(x, y, conj=conj))(self.z, self.cz)
 
         # Conjugated N must be complex-valued
         chex.assert_type(N_c, complex)
@@ -392,9 +411,6 @@ class TestPeriodSector(TestCase):
         chex.assert_type(N_prepotential_c, complex)
         # N_prepotential_c must have the same (h12+1) x (h12+1) shape
         chex.assert_shape(N_prepotential_c, (self.model.h12 + 1, self.model.h12 + 1))
-
-        dN_X_c = self.variant(lambda x, y: self.model.dN(x, y, conj=conj))(self.z, self.cz)
-        dN_cX_c = self.variant(lambda x, y: self.model.dN_c(x, y, conj=conj))(self.z, self.cz)
 
         # Holomorphic derivative of conjugated N must be complex-valued
         chex.assert_type(dN_X_c, complex)

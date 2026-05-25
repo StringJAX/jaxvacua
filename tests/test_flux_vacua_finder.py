@@ -483,6 +483,7 @@ class TestFluxVacuaFinder(TestCase):
                         msg="Im(tau) must remain positive after Newton iteration")
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_newton_method_solver_modes(self):
         r"""**Description:**
         The Newton solver supports ``"real"`` mode which converts to a real

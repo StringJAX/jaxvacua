@@ -65,11 +65,13 @@ class TestCSSector(TestCase):
     Attributes:
         model (jaxvacua.flux_eft): FluxEFT model with ``h12=2``,
             ``model_ID=1``, ``model_type="KS"`` and ``maximum_degree=5``.
-        z (jnp.ndarray): Random complex structure moduli of shape ``(h12,)``.
+        z (jnp.ndarray): Fixed representative complex-structure moduli of
+            shape ``(h12,)``.
         cz (jnp.ndarray): Complex conjugate of ``z``.
-        tau (complex): Random axio-dilaton with positive imaginary part.
+        tau (complex): Fixed representative axio-dilaton with positive
+            imaginary part.
         ctau (complex): Complex conjugate of ``tau``.
-        f (jnp.ndarray): Random integer flux vector of shape
+        f (jnp.ndarray): Fixed integer flux vector of shape
             ``(4*(h12+1),)`` cast to float.
         x (jnp.ndarray): Real parameter vector ``[Re(z_1), Im(z_1), ...,
             Re(tau), Im(tau)]`` of shape ``(2*(h12+1),)``.
@@ -96,11 +98,13 @@ class TestCSSector(TestCase):
 
         cls.model = jaxvacua.FluxEFT(h12=h12, model_ID=1, model_type="KS", maximum_degree=5)
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5,1.5],[1.5,0.]])
-        cls.z = jnp.array(np.random.uniform(-1, 1, h12) + 1j * np.random.uniform(1., 10., h12))
+        # Deterministic interior LCS-style fixture; avoids test-order and
+        # session-dependent numerical variation in sign-sensitive matrix tests.
+        cls.z = jnp.array([0.23 + 3.4j, -0.31 + 2.8j])
         cls.cz = jnp.conj(cls.z)
-        cls.tau = np.random.uniform(1, 2) + 1j * np.random.uniform(0.1, 0.5)
+        cls.tau = 0.37 + 4.6j
         cls.ctau = jnp.conj(cls.tau)
-        cls.f = jnp.array(np.random.randint(-10, 11, 4 * (h12 + 1))).astype(float)
+        cls.f = jnp.array([3, -2, 1, 4, -1, 2, -3, 0, 5, -4, 2, -1]).astype(float)
 
         cls.x = jnp.array(np.append(np.append([cls.z.real], [cls.z.imag], axis=0).T.flatten(), [cls.tau.real, cls.tau.imag]))
 

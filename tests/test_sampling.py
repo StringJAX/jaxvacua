@@ -177,6 +177,35 @@ class TestDataSampler(TestCase):
             )
             chex.assert_shape(out, expected_shape)
 
+    def test_jax_backend_same_key_reproducible_box_samples(self):
+        r"""
+        **Description:**
+        Using the same explicit JAX PRNG key must reproduce the same one-shot
+        box samples.  This pins the deterministic contract for callers that
+        manage their own keys.
+        """
+        key = jax.random.PRNGKey(314159)
+
+        flux_a = self.sampler_jax.get_fluxes(
+            4, mode="full", sampling_mode="box", rns_key=key
+        )
+        flux_b = self.sampler_jax.get_fluxes(
+            4, mode="full", sampling_mode="box", rns_key=key
+        )
+        self.assertAllEqual(flux_a, flux_b)
+
+        moduli_a = self.sampler_jax.get_moduli(
+            4, sampling_mode="box", rns_key=key
+        )
+        moduli_b = self.sampler_jax.get_moduli(
+            4, sampling_mode="box", rns_key=key
+        )
+        self.assertAllEqual(moduli_a, moduli_b)
+
+        tau_a = self.sampler_jax.get_complex_tau(4, rns_key=key)
+        tau_b = self.sampler_jax.get_complex_tau(4, rns_key=key)
+        self.assertAllEqual(tau_a, tau_b)
+
     def test_get_fluxes_box_half(self):
         r"""
         **Description:**
@@ -650,8 +679,16 @@ class TestDataSampler(TestCase):
     # ==========================================================================
 
     def _make_pts(self):
-        r"""Helper: generate N random points with large norms to test rescaling."""
-        return np.random.uniform(2.0, 10.0, (self.N, self.model.h12))
+        r"""Helper: return deterministic points with large norms."""
+        base = np.array([
+            [2.0, 9.0],
+            [8.5, 3.0],
+            [4.25, 7.75],
+            [9.5, 9.25],
+            [6.0, 2.5],
+        ])
+        reps = int(np.ceil(self.N / len(base)))
+        return np.tile(base, (reps, 1))[:self.N, :self.model.h12]
 
     def test_rescale_points_l2(self):
         r"""
@@ -938,6 +975,26 @@ class TestDataSampler(TestCase):
             # Axio-dilaton must have complex dtype (tau = c0 + i*s)
             chex.assert_type(tau,    complex)
 
+    def test_initial_guesses_jax_same_key_reproducible_box_mode(self):
+        r"""
+        **Description:**
+        ``initial_guesses`` must be reproducible when the caller supplies the
+        same explicit JAX key and routes through the one-shot box samplers.
+        """
+        key = jax.random.PRNGKey(271828)
+        kwargs = dict(
+            rns_key=key,
+            include_fluxes=True,
+            moduli_sampling_mode="box",
+            fluxes_sampling_mode="box",
+        )
+        moduli_a, tau_a, fluxes_a = self.sampler_jax.initial_guesses(5, **kwargs)
+        moduli_b, tau_b, fluxes_b = self.sampler_jax.initial_guesses(5, **kwargs)
+
+        self.assertAllEqual(moduli_a, moduli_b)
+        self.assertAllEqual(tau_a, tau_b)
+        self.assertAllEqual(fluxes_a, fluxes_b)
+
     def test_initial_guesses_without_fluxes(self):
         r"""
         **Description:**
@@ -1013,17 +1070,10 @@ class TestDataSampler(TestCase):
             - ``tau`` (complex): Axio-dilaton scalar
             - ``flux0`` (jax.Array): Half-flux vector, shape ``(n_fluxes,)``
         """
-        z = jnp.array(
-            np.random.uniform(-0.5, 0.5, self.model.h12)
-            + 1j * np.random.uniform(1.0, 4.0, self.model.h12)
-        )
-        tau = complex(
-            np.random.uniform(-0.5, 0.5),
-            np.random.uniform(2.0, 8.0)
-        )
-        flux0 = jnp.array(
-            np.random.randint(-5, 6, self.model.n_fluxes)
-        ).astype(jnp.float64)
+        z = jnp.array([0.18 + 2.7j, -0.24 + 3.1j])[:self.model.h12]
+        tau = complex(0.21, 5.4)
+        flux0 = jnp.array([2, -1, 3, 0, -2, 1])[:self.model.n_fluxes]
+        flux0 = flux0.astype(jnp.float64)
         return z, tau, flux0
 
     def test_ISD_sampling_PM_modes(self):

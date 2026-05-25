@@ -47,8 +47,11 @@ from jaxvacua.conifold import (
     extended_euclidean,
     orthogonal_lattice,
     get_basis_change,
+    get_bulk_embedding,
+    get_bulk_projection,
     compute_a_matrix,
 )
+from jaxvacua.conifold.conifold_utils import get_embedding
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -380,6 +383,62 @@ class TestGetBasisChange(TestCase):
         Lambda = get_basis_change(q)
         # First row dotted with q must give 1 (= gcd)
         self.assertEqual(int(Lambda[0] @ np.array(q)), 1)
+
+    def test_bulk_embedding_projection_axis_aligned(self):
+        r"""
+        **Description:**
+        In the conifold-aligned basis, the conifold embedding and bulk
+        embedding/projection reduce to the obvious coordinate slices.
+        """
+        q = np.array([1, 0, 0])
+        e_q = np.asarray(get_embedding(q))
+        bulk_embedding = np.asarray(get_bulk_embedding(q))
+        bulk_projection = np.asarray(get_bulk_projection(q))
+
+        expected_bulk = np.array([[0, 0], [1, 0], [0, 1]])
+        self.assertAllEqual(e_q, np.array([1, 0, 0]))
+        self.assertAllEqual(bulk_embedding, expected_bulk)
+        self.assertAllEqual(bulk_projection, expected_bulk)
+
+    def test_bulk_embedding_projection_general_basis_roundtrip(self):
+        r"""
+        **Description:**
+        In a general basis, bulk embedding and bulk projection differ but must
+        still give an exact decomposition
+
+        ``v = (q·v) e_q + bulk_embedding @ (v @ bulk_projection)``.
+
+        This pure-lattice regression catches projection/embedding swaps without
+        requiring CYTools or coniLCS model construction.
+        """
+        q = np.array([-1, 1, 0])
+        e_q = np.asarray(get_embedding(q), dtype=float)
+        bulk_embedding = np.asarray(get_bulk_embedding(q), dtype=float)
+        bulk_projection = np.asarray(get_bulk_projection(q), dtype=float)
+
+        self.assertAlmostEqual(float(q @ e_q), 1.0)
+        self.assertAllClose(q @ bulk_embedding, np.zeros(2), atol=1e-12)
+        self.assertAllClose(
+            bulk_embedding.T @ bulk_projection,
+            np.eye(2),
+            atol=1e-12,
+        )
+        self.assertGreater(
+            float(np.max(np.abs(bulk_embedding - bulk_projection))),
+            0.0,
+            msg="embedding and projection should differ in this general basis",
+        )
+
+        test_vectors = [
+            np.array([2.5, -0.75, 4.0]),
+            np.array([-1.0, 3.0, 0.5]),
+            np.array([0.0, 1.25, -2.0]),
+        ]
+        for v in test_vectors:
+            z_cf = float(q @ v)
+            z_bulk = v @ bulk_projection
+            reconstructed = z_cf * e_q + bulk_embedding @ z_bulk
+            self.assertAllClose(reconstructed, v, atol=1e-12)
 
 
 # ==============================================================================
