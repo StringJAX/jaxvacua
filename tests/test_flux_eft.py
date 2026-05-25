@@ -1819,6 +1819,31 @@ class TestFluxEFT(TestCase):
             rtol=1e-06, atol=1e-06
         )
 
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_compute_tau_vev_solves_dilaton_fterm(self):
+        r"""
+        **Description:**
+        ``compute_tau_vev`` should return the axio-dilaton value implied by
+        the ``D_tau W = 0`` equation for fixed complex-structure moduli and
+        fluxes. This guards the public helper against sign or symplectic
+        pairing regressions.
+        """
+
+        tau = self.variant(lambda z, fl: self.model.compute_tau_vev(z, fl))(
+            self.z, self.f_solution
+        )
+
+        self.assertTrue(jnp.isfinite(tau.real))
+        self.assertTrue(jnp.isfinite(tau.imag))
+
+        d_tau = self.variant(
+            lambda z, t, fl: self.model.DW_tau(
+                z, jnp.conj(z), t, jnp.conj(t), fl
+            )
+        )(self.z, tau, self.f_solution)
+
+        self.assertAllClose(d_tau, 0.0 + 0.0j, atol=1e-10)
+
     # ==========================================================================
     #  18.  Hodge decomposition of flux
     # ==========================================================================

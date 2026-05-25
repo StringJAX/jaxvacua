@@ -30,7 +30,7 @@ The finder is tested as an ``FluxEFT`` subclass, so these tests also guard the
 absence of a separate wrapped model object.
 """
 
-import sys, os, warnings
+import sys, os, warnings, tempfile
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -46,6 +46,26 @@ import jaxvacua
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
+
+
+class _StaticVacuaSampler:
+    """Small deterministic sampler for wrapper-level finder tests."""
+
+    def __init__(self, model):
+        self.model = model
+        self.moduli = jnp.array([0.1 + 3.0j, -0.2 + 2.5j])
+        self.tau = -0.3 + 5.0j
+        self.fluxes = jnp.array(
+            [1., 0., -2., 0., 3., -1., 2., 1., 0., -1., 1., 0.]
+        )
+
+    def initial_guesses(self, n, *args, include_fluxes=True, **kwargs):
+        moduli = jnp.broadcast_to(self.moduli, (n, self.model.h12))
+        tau = jnp.broadcast_to(jnp.asarray(self.tau), (n,))
+        if not include_fluxes:
+            return moduli, tau
+        fluxes = jnp.broadcast_to(self.fluxes, (n, 2 * self.model.n_fluxes))
+        return moduli, tau, fluxes
 
 
 # ==============================================================================
@@ -580,6 +600,296 @@ class TestFluxVacuaFinder(TestCase):
         sampler = self.model.sampler
         self.assertTrue(callable(getattr(sampler, 'get_moduli', None)),
                         msg="sampler must have a callable get_moduli method")
+
+    # ==========================================================================
+    #  7. constructor and post-processing helpers
+    # ==========================================================================
+
+    def test_from_model_reuses_geometry_and_sets_finder_state(self):
+        r"""``from_model`` should add finder state without rebuilding geometry."""
+
+        base = jaxvacua.FluxEFT(
+            h12=self.h12, model_ID=1, model_type="KS", maximum_degree=0
+        )
+        sampler = _StaticVacuaSampler(base)
+        finder = jaxvacua.FluxVacuaFinder.from_model(
+            base, sampler=sampler, map_to_fd=True, moduli_bounds=(2., 4.)
+        )
+
+        self.assertIsInstance(finder, jaxvacua.FluxVacuaFinder)
+        self.assertIs(finder.periods, base.periods)
+        self.assertIs(finder.lcs_tree, base.lcs_tree)
+        self.assertIs(finder.sampler, sampler)
+        self.assertTrue(finder._map_to_fd)
+        self.assertEqual(finder._sampler_kwargs["moduli_bounds"], (2., 4.))
+
+        finder._calibrated_sigmas = {"H": 1.0}
+        self.assertFalse(hasattr(base, "_calibrated_sigmas"))
+
+    def test_to_fd_disabled_is_noop_wrapper(self):
+        r"""``to_fd`` should respect the finder-level ``map_to_fd`` flag."""
+
+        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        moduli = np.array([0.6 + 3.0j, -0.7 + 2.0j])
+        tau = 0.2 + 3.0j
+        fluxes = np.arange(2 * self.model.n_fluxes, dtype=float)
+
+        out = finder.to_fd(moduli, tau, fluxes)
+
+        self.assertIs(out[0], moduli)
+        self.assertIs(out[1], tau)
+        self.assertIs(out[2], fluxes)
+
+    def test_deduplicate_vacua_collapses_rounded_duplicates(self):
+        r"""Batched deduplication should keep the first representative."""
+
+        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        moduli = jnp.array([
+            [0.100000001 + 3.0j, -0.2 + 2.5j],
+            [0.100000002 + 3.0j, -0.2 + 2.5j],
+            [0.3 + 3.0j, -0.2 + 2.5j],
+        ])
+        tau = jnp.array([0.1 + 4.0j, 0.1 + 4.0j, 0.2 + 4.0j])
+        fluxes = jnp.array([
+            self.fl,
+            self.fl,
+            self.fl.at[0].add(1.0),
+        ])
+
+        mod_u, tau_u, flux_u, keep = finder.deduplicate_vacua(
+            moduli, tau, fluxes, n_digits=6
+        )
+
+        self.assertAllEqual(keep, jnp.array([0, 2]))
+        chex.assert_shape(mod_u, (2, self.h12))
+        chex.assert_shape(tau_u, (2,))
+        chex.assert_shape(flux_u, (2, 2 * self.model.n_fluxes))
+
+    def test_deduplicate_vacua_empty_batch(self):
+        r"""Empty batches should round-trip without special-case crashes."""
+
+        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        moduli = jnp.zeros((0, self.h12), dtype=complex)
+        tau = jnp.zeros((0,), dtype=complex)
+        fluxes = jnp.zeros((0, 2 * self.model.n_fluxes))
+
+        mod_u, tau_u, flux_u, keep = finder.deduplicate_vacua(moduli, tau, fluxes)
+
+        chex.assert_shape(mod_u, (0, self.h12))
+        chex.assert_shape(tau_u, (0,))
+        chex.assert_shape(flux_u, (0, 2 * self.model.n_fluxes))
+        chex.assert_shape(keep, (0,))
+
+    # ==========================================================================
+    #  8. F-flux linearisation and solver wrappers
+    # ==========================================================================
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_linearised_shifts_F_shapes_and_flux_structure(self):
+        r"""``linearised_shifts_F`` completes/preserves the H-flux block."""
+
+        fn = self.variant(
+            lambda z, tau, fl: self.model.linearised_shifts_F(
+                z, tau, fl, mode="Fflux"
+            )
+        )
+        moduli_new, tau_new, flux_new = fn(self.z, self.tau, self.fl)
+
+        chex.assert_shape(moduli_new, (self.h12,))
+        chex.assert_shape(tau_new, ())
+        chex.assert_shape(flux_new, (2 * self.model.n_fluxes,))
+        self.assertAllClose(flux_new[:self.model.n_fluxes], self.fl[:self.model.n_fluxes])
+        self.assertAllClose(flux_new[self.model.n_fluxes:],
+                            jnp.round(flux_new[self.model.n_fluxes:]))
+
+    @chex.variants(with_jit=True, without_jit=True)
+    def test_linearised_shifts_dispatch_Fflux(self):
+        r"""The generic dispatcher should match ``linearised_shifts_F``."""
+
+        direct = self.variant(
+            lambda z, tau, fl: self.model.linearised_shifts_F(
+                z, tau, fl, mode="Fflux"
+            )
+        )(self.z, self.tau, self.fl)
+        dispatch = self.variant(
+            lambda z, tau, fl: self.model.linearised_shifts(
+                z, tau, fl, mode="Fflux", return_flag=False
+            )
+        )(self.z, self.tau, self.fl)
+
+        for got, expected in zip(dispatch, direct):
+            self.assertAllClose(got, expected, atol=1e-12)
+
+    def test_fterm_solver_accepts_custom_objective_and_optimiser(self):
+        r"""``fterm_solver`` should honour user-supplied solver callables."""
+
+        moduli = jnp.broadcast_to(self.z, (2, self.h12))
+        tau = jnp.broadcast_to(jnp.asarray(self.tau), (2,))
+        fluxes = jnp.broadcast_to(self.fl, (2, 2 * self.model.n_fluxes))
+
+        def objective_fct(m, cm, t, ct, fl):
+            return jnp.zeros((m.shape[0], self.model.dimension_H3), dtype=complex)
+
+        def optimiser(m, t, fl):
+            return m, t, fl, jnp.ones(m.shape[0], dtype=bool)
+
+        step, mod_out, tau_out, flux_out, checks, res = self.model.fterm_solver(
+            moduli, tau, fluxes,
+            objective_fct=objective_fct,
+            optimiser=optimiser,
+            tol=1e-12,
+            max_iters=3,
+        )
+
+        self.assertEqual(int(step), 1)
+        self.assertAllClose(mod_out, moduli)
+        self.assertAllClose(tau_out, tau)
+        self.assertAllClose(flux_out, fluxes)
+        self.assertAllTrue(checks)
+        self.assertAllClose(res, jnp.zeros(2), atol=1e-14)
+
+    def test_sample_SUSY_flux_vacua_wrapper_with_custom_solver(self):
+        r"""The high-level SUSY sampler should compose sampler, solver and dedup."""
+
+        sampler = _StaticVacuaSampler(self.model)
+
+        def objective_fct(m, cm, t, ct, fl):
+            return jnp.zeros((m.shape[0], self.model.dimension_H3), dtype=complex)
+
+        def optimiser(m, t, fl):
+            return m, t, fl, jnp.ones(m.shape[0], dtype=bool)
+
+        moduli, tau, fluxes, residuals = self.model.sample_SUSY_flux_vacua(
+            N=1,
+            sampler=sampler,
+            max_iters=2,
+            objective_fct=objective_fct,
+            optimiser=optimiser,
+            tol=1e-12,
+            vmap_dim=2,
+            deduplicate=False,
+            max_batches=1,
+            errors="raise",
+        )
+
+        self.assertGreaterEqual(len(moduli), 1)
+        chex.assert_shape(moduli, (len(moduli), self.h12))
+        chex.assert_shape(tau, (len(moduli),))
+        chex.assert_shape(fluxes, (len(moduli), 2 * self.model.n_fluxes))
+        self.assertAllClose(residuals, jnp.zeros_like(residuals), atol=1e-14)
+
+    def test_sample_SUSY_vacua_from_fluxes_wrapper_with_custom_solver(self):
+        r"""Flux-first SUSY sampling should handle externally supplied solvers."""
+
+        initial_moduli = jnp.broadcast_to(self.z, (2, self.h12))
+        initial_tau = jnp.broadcast_to(jnp.asarray(self.tau), (2,))
+        fluxes_init = jnp.broadcast_to(self.fl, (1, 2 * self.model.n_fluxes))
+
+        def objective_fct(m, cm, t, ct, fl):
+            return jnp.zeros(
+                (m.shape[0], m.shape[1], self.model.dimension_H3),
+                dtype=complex,
+            )
+
+        def optimiser_init(m, t, fl):
+            n_flux = fl.shape[0]
+            n_pts = m.shape[0]
+            moduli = jnp.broadcast_to(m[None, :, :], (n_flux, n_pts, self.h12))
+            tau = jnp.broadcast_to(t[None, :], (n_flux, n_pts))
+            fluxes = jnp.broadcast_to(
+                fl[:, None, :], (n_flux, n_pts, 2 * self.model.n_fluxes)
+            )
+            return moduli, tau, fluxes
+
+        def optimiser_steps(m, t, fl):
+            return m, t, fl, jnp.ones(m.shape[:2], dtype=bool)
+
+        moduli, tau, fluxes, residuals = self.model.sample_SUSY_vacua_from_fluxes(
+            fluxes_init=fluxes_init,
+            initial_guesses=(initial_moduli, initial_tau),
+            N=1,
+            max_iters=2,
+            objective_fct=objective_fct,
+            optimiser_init=optimiser_init,
+            optimiser_steps=optimiser_steps,
+            mode="Fflux",
+            tol=1e-12,
+            deduplicate=False,
+            max_batches=1,
+            errors="raise",
+        )
+
+        self.assertGreaterEqual(len(moduli), 1)
+        chex.assert_shape(moduli, (len(moduli), self.h12))
+        chex.assert_shape(tau, (len(moduli),))
+        chex.assert_shape(fluxes, (len(moduli), 2 * self.model.n_fluxes))
+        self.assertAllClose(residuals, jnp.zeros_like(residuals), atol=1e-14)
+
+    # ==========================================================================
+    #  9. calibration persistence
+    # ==========================================================================
+
+    def test_run_calibration_orchestrates_calibration_steps(self):
+        r"""``run_calibration`` should call the three calibration stages."""
+
+        finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+        calls = []
+        sampler = object()
+
+        def fake_precompute(n_sample=50, Nmax=None, sampler=None):
+            calls.append(("precompute", n_sample, Nmax, sampler))
+            finder._s_min = 1.0
+            finder._tr_Minv_median = 2.0
+            finder._M_cond = 3.0
+
+        def fake_estimate(Nmax=None):
+            calls.append(("estimate", Nmax))
+            finder._calibrated_sigmas = {"H": 1.0}
+
+        def fake_calibrate(Nmax=None, modes=None, n_test=200,
+                           target_acceptance=0.8, sampler=None, verbose=True):
+            calls.append(("calibrate", Nmax, tuple(modes), n_test,
+                          target_acceptance, sampler, verbose))
+            finder._calibrated_sigmas["F"] = 2.0
+            return dict(finder._calibrated_sigmas)
+
+        finder._precompute_M_eigensystem = fake_precompute
+        finder._estimate_sigmas = fake_estimate
+        finder.calibrate_priors = fake_calibrate
+
+        result = finder.run_calibration(
+            Nmax=17,
+            n_sample=3,
+            n_test=4,
+            target_acceptance=0.7,
+            modes=["H"],
+            sampler=sampler,
+            verbose=False,
+        )
+
+        self.assertEqual(result, {"H": 1.0, "F": 2.0})
+        self.assertEqual(calls[0], ("precompute", 3, 17, sampler))
+        self.assertEqual(calls[1], ("estimate", 17))
+        self.assertEqual(calls[2], ("calibrate", 17, ("H",), 4, 0.7, sampler, False))
+
+    def test_save_and_load_calibration_roundtrip(self):
+        r"""Calibration JSON files should round-trip the sigma table."""
+
+        finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+        finder._calibrated_sigmas = {"F": 1.25, "H": 2.5}
+        finder._M_cond = 12.0
+        finder._tr_Minv_median = 3.0
+        finder._s_min = 0.9
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "calibration.json")
+            saved = finder.save_calibration(Nmax=99, path=path)
+
+            loaded_finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+            sigmas = loaded_finder.load_calibration(saved)
+
+        self.assertEqual(sigmas, {"F": 1.25, "H": 2.5})
+        self.assertEqual(loaded_finder._calibration_isd_modes, ("F", "H"))
 
 
 if __name__ == "__main__":

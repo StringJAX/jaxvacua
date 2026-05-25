@@ -1000,3 +1000,83 @@ class TestPeriodSector(TestCase):
                             msg="dPi_c must equal conj(dPi)")
         self.assertAllClose(DPi_c, jnp.conj(DPi),
                             msg="DPi_c must equal conj(DPi)")
+
+
+# ==============================================================================
+# TestCustomPeriodInputs
+# ==============================================================================
+
+class TestCustomPeriodInputs(TestCase):
+    r"""
+    **Description:**
+    Focused checks for user-supplied period and prepotential callables.  These
+    guard the constructor dispatch used by the custom-period notebooks, where
+    no built-in LCS model data is required.
+    """
+
+    def test_custom_prepotential_registers_and_differentiates(self):
+        r"""A valid homogeneous prepotential should become the period source."""
+
+        def F(X, conj=False):
+            coeff = -0.5j if conj else 0.5j
+            return coeff * jnp.sum(X ** 2)
+
+        with pytest.warns(UserWarning, match="general input periods"):
+            model = jaxvacua.periods(h12=1, limit=None, prepotential_input=F)
+        X = jnp.array([1.0 + 0.2j, 0.3 + 1.1j])
+        cX = jnp.conj(X)
+
+        self.assertTrue(model._prepotential_input_used)
+        self.assertFalse(model._period_input_used)
+
+        Pi = model.period_vector_per(X)
+        Pi_c = model.period_vector_per(cX, conj=True)
+        ddF = model.prepot_grad_grad_per(X)
+        N = model.gauge_kinetic_matrix(X, cX)
+
+        chex.assert_shape(Pi, (4,))
+        chex.assert_shape(ddF, (2, 2))
+        chex.assert_shape(N, (2, 2))
+        self.assertAllClose(Pi_c, jnp.conj(Pi), atol=1e-12)
+        self.assertAllClose(ddF, 1j * jnp.eye(2), atol=1e-12)
+
+    def test_custom_period_input_registers_direct_period_vector(self):
+        r"""A direct period vector should bypass prepotential reconstruction."""
+
+        def Pi(X, conj=False):
+            c1 = -1j if conj else 1j
+            c2 = -2j if conj else 2j
+            return jnp.array([c1 * X[0], c2 * X[1], X[0], X[1]])
+
+        with pytest.warns(UserWarning, match="general input periods"):
+            model = jaxvacua.periods(h12=1, limit=None, period_input=Pi)
+        X = jnp.array([1.0 + 0.2j, 0.3 + 1.1j])
+
+        self.assertTrue(model._period_input_used)
+        self.assertFalse(model._prepotential_input_used)
+        self.assertAllClose(model.period_vector_per(X), Pi(X), atol=1e-12)
+        self.assertAllClose(
+            model.period_vector_per(jnp.conj(X), conj=True),
+            jnp.conj(Pi(X)),
+            atol=1e-12,
+        )
+
+    def test_custom_period_input_rejects_wrong_shape(self):
+        r"""Constructor validation should reject malformed period vectors."""
+
+        def bad_periods(X, conj=False):
+            return jnp.ones((3,), dtype=complex)
+
+        with pytest.warns(UserWarning, match="general input periods"):
+            with pytest.raises(ValueError, match="Wrong output shape for period"):
+                jaxvacua.periods(h12=1, limit=None, period_input=bad_periods)
+
+    def test_custom_prepotential_rejects_bad_conjugation(self):
+        r"""Constructor validation should catch inconsistent conjugation."""
+
+        def bad_F(X, conj=False):
+            return 0.5j * jnp.sum(X ** 2)
+
+        with pytest.warns(UserWarning, match="general input periods"):
+            with pytest.raises(ValueError, match="not consistent with complex conjugation"):
+                jaxvacua.periods(h12=1, limit=None, prepotential_input=bad_F)

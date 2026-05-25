@@ -1720,3 +1720,48 @@ class TestMonodromy(TestCase):
                 product, np.eye(self.dim, dtype=int),
                 err_msg=f"T(n={n_vec}) @ T(-n) != I"
             )
+
+    def test_conifold_monodromy_matrix_from_index(self):
+        r"""
+        **Description:**
+        The Picard-Lefschetz conifold monodromy for ``conifold_index=b`` has
+        the expected rank-one ``F_a <- F_a + c_a c_b z^b`` block.
+        """
+
+        T = self.model.conifold_monodromy_matrix(conifold_index=1)
+        expected = np.eye(self.dim, dtype=int)
+        expected[1 + 1, self.h + 2 + 1] += 1
+
+        np.testing.assert_array_equal(T, expected)
+
+    def test_conifold_monodromy_matrix_from_curve(self):
+        r"""
+        **Description:**
+        A general conifold curve ``c`` should insert the outer product
+        ``c_a c_b`` in the magnetic/electric off-diagonal block.
+        """
+
+        c = np.array([2, -1], dtype=int)
+        T = self.model.conifold_monodromy_matrix(conifold_curve=c)
+        expected = np.eye(self.dim, dtype=int)
+        expected[1:self.h + 1, self.h + 2:self.dim] += np.outer(c, c)
+
+        np.testing.assert_array_equal(T, expected)
+
+    def test_conifold_monodromy_matrix_rejects_ambiguous_input(self):
+        r"""
+        **Description:**
+        Supplying both ``conifold_curve`` and ``conifold_index`` is ambiguous
+        and should be rejected before any basis-dependent logic is used.
+        """
+
+        with self.assertRaises(ValueError):
+            self.model.conifold_monodromy_matrix(
+                conifold_curve=np.array([1, 0]), conifold_index=0,
+            )
+
+    def test_conifold_monodromy_matrix_rejects_wrong_curve_length(self):
+        r"""The conifold curve length must match ``h12``."""
+
+        with self.assertRaises(ValueError):
+            self.model.conifold_monodromy_matrix(conifold_curve=np.array([1, 0, 0]))
