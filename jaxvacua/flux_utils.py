@@ -142,18 +142,41 @@ def pfv_to_moduli(
     if "coniLCS" in self.periods.limit:
         gs = 1/tau.imag
         c0 = tau.real
-        Nhat = N[1:,1:]
-        phat = jnp.linalg.inv(Nhat)@K[1:]
-        zbulk = phat*tau
-        Kprime = K[0]-N[0,1:]@phat
-        #zcf = jnp.exp(2*jnp.pi*Kprime/self.periods.ncf/gs/M[0])/2/jnp.pi
+        ncf = self.lcs_tree.conifold.ncf
+        if self.lcs_tree.conifold_basis:
+            # Aligned: conifold at index 0, plain slices (bit-identical).
+            Nhat   = N[1:, 1:]                 # bulk-bulk axion matrix
+            Ncb    = N[0, 1:]                  # conifold-bulk
+            Kbulk  = K[1:]                     # bulk K-flux
+            Kcf    = K[0]                      # conifold K-flux
+            Mcf    = M[0]                      # conifold M-flux
+        else:
+            # General basis: N indices are moduli-type (split via the conifold
+            # embedding e_q + bulk_embedding, as in _split_conifold_bulk); the
+            # K-flux is covariant (conifold via e_q, bulk via bulk_embedding) and
+            # the M-flux is contravariant (conifold via the conifold curve q).
+            e_q = self.lcs_tree.conifold.embedding
+            q   = self.lcs_tree.conifold.conifold_curve
+            be  = self.lcs_tree.conifold.bulk_embedding
+            Nhat   = be.T @ N @ be
+            Ncb    = e_q @ N @ be
+            Kbulk  = K @ be
+            Kcf    = K @ e_q
+            Mcf    = M @ q
 
-        # amatrix[0]@M-P1==0???
+        phat   = jnp.linalg.inv(Nhat) @ Kbulk
+        zbulk  = phat * tau
+        Kprime = Kcf - Ncb @ phat
+
         phase_comb = -1j*(+c0*Kprime)
         radial = Kprime/gs
-        zcf = -1/(2*jnp.pi*1j)*jnp.exp(2*jnp.pi/self.lcs_tree.conifold.ncf/M[0]*(phase_comb+radial))
+        zcf = -1/(2*jnp.pi*1j)*jnp.exp(2*jnp.pi/ncf/Mcf*(phase_comb+radial))
 
-        z0 = jnp.append(jnp.ones(1)*zcf,zbulk)
+        if self.lcs_tree.conifold_basis:
+            z0 = jnp.append(jnp.ones(1)*zcf, zbulk)
+        else:
+            # reconstruct the full modulus: z = z_cf·e_q + bulk_embedding·z_bulk
+            z0 = zcf*jnp.asarray(e_q, dtype=zbulk.dtype) + be @ zbulk
     else:
         p = jnp.linalg.inv(N)@K
         z0 = p*tau

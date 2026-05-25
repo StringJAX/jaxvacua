@@ -56,9 +56,9 @@ from jaxpolylog import jax_polylog_vmap
 @partial(jit, static_argnums=(4,5,))
 def W_bulk(self, z, tau, flux, conj=False, normalise=False):
 
-    if not self.lcs_tree.conifold_basis:
-        raise NotImplementedError("compute_zcf_compact is only implemented for conifold_basis=True.")
-
+    # Both bases: the conifold/bulk split (conifold_fluxes) and the bulk
+    # prepotential coefficients (F_coniLCS_exp) are basis-general, so ``z`` is
+    # the bulk-only modulus vector (length h12-1) in either basis.
     coeff = 2 * jnp.pi * 1j
     if conj:
         coeff = -coeff
@@ -159,9 +159,9 @@ def _split_conifold_bulk(self):
     Under ``conifold_basis=True`` these reduce to plain array slicing
     (``kappa[0, 1:, 1:]``, ``kappa[0, 0, 1:]``, ``a_matrix[0, 0]``,
     ``a_matrix[0, 1:]``, ``b_vector[0]``). Under ``conifold_basis=False`` the
-    same data is recovered via ``einsum`` projections through the conifold
-    direction ``q = conifold.conifold_curve`` and the orthogonal-complement matrix
-    ``w_proj = conifold.projection``.
+    same data is recovered via ``einsum`` contractions through the conifold
+    embedding ``e_q = conifold.embedding`` (the conifold direction of a vector)
+    and the bulk embedding ``bulk_embedding = conifold.bulk_embedding`` (= Λ[1:]ᵀ).
     """
     kappa = self.lcs_tree.intnums
     if self.lcs_tree.conifold_basis:
@@ -172,17 +172,19 @@ def _split_conifold_bulk(self):
         a01 = a_coni[1:]
         b_coni = self.lcs_tree.b_vector[0]
     else:
-        # The intersection/a/b tensors contract with the moduli via the embedding
-        # z = z_cf·e_q + w_proj·z_bulk, so the conifold direction is e_q (q·e_q=1),
-        # NOT q.  Bulk directions project with w_proj.  Reduces to the aligned
-        # kappa[0,1:,1:] etc slices when e_q=(1,0,…), w_proj=[0;I].
+        # The intersection/a/b tensors contract with the moduli via the
+        # decomposition z = z_cf·e_q + bulk_embedding·z_bulk, so the conifold
+        # direction of a vector is the embedding e_q (q·e_q=1, NOT q) and the
+        # bulk directions are bulk_embedding (= Λ[1:]ᵀ, NOT a generic ker(q)
+        # basis).  Reduces to the aligned kappa[0,1:,1:] etc slices when
+        # e_q=(1,0,…), bulk_embedding=[0;I].
         e_q = self.lcs_tree.conifold.embedding
-        w_proj = self.lcs_tree.conifold.projection
-        kappa_011 = jnp.einsum("ijk,i,jl,km", kappa, e_q, w_proj, w_proj)
-        kappa_001 = jnp.einsum("ijk,i,j,km", kappa, e_q, e_q, w_proj)
+        bulk_embedding = self.lcs_tree.conifold.bulk_embedding
+        kappa_011 = jnp.einsum("ijk,i,jl,km", kappa, e_q, bulk_embedding, bulk_embedding)
+        kappa_001 = jnp.einsum("ijk,i,j,km", kappa, e_q, e_q, bulk_embedding)
         a_coni = self.lcs_tree.a_matrix @ e_q
         a00 = a_coni @ e_q
-        a01 = a_coni @ w_proj
+        a01 = a_coni @ bulk_embedding
         b_coni = self.lcs_tree.b_vector @ e_q
     return kappa_011, kappa_001, a00, a01, b_coni
 
@@ -204,31 +206,46 @@ def _W_log_coeff_pfv(self, z, tau, flux, conj=False):
     ``compute_zcf(mode="pfv")`` dispatch composes via
     :func:`_zcf_from_log_coeff` without any special-casing.
 
-    Note: ``conifold_basis=True`` only — the racetrack split assumes
-    axis-aligned ``M`` / ``K`` components.
+    Works in both bases: the racetrack conifold/bulk split uses plain slices
+    when ``conifold_basis=True`` and the ``e_q`` / ``bulk_embedding`` projections
+    when ``conifold_basis=False`` (reducing to the slices in the aligned frame).
     """
-    if not self.lcs_tree.conifold_basis:
-        raise NotImplementedError(
-            "_W_log_coeff_pfv is only implemented for conifold_basis=True."
-        )
-
     f1, f2, h1, h2 = self._split_fluxes(flux)
 
     Mvec = f2[1:]
     Kvec = h1[1:]
-    P1   = f1[1]
 
-    # Racetrack split of the bulk fluxes.
-    N      = self.lcs_tree.intnums @ Mvec
-    pvec   = jnp.linalg.inv(N[1:, 1:]) @ Kvec[1:]
-    Kprime = Kvec[0] - N[0, 1:] @ pvec
+    # Racetrack split of the bulk fluxes.  Aligned basis: plain index-0/1 slices.
+    # General basis: N's indices are moduli-type (split via the conifold
+    # embedding e_q + bulk_embedding, as in _split_conifold_bulk); the K-flux and
+    # the conifold R-flux P1 are covariant (conifold via e_q); the conifold row
+    # of the a-matrix is e_q·a.  Both reduce to the slices when aligned.
+    N = self.lcs_tree.intnums @ Mvec
+    if self.lcs_tree.conifold_basis:
+        P1     = f1[1]
+        Nhat   = N[1:, 1:]
+        Ncb    = N[0, 1:]
+        Kbulk  = Kvec[1:]
+        Kcf    = Kvec[0]
+        a_coni = self.lcs_tree.a_matrix[0]
+    else:
+        e_q = self.lcs_tree.conifold.embedding
+        be  = self.lcs_tree.conifold.bulk_embedding
+        P1     = f1[1:] @ e_q
+        Nhat   = be.T @ N @ be
+        Ncb    = e_q @ N @ be
+        Kbulk  = Kvec @ be
+        Kcf    = Kvec @ e_q
+        a_coni = e_q @ self.lcs_tree.a_matrix
+
+    pvec   = jnp.linalg.inv(Nhat) @ Kbulk
+    Kprime = Kcf - Ncb @ pvec
 
     # PFV: c0 = Re(τ), gs = 1/Im(τ).
     c0 = jnp.real(tau)
-    s  = jnp.imag(tau)
-    gs = 1.0 / s
+    gs = 1.0 / jnp.imag(tau)
 
-    phase_comb = -1j * (self.lcs_tree.a_matrix[0] @ Mvec - P1 + c0 * Kprime)
+    phase_comb = -1j * (a_coni @ Mvec - P1 + c0 * Kprime)
     if conj:
         phase_comb = -phase_comb
 
@@ -272,16 +289,16 @@ def _W_log_coeff_manual(self, z, tau, flux, conj=False):
             bulk_charges_proj = jnp.asarray(bulk_charges[:, 1:])
             etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
         else:
-            # General basis: mirror the aligned slices via projection.  The
-            # conifold-direction charge (q̃₁) is bulk_charges·e_q (q·e_q=1), NOT
-            # bulk_charges·q; the bulk charges are bulk_charges·w_proj; the
+            # General basis: charges are covectors q̃' = Λ q̃.  The conifold
+            # component (q̃₁) is bulk_charges·e_q (q·e_q=1, NOT bulk_charges·q);
+            # the bulk charges are bulk_charges @ bulk_embedding (= Λ[1:]ᵀ); the
             # worldsheet-instanton phase contracts the projected bulk charges
             # with the bulk moduli (zero conifold component).  Reduces to the
-            # aligned [:,0]/[:,1:] slices when e_q=(1,0,…,0), w_proj=[0;I].
+            # aligned [:,0]/[:,1:] slices when e_q=(1,0,…,0), bulk_embedding=[0;I].
             e_q = jnp.asarray(self.lcs_tree.conifold.embedding, dtype=bulk_charges.dtype)
-            w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=bulk_charges.dtype)
+            bulk_embedding = jnp.asarray(self.lcs_tree.conifold.bulk_embedding, dtype=bulk_charges.dtype)
             beta1 = jnp.asarray(bulk_charges @ e_q)
-            bulk_charges_proj = jnp.asarray(bulk_charges @ w_proj)
+            bulk_charges_proj = jnp.asarray(bulk_charges @ bulk_embedding)
             etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
 
         Li1 = jax_polylog_vmap(etpz, 1, self.periods.prange)
@@ -304,13 +321,9 @@ def _W_log_coeff_autodiff(self, z, tau, flux, conj=False):
     ``dF_coniLCS_exp(zbulk, n=1)`` series helpers.
 
     Body extracted from :func:`compute_zcf_compact` minus the final
-    exponentiation. Must agree with :func:`_W_log_coeff_manual` numerically.
+    exponentiation. Must agree with :func:`_W_log_coeff_manual` numerically in
+    either basis (``F_coniLCS_exp`` and ``conifold_fluxes`` are basis-general).
     """
-    if not self.lcs_tree.conifold_basis:
-        raise NotImplementedError(
-            "_W_log_coeff_autodiff is only implemented for conifold_basis=True."
-        )
-
     coeff = 2 * jnp.pi * 1j
     if conj:
         coeff = -coeff
@@ -515,19 +528,28 @@ def zcf_handling(self, x_bulk, flux, mode=None, apply_correction=False, conj=Fal
     Returns:
         Array: Real variables including the conifold modulus.
     """
-    if not self.lcs_tree.conifold_basis:
-        raise NotImplementedError("zcf_handling is only implemented for conifold_basis=True.")
-
     if mode is None:
-        xcz = jnp.zeros(2)
+        zcf = 0.0 + 0.0j
     else:
         zcf = self.compute_zcf_x(
             x_bulk, flux,
             mode=mode, apply_correction=apply_correction, conj=conj,
         )
-        xcz = jnp.array([zcf.real, zcf.imag])
 
-    return jnp.append(xcz, x_bulk)
+    if self.lcs_tree.conifold_basis:
+        # Aligned: conifold at index 0 ⇒ prepend (Re, Im) of z_cf to the bulk
+        # real vector (bit-identical to the original).
+        xcz = jnp.array([jnp.real(zcf), jnp.imag(zcf)])
+        return jnp.append(xcz, x_bulk)
+
+    # General basis: reconstruct the full modulus z = z_cf·e_q + bulk_embedding·z_bulk
+    # (the conifold is the charge combination q, not a coordinate axis) and
+    # re-encode it as the full real (interleaved) coordinate vector.
+    z_bulk, _, tau, ctau = self._convert_real_to_complex(x_bulk)
+    e_q = jnp.asarray(self.lcs_tree.conifold.embedding,      dtype=z_bulk.dtype)
+    be  = jnp.asarray(self.lcs_tree.conifold.bulk_embedding, dtype=z_bulk.dtype)
+    z_full = zcf * e_q + be @ z_bulk
+    return self._convert_complex_to_real(z_full, jnp.conj(z_full), tau, ctau)
 
 
 # NOTE: ``DWbulk_x`` and ``dDWbulk_x`` were hard-removed on 2026-05-01 after

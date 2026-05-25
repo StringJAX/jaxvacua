@@ -108,15 +108,17 @@ def F_coniLCS_poly_split_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bo
 
     """
     # Reconstruct the full period vector from (X^0, X^cf, X^bulk).  Aligned basis:
-    # conifold at index 1 -> [X0, Xcf, *Xbulk].  General basis: embed via
-    # X_mod = Xcf·e_q + w_proj·Xbulk (conifold direction e_q, bulk columns w_proj),
-    # so ∂/∂Xcf correctly picks up the conifold direction for the derivatives.
+    # conifold at index 1 -> [X0, Xcf, *Xbulk].  General basis: embed the bulk
+    # via X_mod = Xcf·e_q + bulk_embedding·Xbulk (conifold direction e_q = Λ[0],
+    # bulk embedding = Λ[1:]ᵀ), so ∂/∂Xcf correctly picks up the conifold
+    # direction for the derivatives and the round-trip with the bulk projection
+    # (Λ⁻¹[:,1:]) is exact.
     if self.lcs_tree.conifold_basis:
         XPer = jnp.append(jnp.array([X0, Xcf]), Xbulk)
     else:
-        e_q    = jnp.asarray(self.lcs_tree.conifold.embedding,  dtype=Xbulk.dtype)
-        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=Xbulk.dtype)
-        X_mod  = Xcf * e_q + w_proj @ Xbulk
+        e_q            = jnp.asarray(self.lcs_tree.conifold.embedding,      dtype=Xbulk.dtype)
+        bulk_embedding = jnp.asarray(self.lcs_tree.conifold.bulk_embedding, dtype=Xbulk.dtype)
+        X_mod  = Xcf * e_q + bulk_embedding @ Xbulk
         XPer   = jnp.append(jnp.array([X0]), X_mod)
 
     return self.F_LCS_poly_per(XPer,conj=conj)
@@ -292,16 +294,17 @@ def F_inst_per_coni(self, X0: complex, XPerBulk: Array, conj: bool = False, n: i
             bulk_charges = self.delete_coni_index(self.lcs_tree.gv_charges, self.lcs_tree.coni_index)
 
     # Reconstruct the full period at the conifold locus (X^cf = 0).  Aligned:
-    # [X0, 0, *XPerBulk].  General: embed the bulk periods via w_proj (conifold
-    # component is zero), and identify the conifold-direction charge (q̃₁) as
-    # bulk_charges·e_q (the embedding, q·e_q=1) instead of the index-0 column.
+    # [X0, 0, *XPerBulk].  General: embed the bulk periods via bulk_embedding
+    # (= Λ[1:]ᵀ; conifold component is zero), and identify the conifold-direction
+    # charge (q̃₁) as bulk_charges·e_q (the embedding, q·e_q=1) instead of the
+    # index-0 column.
     if self.lcs_tree.conifold_basis:
         XPer  = jnp.append(X0, jnp.append(0.+1j*0., XPerBulk))
         beta1 = bulk_charges[:, 0]
     else:
-        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=XPerBulk.dtype)
-        e_q    = jnp.asarray(self.lcs_tree.conifold.embedding,  dtype=bulk_charges.dtype)
-        XPer   = jnp.append(X0, w_proj @ XPerBulk)
+        bulk_embedding = jnp.asarray(self.lcs_tree.conifold.bulk_embedding, dtype=XPerBulk.dtype)
+        e_q            = jnp.asarray(self.lcs_tree.conifold.embedding,       dtype=bulk_charges.dtype)
+        XPer   = jnp.append(X0, bulk_embedding @ XPerBulk)
         beta1  = bulk_charges @ e_q
 
     coeff = 2.*Pi*1j
@@ -575,19 +578,20 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     # Extract periods (basis-aware)
     # ----------------------------------------
     # Aligned basis: conifold at index 1 -> plain slices (bit-identical).
-    # General basis: identify the conifold period via the conifold charge and
-    # project the bulk periods onto ker(q) via the stored projection w_proj
-    # (= get_projection(conifold_curve), which is [0;I] only in the aligned frame
-    # — hence the explicit branch).
+    # General basis: identify the conifold period X^cf = q·X[1:] (conifold curve
+    # q) and extract the bulk periods with the bulk PROJECTION (= Λ⁻¹[:,1:]),
+    # the left inverse of the bulk embedding so the reconstruction round-trip in
+    # F_coniLCS_exp_per is exact.  Both reduce to the slices when q=(1,0,…),
+    # bulk_projection=[0;I].
     X0 = XPer[0]    # Fundamental period X^0
     if self.lcs_tree.conifold_basis:
         XConi    = XPer[1]    # Conifold period X_cf
         XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
     else:
-        qcf    = jnp.asarray(self.lcs_tree.conifold.conifold_curve, dtype=XPer.dtype)
-        w_proj = jnp.asarray(self.lcs_tree.conifold.projection,     dtype=XPer.dtype)
+        qcf            = jnp.asarray(self.lcs_tree.conifold.conifold_curve,  dtype=XPer.dtype)
+        bulk_projection = jnp.asarray(self.lcs_tree.conifold.bulk_projection, dtype=XPer.dtype)
         XConi    = qcf @ XPer[1:]
-        XPerBulk = XPer[1:] @ w_proj
+        XPerBulk = XPer[1:] @ bulk_projection
 
 
     # ----------------------------------------
@@ -735,17 +739,21 @@ def F_coniLCS_exp(self,
     # ----------------------------------------
     # bulk_moduli are the (h12-1) bulk coordinates; embed into full moduli with
     # zero conifold component.  Aligned: prepend a zero (conifold at index 0) and
-    # take XPer[2:] for the bulk.  General: embed via w_proj and project the bulk
-    # periods via w_proj.  Both reduce identically when w_proj=[0;I].
+    # take XPer[2:] for the bulk.  General: EMBED the bulk moduli with
+    # bulk_embedding (= Λ[1:]ᵀ) and EXTRACT the bulk periods with bulk_projection
+    # (= Λ⁻¹[:,1:]) — distinct matrices in a general basis (their composition
+    # bulk_embeddingᵀ·bulk_projection = I makes the round-trip exact).  Both
+    # reduce to the slices when bulk_embedding=bulk_projection=[0;I].
     if self.lcs_tree.conifold_basis:
         moduli = jnp.append(jnp.zeros(1), bulk_moduli)
         XPer = self.moduli_to_periods(moduli,conj=conj)
         XPerBulk = XPer[2:]   # Bulk (non-conifold) periods
     else:
-        w_proj = jnp.asarray(self.lcs_tree.conifold.projection, dtype=bulk_moduli.dtype)
-        moduli = w_proj @ bulk_moduli
+        bulk_embedding  = jnp.asarray(self.lcs_tree.conifold.bulk_embedding,  dtype=bulk_moduli.dtype)
+        bulk_projection = jnp.asarray(self.lcs_tree.conifold.bulk_projection, dtype=bulk_moduli.dtype)
+        moduli = bulk_embedding @ bulk_moduli
         XPer = self.moduli_to_periods(moduli,conj=conj)
-        XPerBulk = XPer[1:] @ w_proj
+        XPerBulk = XPer[1:] @ bulk_projection
     XConi    = 1. + 0*1j    # Conifold period X_cf (normalisation marker)
     X0       = XPer[0]    # Fundamental period X^0
 

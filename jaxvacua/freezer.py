@@ -240,7 +240,7 @@ class Freezer(ABC):
         """
         x_full = self._real_light_to_full(x_light, fluxes, **kwargs)
         DW_x_full = self.model.DW_x(x_full, fluxes)
-        return DW_x_full[self._real_light_slice]
+        return self._real_light_jacobian.T @ DW_x_full
 
     def dDW_x_light(
         self,
@@ -262,8 +262,8 @@ class Freezer(ABC):
         """
         x_full = self._real_light_to_full(x_light, fluxes, **kwargs)
         dDW_x_full = self.model.dDW_x(x_full, fluxes)
-        idx = self._real_light_slice
-        return dDW_x_full[jnp.ix_(idx, idx)]
+        J = self._real_light_jacobian
+        return J.T @ dDW_x_full @ J
 
     def V_x_light(
         self,
@@ -330,7 +330,7 @@ class Freezer(ABC):
         """
         x_full = self._real_light_to_full(x_light, fluxes, **kwargs)
         dV_full = self.model.dV_x(x_full, fluxes, noscale=noscale)
-        return dV_full[self._real_light_slice]
+        return self._real_light_jacobian.T @ dV_full
 
     def ddV_x_light(
         self,
@@ -372,8 +372,8 @@ class Freezer(ABC):
         """
         x_full = self._real_light_to_full(x_light, fluxes, **kwargs)
         ddV_full = self.model.ddV_x(x_full, fluxes, noscale=noscale)
-        idx = self._real_light_slice
-        return ddV_full[jnp.ix_(idx, idx)]
+        J = self._real_light_jacobian
+        return J.T @ ddV_full @ J
 
     @property
     def _real_light_slice(self) -> Array:
@@ -391,6 +391,27 @@ class Freezer(ABC):
         # tau is always the last two entries
         real_idx.extend([2 * self.model.h12, 2 * self.model.h12 + 1])
         return jnp.array(real_idx)
+
+    @property
+    def _real_light_jacobian(self) -> Array:
+        r"""
+        **Description:**
+        Real Jacobian :math:`J = \partial x_{\rm full}/\partial x_{\rm light}`
+        (heavy moduli held fixed) mapping the light real coordinates into the
+        full real array.  The light real gradient is :math:`J^T\cdot(\text{full
+        gradient})` and the Hessian block :math:`J^T\cdot(\text{full
+        Hessian})\cdot J`.
+
+        For an axis-aligned light/heavy split this is the selection matrix that
+        picks :attr:`_real_light_slice` (so :math:`J^T v = v[\text{slice}]` and
+        :math:`J^T M J = M[\text{slice},\text{slice}]`, bit-identical to plain
+        slicing).  Subclasses whose light directions are *not* coordinate axes
+        — e.g. a conifold modulus that is a generic charge combination
+        (``conifold_basis=False``) — override this with the corresponding
+        embedding Jacobian.
+        """
+        dim_full = 2 * (self.model.h12 + 1)
+        return jnp.eye(dim_full)[:, self._real_light_slice]
 
     @abstractmethod
     def _real_light_to_full(
@@ -471,6 +492,72 @@ class ConifoldFreezer(Freezer):
         Conifold degree :math:`n_{\text{cf}}`, sourced from
         ``self.model.lcs_tree.conifold.ncf`` (single source of truth)."""
         return int(self.model.lcs_tree.conifold.ncf)
+
+    # ------------------------------------------------------------------ #
+    # conifold_basis=False reconstruction.
+    #
+    # When the geometry is NOT rotated into the conifold-aligned frame the
+    # conifold modulus is the charge combination z_cf = q·z, not a coordinate
+    # axis, and the light (bulk) directions span ker(q).  The light↔full map is
+    # then z_full = z_cf·e_q + bulk_embedding·z_light (instead of an index
+    # scatter), and the light F-terms / Jacobian project through ``bulk_embedding``
+    # (= Λ[1:]ᵀ).  In the aligned basis (``conifold_basis=True``) every method
+    # below defers to the base-class index-based implementation, bit-identical.
+    # ------------------------------------------------------------------ #
+
+    def reconstruct_full_moduli(self, z_light, tau, fluxes, **kwargs):
+        r"""
+        **Description:**
+        Reconstruct the full modulus vector from the light (bulk) moduli with
+        the conifold modulus on-shell.  Aligned: index scatter (base class).
+        General: :math:`z_{\rm full} = z_{\rm cf}\,e_q + \text{bulk\_embedding}\,z_{\rm light}`.
+        """
+        if self.model.lcs_tree.conifold_basis:
+            return super().reconstruct_full_moduli(z_light, tau, fluxes, **kwargs)
+        z_cf = self.solve_heavy(z_light, tau, fluxes, **kwargs)[0]
+        coni = self.model.lcs_tree.conifold
+        e_q = jnp.asarray(coni.embedding,      dtype=z_light.dtype)
+        be  = jnp.asarray(coni.bulk_embedding, dtype=z_light.dtype)
+        return z_cf * e_q + be @ z_light
+
+    def DW_light(self, z_light, z_light_c, tau, tau_c, fluxes, **kwargs):
+        r"""
+        **Description:**
+        Covariant derivatives :math:`D_i W` for the light moduli (+ :math:`D_\tau W`)
+        with the conifold modulus on-shell.  General basis: project the full
+        :math:`D_i W` onto the bulk directions, :math:`D_a W = D_i W\,
+        \text{bulk\_embedding}^{i}{}_{a}` (the conifold component
+        :math:`D_i W\,e_q^i = \partial_{z_{\rm cf}}W \approx 0` on-shell).
+        """
+        if self.model.lcs_tree.conifold_basis:
+            return super().DW_light(z_light, z_light_c, tau, tau_c, fluxes, **kwargs)
+        z_full   = self.reconstruct_full_moduli(z_light,   tau,   fluxes, **kwargs)
+        z_full_c = self.reconstruct_full_moduli(z_light_c, tau_c, fluxes, **kwargs)
+        DW_full = self.model.DW(z_full, z_full_c, tau, tau_c, fluxes)
+        be = jnp.asarray(self.model.lcs_tree.conifold.bulk_embedding, dtype=DW_full.dtype)
+        DW_z_light = DW_full[:self.model.h12] @ be
+        DW_tau = DW_full[-1]
+        return jnp.append(DW_z_light, DW_tau)
+
+    @property
+    def _real_light_jacobian(self) -> Array:
+        r"""
+        **Description:**
+        Real Jacobian :math:`\partial x_{\rm full}/\partial x_{\rm light}` for the
+        ConifoldFreezer.  General basis: the bulk embedding lifted to real
+        coordinates, :math:`\text{bulk\_embedding}\otimes \mathbb{1}_2` on the
+        moduli block plus :math:`\mathbb{1}_2` for :math:`\tau`.  Aligned basis:
+        the selection matrix (base class).
+        """
+        if self.model.lcs_tree.conifold_basis:
+            return super()._real_light_jacobian
+        be = jnp.asarray(self.model.lcs_tree.conifold.bulk_embedding)
+        J_mod = jnp.kron(be, jnp.eye(2, dtype=be.dtype))   # (2*h12, 2*(h12-1))
+        nm, nl = J_mod.shape
+        J = jnp.zeros((nm + 2, nl + 2), dtype=be.dtype)
+        J = J.at[:nm, :nl].set(J_mod)
+        J = J.at[nm:, nl:].set(jnp.eye(2, dtype=be.dtype))   # tau block
+        return J
 
     def solve_heavy(
         self,

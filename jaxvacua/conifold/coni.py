@@ -59,7 +59,9 @@ except ImportError:
     Polytope = None
     Triangulation = None
 
-from jaxvacua.conifold.conifold_utils import get_basis_change, get_projection, get_embedding
+from jaxvacua.conifold.conifold_utils import (
+    get_basis_change, get_bulk_embedding, get_bulk_projection, get_embedding,
+)
 
 
 class Conifold:
@@ -111,7 +113,8 @@ class Conifold:
                  one_face_divisors:  Optional[Array]         = None,
                  polytope:           Optional[Polytope]      = None,
                  dual_triangulation: Optional[Triangulation] = None,
-                 projection: Optional[Array] = None,
+                 bulk_embedding: Optional[Array] = None,
+                 bulk_projection: Optional[Array] = None,
                  embedding: Optional[Array] = None):
         r"""
         **Description:**
@@ -129,11 +132,16 @@ class Conifold:
         # Cytools refs — dropped at the JAX pytree boundary by the custom flatten.
         self._polytope           = polytope
         self._dual_triangulation = dual_triangulation
-        # Bulk projection (q @ w_proj = 0) and conifold embedding (q · e_q = 1).
-        # Both are required for the conifold_basis=False code paths (flux/charge
-        # splitting and full-moduli reconstruction); previously `projection` was
-        # silently discarded as the integer 0, which broke those paths.
-        self.projection = projection
+        # Conifold/bulk split objects for the conifold_basis=False code paths.
+        # In a general basis the bulk EMBEDDING (build a vector from its bulk
+        # components / project a charge covector onto the bulk; = Λ[1:]ᵀ) and the
+        # bulk PROJECTION (extract bulk components of a period vector;
+        # = Λ⁻¹[:,1:]) are DIFFERENT matrices — they coincide only in the
+        # conifold-aligned basis.  The conifold direction of a vector is the
+        # embedding ``embedding`` (e_q = Λ[0], q·e_q = 1); the conifold modulus
+        # is extracted by ``conifold_curve`` (z_cf = q·z).
+        self.bulk_embedding = bulk_embedding
+        self.bulk_projection = bulk_projection
         self.embedding = embedding
 
     def __repr__(self):
@@ -280,9 +288,6 @@ class Conifold:
         bc     = jnp.asarray(bc_np)
         curve0 = curve @ bc.T                              # = (1,0,...,0)
 
-        projection = get_projection(curve)
-        embedding  = get_embedding(curve)
-
         return cls(
             ncf=int(ncf),
             conifold_curve=curve,
@@ -292,8 +297,9 @@ class Conifold:
             one_face_divisors=jnp.asarray(one_face_divisors),
             polytope=polytope,
             dual_triangulation=dual_triangulation,
-            projection=projection,
-            embedding=embedding
+            bulk_embedding=get_bulk_embedding(curve),
+            bulk_projection=get_bulk_projection(curve),
+            embedding=get_embedding(curve),
         )
 
     @classmethod
@@ -318,8 +324,9 @@ class Conifold:
         if cc0 is None and cc is not None and bc is not None:
             kwargs["conifold_curve0"] = jnp.asarray(cc) @ jnp.asarray(bc).T
 
-        kwargs["projection"] = get_projection(cc)
-        kwargs["embedding"]  = get_embedding(cc)
+        kwargs["bulk_embedding"]  = get_bulk_embedding(cc)
+        kwargs["bulk_projection"] = get_bulk_projection(cc)
+        kwargs["embedding"]       = get_embedding(cc)
         return cls(**kwargs)
 
 
@@ -358,7 +365,8 @@ class Conifold:
 
 _CONIFOLD_DYNAMIC_KEYS = (
     # Hot-path attributes (plain names)
-    'conifold_curve', 'conifold_curve0','projection','embedding',
+    'conifold_curve', 'conifold_curve0',
+    'bulk_embedding', 'bulk_projection', 'embedding',
     # Lazy-getter backing storage (underscore-prefixed)
     '_basis_change', '_flop_edge', '_one_face_divisors',
 )

@@ -415,8 +415,12 @@ class FluxEFT(css):
            to the included boundary ``hi``.
 
         For conifold models (``coniLCS_series`` or ``coniLCS_bulk``), the conifold
-        modulus (index 0 in the conifold basis) is left untouched because
-        the logarithmic monodromy breaks integer periodicity.
+        modulus is left untouched because the logarithmic monodromy breaks integer
+        periodicity.  With ``conifold_basis=True`` it is index 0; with
+        ``conifold_basis=False`` it is the charge combination ``q·z``, so the
+        axion shifts are computed in the conifold-aligned frame ``z_al = Λ⁻ᵀ z``
+        (leaving ``z_al[0]`` fixed) and the integer shift is rotated back as
+        ``n = Λᵀ n_al ∈ ker(q)``.
 
         Args:
             moduli (Array): Complex structure moduli values.
@@ -450,40 +454,56 @@ class FluxEFT(css):
             fluxes_fd = jnp.append(fluxes_fd[:self.n_fluxes] + H, H).astype(int)
             tau_fd = tau_fd + 1
 
-        # Step 3: Map Re(z^a) into (lo, hi] via monodromy
-        # For coniLCS_series/bulk: the conifold log term breaks integer periodicity.
-        # With conifold_basis=True, the conifold modulus is at index 0 — skip it.
-        # With conifold_basis=False, the conifold modulus is a linear combination
-        # of coordinate moduli, so we cannot safely apply monodromy to any direction.
+        # Step 3: Map Re(z^a) into (lo, hi] via integer monodromy z^a → z^a + n^a.
+        # For coniLCS_series/bulk the conifold log term z_cf² log z_cf breaks integer
+        # periodicity along the conifold direction, so admissible shifts must
+        # preserve z_cf = q·z, i.e. n ∈ ker(q).
         _is_conifold_limit = self.periods.limit in ("coniLCS_series", "coniLCS_bulk")
         _conifold_basis = getattr(self.lcs_tree, 'conifold_basis', True)
 
-        n = -jnp.ceil(moduli.real - hi).astype(int)
-        if _is_conifold_limit:
-            if not _conifold_basis:
-                import warnings
-                warnings.warn(
-                    "map_to_fd: conifold_basis=False — cannot identify the conifold "
-                    "direction in coordinate basis. Skipping monodromy shifts for all "
-                    "moduli. Set conifold_basis=True for proper FD mapping."
-                )
-                n = jnp.zeros_like(n)
-            else:
-                n = n.at[0].set(0)
-        moduli_fd, fluxes_fd = self.apply_monodromy(moduli, fluxes_fd, n)
+        if _is_conifold_limit and not _conifold_basis:
+            # General basis: the conifold modulus is the charge combination q·z, not
+            # a coordinate axis.  Work in the conifold-aligned frame z_al = Λ⁻ᵀ z (so
+            # z_al[0] = q·z = z_cf), shift the BULK components of Re(z_al) into
+            # (lo, hi] leaving index 0 (the conifold) unshifted, and rotate the integer
+            # shift back via n = Λᵀ n_al ∈ ker(q) (q·n = (Λq)·n_al = n_al[0] = 0).
+            Lam       = jnp.asarray(self.lcs_tree.conifold.basis_change())
+            Lam_inv_T = jnp.linalg.inv(Lam).T
 
-        # Step 4: Snap Re(z) near lo to hi (boundary identification)
-        near_lo = jnp.abs(moduli_fd.real - lo) < boundary_tol
-        if _is_conifold_limit:
-            if not _conifold_basis:
-                near_lo = jnp.zeros_like(near_lo)
-            else:
+            z_al = Lam_inv_T @ moduli
+            n_al = -jnp.ceil(z_al.real - hi).astype(int)
+            n_al = n_al.at[0].set(0)
+            n    = jnp.rint(Lam.T @ n_al).astype(int)
+            moduli_fd, fluxes_fd = self.apply_monodromy(moduli, fluxes_fd, n)
+
+            # Step 4: boundary snap, evaluated on the aligned Re(z_al).
+            z_al_fd = Lam_inv_T @ moduli_fd
+            near_lo = jnp.abs(z_al_fd.real - lo) < boundary_tol
+            near_lo = near_lo.at[0].set(False)
+            if jnp.any(near_lo):
+                n_snap = jnp.rint(Lam.T @ jnp.where(near_lo, 1, 0)).astype(int)
+                moduli_fd, fluxes_fd = self.apply_monodromy(moduli_fd, fluxes_fd, n_snap)
+                # set the snapped aligned Re exactly to hi, then rotate back
+                z_al_fd   = Lam_inv_T @ moduli_fd
+                z_al_fd   = jnp.where(near_lo, hi + 1j * z_al_fd.imag, z_al_fd)
+                moduli_fd = Lam.T @ z_al_fd
+        else:
+            # Aligned basis (conifold at index 0) or non-conifold LCS: shift the
+            # coordinate axes directly; for the conifold limit skip index 0.
+            n = -jnp.ceil(moduli.real - hi).astype(int)
+            if _is_conifold_limit:
+                n = n.at[0].set(0)
+            moduli_fd, fluxes_fd = self.apply_monodromy(moduli, fluxes_fd, n)
+
+            # Step 4: Snap Re(z) near lo to hi (boundary identification)
+            near_lo = jnp.abs(moduli_fd.real - lo) < boundary_tol
+            if _is_conifold_limit:
                 near_lo = near_lo.at[0].set(False)
-        if jnp.any(near_lo):
-            n_snap = jnp.where(near_lo, 1, 0)
-            _, fluxes_fd = self.apply_monodromy(moduli_fd, fluxes_fd, n_snap)
-            # Set Re(z) exactly to hi
-            moduli_fd = jnp.where(near_lo, hi + 1j * moduli_fd.imag, moduli_fd)
+            if jnp.any(near_lo):
+                n_snap = jnp.where(near_lo, 1, 0)
+                _, fluxes_fd = self.apply_monodromy(moduli_fd, fluxes_fd, n_snap)
+                # Set Re(z) exactly to hi
+                moduli_fd = jnp.where(near_lo, hi + 1j * moduli_fd.imag, moduli_fd)
 
         return moduli_fd, tau_fd, fluxes_fd
 

@@ -28,8 +28,8 @@ Main public API
 - ``Conifold`` and ``find_conifolds`` for representing and discovering
   conifold limits.
 - Basis and flux helpers from ``conifold_utils`` such as ``get_basis_change``,
-  ``compute_a_matrix``, ``get_projection``, ``conifold_fluxes`` and
-  ``delete_coni_index``.
+  ``compute_a_matrix``, ``get_bulk_embedding``, ``get_bulk_projection``,
+  ``conifold_fluxes`` and ``delete_coni_index``.
 - coniLCS prepotential functions from ``coniLCS_prepotential``.
 - ``z_cf`` physics helpers from ``zcf_solver`` such as ``W_log_coeff``,
   ``compute_zcf`` and ``zcf_handling``.
@@ -92,7 +92,8 @@ from jaxvacua.conifold.conifold_utils import (        # noqa: E402,F401
     orthogonal_lattice,
     get_basis_change,
     compute_a_matrix,
-    get_projection,
+    get_bulk_embedding,
+    get_bulk_projection,
     conifold_fluxes,
     delete_coni_index,
 )
@@ -197,7 +198,8 @@ __all__ = [
     "Conifold", "find_conifolds",
     # Structural helpers
     "extended_euclidean", "orthogonal_lattice",
-    "get_basis_change", "compute_a_matrix", "get_projection",
+    "get_basis_change", "compute_a_matrix",
+    "get_bulk_embedding", "get_bulk_projection",
     "conifold_fluxes", "delete_coni_index",
     # z_cf physics (attached as methods to FluxEFT)
     "compute_zcf", "compute_zcf_x", "zcf_handling",

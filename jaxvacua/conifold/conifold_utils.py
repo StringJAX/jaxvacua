@@ -25,8 +25,8 @@ conifold modulus.
 
 Main public API
 ---------------
-- Lattice and basis algebra: ``get_basis_change``, ``compute_a_matrix`` and
-  ``get_projection``.
+- Lattice and basis algebra: ``get_basis_change``, ``compute_a_matrix``,
+  ``get_embedding``, ``get_bulk_embedding`` and ``get_bulk_projection``.
 - Flux and index helpers attached to ``periods`` or ``FluxEFT``:
   ``conifold_fluxes`` and ``delete_coni_index``.
 - Compatibility re-exports of ``extended_euclidean`` and
@@ -155,19 +155,68 @@ def compute_a_matrix(intnumstensor):
     return np.array([[intnumstensor[i][j][j]/2 if i<j else intnumstensor[i][i][j]/2 for j in range(h11)] for i in range(h11)])
 
 
-def get_projection(q):
+def get_bulk_embedding(q):
     r"""
     **Description:**
-    Bulk projection/embedding matrix :math:`w_{\rm proj}` for the conifold
-    charge :math:`q`: the last :math:`h^{1,2}-1` rows of the unimodular matrix
-    :math:`\Lambda` (from :func:`extended_euclidean`), transposed to shape
+    Bulk **embedding** matrix for the conifold charge :math:`q`: the bulk rows
+    :math:`\Lambda_{1:}` of the basis change :math:`\Lambda` (from
+    :func:`get_basis_change`), transposed to shape
     :math:`(h^{1,2}, h^{1,2}-1)`.
 
-    Its columns span :math:`\ker(q)` (so :math:`q \cdot w_{\rm proj} = 0`),
-    giving the bulk directions orthogonal to the conifold curve.  Used both to
-    project charges/fluxes onto the bulk (``charge @ w_proj``) and to embed bulk
-    moduli into the full moduli space (``w_proj @ z_bulk``), which carries zero
-    conifold component by construction.
+    .. admonition:: Details
+        :class: dropdown
+
+        Used to build a full :math:`h^{1,2}`-vector from its
+        :math:`(h^{1,2}-1)` bulk components.  It serves three roles, all with
+        the *same* matrix because charges are covectors and moduli are vectors
+        of the same lattice:
+
+        1. embed bulk moduli/periods: ``X_bulk -> bulk_embedding @ X_bulk``,
+           which carries zero conifold component (:math:`q\cdot\Lambda_{1:}^T = 0`);
+        2. contract the intersection/``a``/``b`` tensors along bulk directions;
+        3. project a charge/flux covector onto the bulk:
+           ``charge @ bulk_embedding`` :math:`= \Lambda_{1:}\, \tilde q`.
+
+        Together with the conifold embedding :func:`get_embedding`
+        (:math:`e_q = \Lambda_0`, the conifold direction of a vector) and the
+        conifold charge :math:`q` it satisfies the resolution of identity
+        :math:`q\, e_q^T + \text{bulk\_proj}\cdot\text{bulk\_embedding}^T = \mathbb{1}`,
+        where the matching bulk **projection** (the left inverse,
+        :math:`\text{bulk\_embedding}^T\,\text{bulk\_proj} = \mathbb{1}_{h^{1,2}-1}`)
+        is :func:`get_bulk_projection`.  In the conifold-aligned basis
+        (:math:`q=(1,0,\ldots,0)`) it reduces to :math:`[0;\mathbb{1}]`.
+
+    Args:
+        q (Array): Integer conifold charge vector of length :math:`h^{1,2}`.
+
+    Returns:
+        Array: Bulk embedding matrix of shape :math:`(h^{1,2}, h^{1,2}-1)`.
+
+    See also: :func:`get_bulk_projection`, :func:`get_embedding`, :func:`get_basis_change`
+    """
+    return jnp.asarray(np.asarray(get_basis_change(q))[1:]).T
+
+
+def get_bulk_projection(q):
+    r"""
+    **Description:**
+    Bulk **projection** matrix for the conifold charge :math:`q`: the bulk
+    columns :math:`(\Lambda^{-1})_{:,1:}` of the inverse basis change, shape
+    :math:`(h^{1,2}, h^{1,2}-1)`.
+
+    .. admonition:: Details
+        :class: dropdown
+
+        Extracts the :math:`(h^{1,2}-1)` bulk components of a modulus/period
+        **vector** ``v`` via ``v @ bulk_projection``
+        (:math:`= (\Lambda^{-T} v)_{1:}`).  It is the left inverse of the bulk
+        embedding (:func:`get_bulk_embedding`),
+        :math:`\text{bulk\_embedding}^T\,\text{bulk\_projection} = \mathbb{1}_{h^{1,2}-1}`,
+        so the "extract bulk then re-embed" round-trip is exact.  This differs
+        from :func:`get_bulk_embedding` in a general basis (projection vs
+        embedding of a vector); the two coincide only in the conifold-aligned
+        basis, where both reduce to :math:`[0;\mathbb{1}]`.  :math:`\Lambda` is
+        unimodular, so :math:`\Lambda^{-1}` is integer.
 
     Args:
         q (Array): Integer conifold charge vector of length :math:`h^{1,2}`.
@@ -175,9 +224,11 @@ def get_projection(q):
     Returns:
         Array: Bulk projection matrix of shape :math:`(h^{1,2}, h^{1,2}-1)`.
 
-    See also: :func:`get_embedding`, :func:`get_basis_change`
+    See also: :func:`get_bulk_embedding`, :func:`get_embedding`, :func:`get_basis_change`
     """
-    return jnp.asarray(extended_euclidean(q)[2][1:len(q)]).T
+    basis_change = np.asarray(get_basis_change(q))
+    basis_change_inv = np.rint(np.linalg.inv(basis_change)).astype(int)
+    return jnp.asarray(basis_change_inv[:, 1:])
 
 
 def get_embedding(q):
@@ -187,11 +238,13 @@ def get_embedding(q):
     Bézout vector (first row of :math:`\Lambda` from
     :func:`extended_euclidean`), satisfying :math:`q \cdot e_q = 1`.
 
-    Used to reconstruct a full modulus vector from the conifold modulus and the
-    bulk moduli: :math:`z_{\rm full} = z_{\rm cf}\, e_q + w_{\rm proj} z_{\rm bulk}`,
+    Gives the conifold direction of a **vector** (modulus/period): a full vector
+    is reconstructed as
+    :math:`z_{\rm full} = z_{\rm cf}\, e_q + \text{bulk\_embedding}\, z_{\rm bulk}`,
     which equals :math:`\Lambda^T (z_{\rm cf}, z_{\rm bulk})` and so inverts the
-    basis change consistently with :func:`get_projection`.  In the conifold-aligned
-    basis (:math:`q = (1,0,\ldots,0)`) this reduces to :math:`(1,0,\ldots,0)`.
+    basis change consistently with :func:`get_bulk_embedding` /
+    :func:`get_bulk_projection`.  In the conifold-aligned basis
+    (:math:`q = (1,0,\ldots,0)`) this reduces to :math:`(1,0,\ldots,0)`.
 
     Args:
         q (Array): Integer conifold charge vector of length :math:`h^{1,2}`.
@@ -199,7 +252,7 @@ def get_embedding(q):
     Returns:
         Array: Embedding vector of length :math:`h^{1,2}` with :math:`q\cdot e_q = 1`.
 
-    See also: :func:`get_projection`, :func:`get_basis_change`
+    See also: :func:`get_bulk_embedding`, :func:`get_bulk_projection`, :func:`get_basis_change`
     """
     return jnp.asarray(extended_euclidean(q)[0])
 
@@ -229,22 +282,32 @@ def conifold_fluxes(self, flux):
         Kalpha = h1[2:]
 
     else:
-        # The conifold-direction flux components (charge-like) project with the
-        # embedding e_q (q·e_q = 1), NOT the charge q (q·q ≠ 1).  The bulk
-        # components project with w_proj (q·w_proj = 0).  Both reduce to the
-        # aligned index-0 / [1:] slices when e_q=(1,0,…), w_proj=[0;I].
-        e_q = self.lcs_tree.conifold.embedding
-        w_proj = self.lcs_tree.conifold.projection
+        # The flux blocks split by how they pair in W = f1·X − f2·𝓕:
+        #   • f1, h1 pair with the electric periods X^I ⇒ COVARIANT, like
+        #     charges (transform with Λ): conifold component = e_q·f = (Λf)[0]
+        #     (e_q = Λ[0], q·e_q = 1); bulk = f @ bulk_embedding (= Λ[1:]ᵀ).
+        #   • f2, h2 pair with the magnetic periods 𝓕_I ⇒ CONTRAVARIANT, like
+        #     moduli (transform with Λ⁻ᵀ): conifold component = q·f = (Λ⁻ᵀf)[0]
+        #     (q = conifold_curve = Λ⁻¹[:,0]); bulk = f @ bulk_projection
+        #     (= Λ⁻¹[:,1:]).
+        # All four reduce to the aligned index-0 / [1:] slices when q=e_q=(1,0,…)
+        # and bulk_embedding=bulk_projection=[0;I].
+        e_q             = self.lcs_tree.conifold.embedding
+        q               = self.lcs_tree.conifold.conifold_curve
+        bulk_embedding  = self.lcs_tree.conifold.bulk_embedding
+        bulk_projection = self.lcs_tree.conifold.bulk_projection
 
-        M1 = f2[1:] @ e_q
-        H1 = h2[1:] @ e_q
+        # f2, h2: contravariant (magnetic) ⇒ q / bulk_projection
+        M1 = f2[1:] @ q
+        H1 = h2[1:] @ q
+        Malpha = f2[1:] @ bulk_projection
+        Halpha = h2[1:] @ bulk_projection
+
+        # f1, h1: covariant (electric) ⇒ e_q / bulk_embedding
         P1 = f1[1:] @ e_q
         K1 = h1[1:] @ e_q
-
-        Malpha = f2[1:] @ w_proj
-        Halpha = h2[1:] @ w_proj
-        Palpha = f1[1:] @ w_proj
-        Kalpha = h1[1:] @ w_proj
+        Palpha = f1[1:] @ bulk_embedding
+        Kalpha = h1[1:] @ bulk_embedding
 
     return M0, H0, M1, H1, Malpha, Halpha, P1, K1, Palpha, Kalpha, P0, K0
 
