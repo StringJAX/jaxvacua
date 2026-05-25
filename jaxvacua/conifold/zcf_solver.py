@@ -300,12 +300,12 @@ def _W_log_coeff_manual(self, z, tau, flux, conj=False):
             beta1 = jnp.asarray(bulk_charges @ e_q)
             bulk_charges_proj = jnp.asarray(bulk_charges @ bulk_embedding)
             etpz = jnp.exp(coeff * jnp.einsum("ki,i", bulk_charges_proj, zbulk))
-
-        Li1 = jax_polylog_vmap(etpz, 1, self.periods.prange)
+            
+        Li1 = jax_polylog_vmap(etpz, 1, self.periods.prange, approx="patch")
         F2b  += -1 / coeff * jnp.sum(bulk_invs * beta1**2 * Li1)
         dF1b += -1 / coeff * jnp.sum((bulk_invs * Li1 * beta1)[:, None] * bulk_charges_proj, axis=0)
 
-        Li2 = jax_polylog_vmap(etpz, 2, self.periods.prange)
+        Li2 = jax_polylog_vmap(etpz, 2, self.periods.prange, approx="patch")
         F1b += -1 / coeff**2 * jnp.sum(bulk_invs * beta1 * (Li2 - (coeff * bulk_charges_proj @ zbulk) * Li1))
 
     tmp  = (M0 - tau * H0) * F1b
