@@ -150,8 +150,6 @@ class css:
                                **kwargs)
 
         
-        # Set class attributes
-        #self._lcs_tree = self.periods.lcs_tree  # Removed: duplicate pytree leaf (lcs_tree already in periods)
         
         # Set gauge choice for projective coordinates
         self.gauge_choice = gauge_choice
@@ -313,6 +311,10 @@ class css:
         See also: :func:`F_LCS_poly`
         
         """
+        
+        if not self.periods.include_mirror_wsi:
+            return 0.
+        
         if self.periods.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
             approx="inf"
             #approx="patch"
@@ -2520,17 +2522,6 @@ class css:
             'max_error': float(error),
             'passed': error < tol,
         }
-
-
-
-"""
-from .conifold_utils import F_coniLCS_bulk,F_coniLCS_series, dK_cf_bulk, F_coniLCS_exp, dF_coniLCS_exp
-css.F_coniLCS_bulk = F_coniLCS_bulk 
-css.F_coniLCS_series = F_coniLCS_series 
-css.dK_cf_bulk = dK_cf_bulk
-css.F_coniLCS_exp = F_coniLCS_exp
-css.dF_coniLCS_exp = dF_coniLCS_exp
-"""
 
 
 # Conifold methods are attached via the ``_ConifoldGated`` descriptor so they

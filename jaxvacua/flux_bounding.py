@@ -1234,18 +1234,6 @@ class bounded_fluxes:
 
             # Unpad and collect
             if jnp.any(flags):
-                """
-                actual = end - start
-                mod_list.append(np.asarray(m[:actual]))
-                tau_list.append(np.asarray(t[:actual]))
-                flux_list.append(np.asarray(f[:actual]))
-                print("F SHAPE: ",f.shape)
-                print("F FLAG SHAPE: ",f[flags].shape)
-                print("M SHAPE: ",m.shape)
-                print("M FLAG SHAPE: ",m[flags].shape)
-                print("t SHAPE: ",t.shape)
-                print("t FLAG SHAPE: ",t[flags].shape)
-                """
                 
                 mod_list.append(np.asarray(m[flags]))
                 tau_list.append(np.asarray(t[flags]))
@@ -2013,14 +2001,19 @@ class bounded_fluxes:
         mu_np,
         tmu_np,
     ) -> None:
-        r"""Print a platform/state summary when eigenvalues are NaN or non-positive.
-
-        Intended for debugging a platform-specific divergence (e.g.
-        GHA Linux py3.12 producing NaN where macOS py3.13 produces
-        finite values). Dumps JAX config, backend/platform, per-array
-        NaN/non-positive counts, and the offending moduli + eigenvalue
-        values for the first ~5 bad samples. Does not raise on its own
-        — the caller decides whether to raise.
+        r"""
+        **Description:**
+        Print a platform/state summary when eigenvalues are NaN or non-positive.
+        
+        Args:
+            bad_arrays (List[Tuple]): List of tuples containing array name, array values, count of NaNs, and count of non-positive entries.
+            moduli_batch (Array): Batch of moduli points corresponding to the eigenvalue arrays.
+            lm_np (Array): Numpy array of maximum eigenvalues.
+            mu_np (Array): Numpy array of minimum eigenvalues.
+            tmu_np (Array): Numpy array of minimum eigenvalues of the inverse.
+            
+        Returns:
+            None
         """
         import sys
         try:
@@ -2186,8 +2179,7 @@ class bounded_fluxes:
         # subset. Only raise when every sample in the batch is bad (the
         # sampler is producing nothing physical); a handful of bad samples
         # in an otherwise healthy batch is just numerical noise and gets
-        # silently dropped — but still dumped via the diagnostic helper so
-        # the CI log records them.
+        # silently dropped 
         valid = (
             np.isfinite(lm_np)   & (lm_np   > 0.0) &
             np.isfinite(mu_np)   & (mu_np   > 0.0) &

@@ -724,6 +724,9 @@ class periods:
 
         """
         
+        if not self.include_mirror_wsi:
+            return 0.
+        
         if self.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
             approx="inf"
             #approx="patch"
@@ -1602,23 +1605,6 @@ class periods:
         """
 
         return jax.jacrev(self.M,holomorphic=True,argnums=1)(XPer,cXPer)
-
-    
-"""
-from .conifold_utils import F_coniLCS_series_per,F_coniLCS_exp_per, F_inst_per_coni,F_coniLCS_poly_split_per,dF_coniLCS_poly_per,ddF_coniLCS_poly_per,dddF_coniLCS_poly_per, ddddF_coniLCS_poly_per,F_coniLCS_bulk_per,F_coni_per,delete_coni_index
-
-periods.F_coniLCS_series_per = F_coniLCS_series_per
-periods.F_coniLCS_exp_per = F_coniLCS_exp_per
-periods.F_coni_per = F_coni_per 
-periods.F_inst_per_coni = F_inst_per_coni 
-periods.F_coniLCS_poly_split_per = F_coniLCS_poly_split_per 
-periods.dF_coniLCS_poly_per = dF_coniLCS_poly_per 
-periods.ddF_coniLCS_poly_per = ddF_coniLCS_poly_per 
-periods.dddF_coniLCS_poly_per = dddF_coniLCS_poly_per 
-periods.ddddF_coniLCS_poly_per = ddddF_coniLCS_poly_per 
-periods.F_coniLCS_bulk_per = F_coniLCS_bulk_per 
-periods.delete_coni_index = delete_coni_index
-"""
 
 # Conifold methods are attached via the ``_ConifoldGated`` descriptor so they
 # are only surfaced when ``self.limit ∈ {coniLCS, coniLCS_series, coniLCS_bulk}``.

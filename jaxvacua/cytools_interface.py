@@ -249,8 +249,7 @@ def cytools_model_data_init(
     points_for_model = KC.tip_of_stretched_cone(c=1)
 
     # Apply basis transformation if provided
-    #if basis_change is not None:
-    if False:
+    if basis_change is not None:
         L = basis_change
         Linv = np.linalg.inv(L)
 
@@ -295,13 +294,10 @@ def cytools_model_data_init(
             rays_KC, _ = remove_zeros(rays_KC)
 
     # Compute or extract intersection numbers in COO format
-    if False:
-        if (basis_change is not None) or (remove_axis is not None):
-            int_nums_coo = compute_intersection_numbers_coo(int_nums)
-        else:
-            int_nums_coo = mirror_cy.intersection_numbers(in_basis=True, format="coo")
-        
-    int_nums_coo = mirror_cy.intersection_numbers(in_basis=True, format="coo")
+    if (basis_change is not None) or (remove_axis is not None):
+        int_nums_coo = compute_intersection_numbers_coo(int_nums)
+    else:
+        int_nums_coo = mirror_cy.intersection_numbers(in_basis=True, format="coo")
 
     # Populate model data dictionary with all computed data
     model_data["h12"] = h12
@@ -422,8 +418,7 @@ def cytools_instanton_data_init(input_data,max_deg, grading_vector = None,basis_
     else:
         gws = None
 
-    #if basis_change is not None:
-    if False:
+    if basis_change is not None:
         def apply_basis_change(inv_dict,basis_matrix):
             """Apply a basis transformation to the curve classes in an invariant dictionary."""
             curvesOG,invariants=zip(*inv_dict.items())

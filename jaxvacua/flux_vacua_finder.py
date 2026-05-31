@@ -789,7 +789,7 @@ class FluxVacuaFinder(FluxEFT):
         # --- old version: materialise the full rank-3 dM/dM_c tensor, then contract ---
         #Theta_k = jnp.matmul(self.dM(moduli,jnp.conj(moduli)).transpose(2,0,1),RHS)
         #Theta_bk = jnp.matmul(self.dM_c(moduli,jnp.conj(moduli)).transpose(2,0,1),RHS)
-        # --- P5: contract the ISD-matrix derivative with RHS via a single jacrev of
+        # New: contract the ISD-matrix derivative with RHS via a single jacrev of
         # (M @ RHS) instead of forming the full tensor.  RHS is moduli-independent,
         # so (d_z M) @ RHS = d_z (M @ RHS); ~dim fewer reverse-mode passes,
         # verified to match the explicit tensor to ~1e-13.
@@ -907,7 +907,7 @@ class FluxVacuaFinder(FluxEFT):
         # --- old version: materialise the full rank-3 dM/dM_c tensor, then contract ---
         #Theta_k = jnp.matmul(self.dM(moduli,jnp.conj(moduli)).transpose(2,0,1),RHS)
         #Theta_bk = jnp.matmul(self.dM_c(moduli,jnp.conj(moduli)).transpose(2,0,1),RHS)
-        # --- P5: contract the ISD-matrix derivative with RHS via a single jacrev of
+        # New: contract the ISD-matrix derivative with RHS via a single jacrev of
         # (M @ RHS) instead of forming the full tensor.  RHS is moduli-independent,
         # so (d_z M) @ RHS = d_z (M @ RHS); ~dim fewer reverse-mode passes,
         # verified to match the explicit tensor to ~1e-13.

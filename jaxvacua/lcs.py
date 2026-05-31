@@ -654,15 +654,6 @@ class lcs_tree(object):
                 #invariants=jnp.array(list(values))
                 # Below makes sure that we don't run into issues with too long 
                 # integers!
-                """
-                print("Type of values in GV/GW dictionary:", type(list(x.values())[0]))
-                
-                print("Type of values in GV/GW dictionary:", type(list(x.values())))
-                print(list(x.values())[:5])
-                print(np.array(list(x.values())[:5]))
-                print(np.array(list(x.values())[:5]).dtype)
-                print(np.array(list(x.values())[:5]).astype(float).dtype)
-                """
                 try:
                     invariants=jnp.array(np.array(list(x.values())).astype(np.float64))
                 except:
@@ -837,8 +828,10 @@ class lcs_tree(object):
             LCS-tree: A LCS-tree instance created from the CYTools Calabi-Yau object.     
         
         """
+        
+        # We use basis_change=None for cytools_init and apply the basis change inside the lcs_tree constructor, to make sure that the basis change is applied consistently to all data, including the conifold curve and the conifold index in the GV charge data.
         md = cytools_model_data_init(cy,
-                                     #basis_change=basis_change,
+                                     basis_change=None,
                                      grading_vector=grading_vector,
                                      model_ID=model_ID,
                                      save_file=save_file,

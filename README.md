@@ -155,7 +155,19 @@ JAXVacua is released under the [GNU General Public License v3.0](LICENSE).
 
 ## Citation
 
-If you find this software useful, please cite:
+If you find this software useful, please cite the following two papers:
+
+```bibtex
+@article{Schachner:2026XXX,
+    author = "Schachner, Andreas",
+    title = "{}",
+    eprint = "XXXX",
+    archivePrefix = "arXiv",
+    primaryClass = "hep-th",
+    year = "2026"
+}
+```
+
 
 ```bibtex
 @article{Dubey:2023dvu,

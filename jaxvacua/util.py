@@ -529,11 +529,6 @@ def flatten_top(
         return flatten_top(flatten_top(arr, as_list=as_list, N=1),
                            as_list=as_list, N=N - 1)
 
-    if isinstance(arr, np.ndarray):
-        # `np.ndarray.reshape` is the right tool for ndarray flattening; this
-        # branch exists only to handle accidental ndarray inputs.
-        print("flatten_top: You really should use .reshape instead...")
-
     flattened = [
         ele.tolist() if isinstance(ele, np.ndarray) else ele
         for row in arr for ele in row

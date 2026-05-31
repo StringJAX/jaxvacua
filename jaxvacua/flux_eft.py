@@ -2704,8 +2704,7 @@ class FluxEFT(css):
         
         M = self.ISD_matrix(moduli,moduli_c)
         # Why do we have to take the inverse here?
-        print("TODO: Why do we have to take the inverse here? Because we defined the ISD matrix as in https://arxiv.org/pdf/2310.06040, \
-            but we use the inverse in our convention due to reordering of the periods!!")
+        # Because we defined the ISD matrix as in https://arxiv.org/pdf/2310.06040, but we use the inverse in our convention due to reordering of the periods!
         M = jnp.linalg.inv(M)
         
         #return -jnp.matmul(cG,jnp.matmul(M,G))/tau2,2.*NFlux,1j*jnp.matmul(cG,jnp.matmul(self.lcs_tree.sigma,G))/tau2
@@ -4176,43 +4175,6 @@ class FluxEFT(css):
             N_1_2 = self._projection_fluxes_1_2(moduli,tau,fluxes,Kcs,IKM,pi_vec)
             
             return N_3_0,N_2_1,N_1_2,N_0_3
-
-
-
-"""
-
-# Bind conifold utility methods (defined in conifold_utils.py with explicit self) to FluxEFT
-from .conifold_utils import (
-    W1_tilde as _W1_tilde_func,
-    compute_zcf as _compute_zcf_func,
-    zcf_handling as _zcf_handling_func,
-    #DW_x_bulk as _DW_x_bulk_func,
-    #dDW_x_bulk as _dDW_x_bulk_func,
-    DWbulk_x as _DWbulk_x_func,
-    dDWbulk_x as _dDWbulk_x_func,
-    DWbulk as _DWbulk_func,
-    dDWbulk as _dDWbulk_func,
-    W_bulk as _W_bulk_func,
-    conifold_fluxes as _conifold_fluxes_func,
-    compute_zcf_correction as _compute_zcf_correction_func,
-    compute_zcf_explicit as _compute_zcf_explicit_func,
-    compute_zcf_compact as _compute_zcf_compact_func,
-)
-FluxEFT.W1_tilde = _W1_tilde_func
-FluxEFT.compute_zcf = _compute_zcf_func
-FluxEFT.zcf_handling = _zcf_handling_func
-#FluxEFT.DW_x_bulk = _DW_x_bulk_func
-#FluxEFT.dDW_x_bulk = _dDW_x_bulk_func
-FluxEFT.DWbulk_x = _DWbulk_x_func
-FluxEFT.dDWbulk_x = _dDWbulk_x_func
-FluxEFT.DWbulk = _DWbulk_func
-FluxEFT.dDWbulk = _dDWbulk_func
-FluxEFT.W_bulk = _W_bulk_func
-FluxEFT.conifold_fluxes = _conifold_fluxes_func
-FluxEFT.compute_zcf_correction = _compute_zcf_correction_func
-FluxEFT.compute_zcf_explicit = _compute_zcf_explicit_func
-FluxEFT.compute_zcf_compact = _compute_zcf_compact_func
-"""
 
 
 # Bind flux utility methods (defined in flux_utils.py with explicit self) to FluxEFT
