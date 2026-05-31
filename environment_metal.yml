@@ -5,9 +5,9 @@ dependencies:
   # JAXVacua dependencies
   - python
   - numpy
-  - normaliz
   - scipy
-  - sympy
+  - pandas
+  - normaliz
   - cvxopt
   - python-flint
   - pplpy
@@ -20,18 +20,18 @@ dependencies:
   - pip:
     - jaxlib
     - jax-metal
-    - flax
     - optax
-    - cvxpy
+    - jaxpolylog>=0.3.0
     - ortools
     - triangulumancer
     - pypalp
     - cygv
-    - h5py
     - gurobipy
     - cytools
   # Common useful tools
   - jupyterlab
   - matplotlib
-  - plotly
   - seaborn
+  # Tests
+  - chex
+  - pytest
