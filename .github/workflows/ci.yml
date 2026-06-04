@@ -153,16 +153,23 @@ jobs:
         run: pytest tests/ -v
 
   test-sharded:
-    name: Test sharded (py${{ matrix.python-version }}, shard ${{ matrix.shard }}/4)
+    name: Test sharded (py${{ matrix.python-version }}, shard ${{ matrix.shard }}/8)
     # Same scope as `full`, but split into N parallel shards via pytest-split.
     # Runs on every push/PR + weekly cron + manual dispatch, in parallel with
     # `full` so the two can be compared on the same commit.
+    #
+    # Shard count: 8.  Bumped from 4 after one shard hit the 6h GHA cap due
+    # to pytest-split's default *count-based* balancing (JIT-heavy tests
+    # clustered unevenly).  For durably-balanced shards, generate
+    # `.test_durations` once locally via
+    #     pytest --store-durations
+    # and commit it — pytest-split then uses real timings.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
 
@@ -187,7 +194,7 @@ jobs:
           pip install platformdirs
           pip install -e .
 
-      - name: Run shard ${{ matrix.shard }}/4
+      - name: Run shard ${{ matrix.shard }}/8
         env:
           JAX_ENABLE_X64: "1"
-        run: pytest tests/ -v --splits=4 --group=${{ matrix.shard }}
+        run: pytest tests/ -v --splits=8 --group=${{ matrix.shard }}
