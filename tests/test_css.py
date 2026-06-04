@@ -1815,3 +1815,6 @@ class TestMonodromy(TestCase):
 
         with self.assertRaises(ValueError):
             self.model.conifold_monodromy_matrix(conifold_curve=np.array([1, 0, 0]))
+            
+    import atexit
+    atexit.register(lambda: print(">>> test_css.py module exit", flush=True))
