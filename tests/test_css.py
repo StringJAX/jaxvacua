@@ -44,12 +44,13 @@ import jaxvacua
 
 
 # ---------------------------------------------------------------------------
-# Diagnostic autouse fixture (temporary).  Writes START/END markers around
-# every test directly to fd 2, bypassing pytest's stdout/stderr capture, so
-# CI logs show exactly which test was running when a hang occurs.  Remove
-# once the GHA hang is diagnosed.
+# Diagnostic autouse fixture (kept for future use).  Writes START/END markers
+# around every test directly to fd 2, bypassing pytest's stdout/stderr capture
+# (combine with ``-s`` and ``PYTHONUNBUFFERED=1`` on the CI command).
+# Flip ``autouse=False`` -> ``autouse=True`` to re-enable when diagnosing a
+# hang in this file again.
 # ---------------------------------------------------------------------------
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def _ci_test_marker(request):
     os.write(2, f">>> START {request.node.nodeid}\n".encode())
     yield

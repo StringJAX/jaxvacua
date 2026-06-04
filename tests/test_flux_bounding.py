@@ -45,6 +45,20 @@ import jaxvacua
 from jaxvacua.flux_bounding import bounded_fluxes
 
 
+# ---------------------------------------------------------------------------
+# Diagnostic autouse fixture (temporary).  Writes START/END markers around
+# every test directly to fd 2, bypassing pytest's stdout/stderr capture
+# (combine with ``-s`` and ``PYTHONUNBUFFERED=1`` on the CI command), so
+# CI logs show exactly which test was running when a hang occurs.  Flip
+# ``autouse=True`` -> ``autouse=False`` to disable once diagnosed.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _ci_test_marker(request):
+    os.write(2, f">>> START {request.node.nodeid}\n".encode())
+    yield
+    os.write(2, f">>> END   {request.node.nodeid}\n".encode())
+
+
 # ==============================================================================
 #  TestFluxBounding
 # ==============================================================================
