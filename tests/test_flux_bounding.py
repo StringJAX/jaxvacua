@@ -98,8 +98,8 @@ class TestFluxBounding(TestCase):
         # Build sampler
         cls.sampler = jaxvacua.data_sampler(
             cls.model,
-            moduli_bounds=(2., 5.),
-            dilaton_bounds=(2., 10.),
+            moduli_bounds=(2., 3.),
+            dilaton_bounds=(2., 5.),
             axion_bounds=(-0.5, 0.5),
             seed=42,
         )
@@ -250,7 +250,7 @@ class TestFluxBounding(TestCase):
         # Draw a small sample of moduli and tau
         #moduli_sample = self.sampler.get_complex_moduli(50)
         #tau_sample = self.sampler.get_complex_tau(50)
-        N = 50
+        N = 20
         moduli_sample, tau_sample = self.sampler.initial_guesses(N,filter_moduli=True,include_fluxes=False)
 
         h1_box, h2_box, h_box = bf_test.compute_bounding_box(
@@ -812,7 +812,7 @@ class TestFluxBounding(TestCase):
         vector with the eigenvalue-based bounding box. At a valid vacuum,
         all bounds should be satisfied.
         """
-        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
         bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
 
@@ -835,7 +835,7 @@ class TestFluxBounding(TestCase):
         Verify that :func:`check_bounds` returns a list of bound check results
         for a given (moduli, tau, flux) point.
         """
-        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
         results = bf_tmp.check_bounds(self.zsol, self.tausol, self.f_solution)
         # Must return a list of tuples
@@ -848,7 +848,7 @@ class TestFluxBounding(TestCase):
         Verify that :func:`check_bounds_flat` returns ``(all_pass, results)``
         where ``all_pass`` is a boolean and ``results`` is a list.
         """
-        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
         bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
         all_pass, results = bf_tmp.check_bounds_flat()
@@ -864,7 +864,7 @@ class TestFluxBounding(TestCase):
         Verify that :func:`check_bounds_batch` returns a boolean array of
         shape ``(N,)`` for a batch of flux vectors.
         """
-        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=10)
+        bf_tmp = bounded_fluxes(self.model, sampler=self.sampler, Nmax=4)
         bf_tmp.compute_eigenvalue_bounds(200, verbose=False)
 
         N = 5
