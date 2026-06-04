@@ -84,14 +84,32 @@ class TestFluxBounding(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-
+        
+        super().setUpClass()
+        import sys
+        def _mark(s): print(f">>> [setUpClass] {s}", file=sys.stderr, flush=True)
+        _mark("start")
+        cls.h12 = 2
+        cls.model = jaxvacua.FluxVacuaFinder(
+            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,
+        )
+        _mark("model built")
+        cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
+        cls.sampler = jaxvacua.data_sampler(
+            cls.model, moduli_bounds=(2., 3.), dilaton_bounds=(2., 5.),
+            axion_bounds=(-0.5, 0.5), seed=42,
+        )
+        _mark("sampler built")
+        cls.bf = bounded_fluxes(cls.model, sampler=cls.sampler, Nmax=4)
+        _mark("bf built")
+        """
         cls.h12 = 2
 
         # Build model and override the a_matrix
         # maximum_degree=2 includes instanton corrections needed for
         # Newton convergence at the known SUSY solution
         cls.model = jaxvacua.FluxVacuaFinder(
-            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,
+            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,prange=20
         )
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
 
@@ -106,7 +124,7 @@ class TestFluxBounding(TestCase):
 
         # Build bounded_fluxes instance
         cls.bf = bounded_fluxes(cls.model, sampler=cls.sampler, Nmax=4)
-
+        """
         # Convenience attributes
         cls.n_fluxes = cls.model.n_fluxes          # = 2*(h12+1) = 6
         cls.dimension_H3 = cls.model.dimension_H3  # = h12+1 = 3
@@ -122,6 +140,7 @@ class TestFluxBounding(TestCase):
         cls.zsol = jnp.array([u1sol, u2sol])
         cls.tausol = tausol
 
+        _mark("done")
 
     # ==========================================================================
     #  1. Constructor
