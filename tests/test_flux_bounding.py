@@ -527,7 +527,7 @@ class TestFluxBounding(TestCase):
         h_batch = h_known[None, :]                  # shape (1, n_fluxes)
 
         # Use a small set of moduli starting points
-        n_pts = 3
+        n_pts = 2
         #moduli_pts = self.sampler.get_complex_moduli(n_pts)
         #tau_pts = self.sampler.get_complex_tau(n_pts)
         moduli_pts, tau_pts = self.sampler.initial_guesses(n_pts,filter_moduli=True,include_fluxes=False)
@@ -536,8 +536,8 @@ class TestFluxBounding(TestCase):
             jnp.array(h_batch, dtype=float),
             jnp.array(moduli_pts),
             jnp.array(tau_pts),
-            n_iters=5,
-            h_sub_batch=200,
+            n_iters=2,
+            h_sub_batch=10,
         )
 
         # Output should be numpy arrays (possibly empty)

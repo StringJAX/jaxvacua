@@ -850,8 +850,7 @@ class TestFluxEFT(TestCase):
         self.assertAllClose(dDW_ctau_tau,  jnp.conj(dDW_tau_ctau), rtol=1e-11, atol=1e-11)
         # d_ctau(D_ctau W*) = conj(d_tau(D_tau W)) — pure tau block conjugation
         self.assertAllClose(dDW_ctau_ctau, jnp.conj(dDW_tau_tau),  rtol=1e-11, atol=1e-11)
-
-        print("ARE THESE CORRECT? IF SO; WHAT DOES IT MEAN?")
+        
         # Combined conj-z block of W* equals conjugate of z block of W
         self.assertAllClose(dDW_cz_c,   jnp.conj(dDW_z),   rtol=1e-11, atol=1e-11)
         # Combined z block of W* equals conjugate of conj-z block of W

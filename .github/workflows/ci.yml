@@ -40,6 +40,14 @@ on:
 env:
   JAXPOLYLOG_PIN: "jaxpolylog>=0.1.0,!=0.2.0"
 
+# Cancel any in-flight runs on the same ref when a new commit lands.
+# Without this, every push spawns 20 jobs (fast=2 + docs=1 + full=1 +
+# test-sharded=16) on top of the previous push's still-running ones,
+# quickly overflowing GitHub's ~20-concurrent-Ubuntu-job free-tier cap.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   fast:
     name: Fast (pytest -m 'not slow')
