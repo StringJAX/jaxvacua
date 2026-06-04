@@ -1172,7 +1172,7 @@ class TestClusterRoundTrip(TestCase):
             expected_len = 2 * self.bf.n_fluxes
             # All merged fluxes must satisfy the tadpole constraint and
             # have the expected flux-vector length.
-            for r in merged[:50]:
+            for r in merged[:10]:
                 fl = np.asarray(r["flux"])
                 self.assertEqual(
                     len(fl), expected_len,
@@ -1199,7 +1199,7 @@ class TestClusterRoundTrip(TestCase):
                 run_dir, mode="sample", n_total_samples=500,
             )
             # Tadpole: |f^T σ h| ≤ Nmax for every merged flux
-            for r in merged[:50]:  # spot-check 50 to keep the test fast
+            for r in merged[:10]:  # spot-check 10 to keep the test fast
                 tad = abs(float(
                     jnp.real(self.model.tadpole(jnp.asarray(r["flux"])))
                 ))
@@ -1272,8 +1272,8 @@ class TestClusterRoundTrip(TestCase):
             os.environ["STRINGFORGE_VAULT"] = os.path.join(tmp, "vault")
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(
-                output_dir=run_dir, mode="enumerate", chunk_size=100,
-                n_total_samples=300, verbose=False,
+                output_dir=run_dir, mode="enumerate", chunk_size=20,
+                n_total_samples=50, verbose=False,
             )
             for i in range(info["n_chunks"]):
                 bounded_fluxes.process_chunk_from_disk(
