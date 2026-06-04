@@ -1083,10 +1083,17 @@ class TestClusterRoundTrip(TestCase):
         os.environ.pop("JAXVACUA_DATA_DIR", None)
 
     def _run_cluster_pipeline(self, run_dir, mode="enumerate",
-                              chunk_size=50_000, n_total_samples=1000,
+                              chunk_size=100, n_total_samples=300,
                               seed=42):
         r"""Export → process-all-chunks-sequentially → merge. Returns
-        (info_dict, merge_results)."""
+        (info_dict, merge_results).
+
+        Defaults are deliberately small (well below the library defaults
+        of ``chunk_size=100_000`` and ``n_total_samples=5_000_000``) so
+        the roundtrip tests exercise the multi-chunk pipeline mechanics
+        on test scale.  ``300 / 100 = 3 chunks`` keeps
+        :meth:`test_missing_chunks` from skipping its multi-chunk path.
+        """
         info = self.bf.export_cluster_job(
             output_dir=run_dir, mode=mode, chunk_size=chunk_size,
             n_total_samples=n_total_samples, seed=seed, verbose=False,
@@ -1156,7 +1163,7 @@ class TestClusterRoundTrip(TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = os.path.join(tmp, "run")
             info, merged = self._run_cluster_pipeline(
-                run_dir, mode="sample", n_total_samples=2000,
+                run_dir, mode="sample", n_total_samples=500,
             )
             # Tadpole: |f^T σ h| ≤ Nmax for every merged flux
             for r in merged[:50]:  # spot-check 50 to keep the test fast
@@ -1180,8 +1187,8 @@ class TestClusterRoundTrip(TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(
-                output_dir=run_dir, mode="enumerate", chunk_size=50_000,
-                verbose=False,
+                output_dir=run_dir, mode="enumerate", chunk_size=100,
+                n_total_samples=300, verbose=False,
             )
             if info["n_chunks"] < 2:
                 self.skipTest("need at least 2 chunks to test missing-chunk handling")
@@ -1232,8 +1239,8 @@ class TestClusterRoundTrip(TestCase):
             os.environ["STRINGFORGE_VAULT"] = os.path.join(tmp, "vault")
             run_dir = os.path.join(tmp, "run")
             info = self.bf.export_cluster_job(
-                output_dir=run_dir, mode="enumerate", chunk_size=50_000,
-                verbose=False,
+                output_dir=run_dir, mode="enumerate", chunk_size=100,
+                n_total_samples=300, verbose=False,
             )
             for i in range(info["n_chunks"]):
                 bounded_fluxes.process_chunk_from_disk(
