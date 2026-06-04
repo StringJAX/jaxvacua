@@ -35,8 +35,8 @@ The primary fixture uses ``conifold_basis=True``.  Non-canonical-basis parity
 is covered by the dedicated coniLCS regression tests.
 """
 
-import os
 import sys
+import types
 import warnings
 
 import jax
@@ -52,18 +52,41 @@ import jaxvacua as jvc
 from util import TestCase
 
 # ---------------------------------------------------------------------------
-# Test fixture: pre-pickled "aule" coniLCS model wired up via the
-# `vp.PromotionModels` helper (the only proven path that exercises all three
-# coniLCS limits — bulk / series / conilcs — from a single lcs_tree).
-# Tests skip gracefully when that helper or the pickled data isn't reachable.
+# Test fixture: the pre-pickled "aule" coniLCS model
+# (``jaxvacua/models/h12_5/model_aule.p``) instantiated at all three
+# coniLCS limits — ``coniLCS_bulk`` / ``coniLCS_series`` / ``coniLCS`` —
+# plus a fixed flux-vacuum seed point.
+#
+# The seed below was derived once from the quantum numbers
+# ``(_MVEC0, _KVEC0, _PVEC0, _TAU0)`` listed for documentation; the
+# resulting ``_PFV_X`` (full real coords) and ``_PFV_FLUX`` (full [f|h])
+# arrays are snapshotted as constants so the tests are self-contained
+# and do not depend on private packages.
 # ---------------------------------------------------------------------------
 _NAME  = "aule"
+
+# Quantum numbers that originally generated the seed point (kept for
+# provenance; not used at runtime).
 _MVEC0 = np.array([20, 4, 8, -18, -20])
 _KVEC0 = np.array([-5, -1, 0, 1, -1])
 _PVEC0 = np.array([0.0, 0.020833333333333332, 0.041666666666666664,
                    0.020833333333333332, 0.0])
 _TAU0  = 1j / 0.04317129968232153
-_ATOL  = 1e-10
+
+# Snapshot of the full real-coord and flux vectors at the seed point.
+_PFV_X = np.array([
+    0.0, 5.3041726121327895e-06, 0.0, 0.4825736886921778,
+    0.0, 0.965147377384355,      0.0, 0.4825736886921778,
+    0.0, 0.0,                    0.0, 23.163537057224524,
+])
+_PFV_FLUX = np.array([
+    -1.0000000000000062, 32.0, 272.0,   0.0, -40.0, -8.0,
+     0.0,                20.0,   4.0,   8.0, -18.0, -20.0,
+     0.0,                -5.0,  -1.0,   0.0,   1.0, -1.0,
+     0.0,                 0.0,   0.0,   0.0,   0.0,  0.0,
+], dtype=float)
+
+_ATOL = 1e-10
 
 _MODELS = None
 _PFV = None
@@ -71,22 +94,31 @@ _LOAD_ERROR = None
 
 
 def _try_load_models():
-    """Build the (bulk, series, conilcs) PromotionModels triple from the
-    'aule' lcs_tree, plus a PFV seed point. Returns (models, pfv) on success,
-    or raises with a descriptive error."""
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    promo_dir = os.path.join(repo_root, "private", "promotion")
-    if promo_dir not in sys.path:
-        sys.path.insert(0, promo_dir)
-    import vacuum_promotion as vp  # noqa: E402
+    """Build the three coniLCS FluxEFT variants ``(bulk, series, conilcs)``
+    from the bundled ``aule`` model, plus a fixed PFV seed.  Uses only
+    public :mod:`jaxvacua` API.
 
-    lcs_tree = jvc.periods(h12=len(_MVEC0), model_ID=_NAME, limit="coniLCS").lcs_tree
-    models = vp.PromotionModels.from_lcs_tree(
-        lcs_tree, conifold_basis=True, ncf=2, prange=20, maximum_degree=2,
+    All three variants share a single ``lcs_tree`` built once at
+    ``limit="coniLCS"`` — this avoids re-loading the model pickle three
+    times and, more importantly, only the coniLCS load path eagerly
+    populates the conifold-basis and GV data that ``coniLCS_bulk`` /
+    ``coniLCS_series`` then consume.
+    """
+    h12 = len(_MVEC0)
+    _kw = dict(conifold_basis=True, ncf=2, prange=20, maximum_degree=2)
+    lcs_tree = jvc.periods(
+        h12=h12, model_ID=_NAME, limit="coniLCS", **_kw,
+    ).lcs_tree
+    models = types.SimpleNamespace(
+        bulk    = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+                              limit="coniLCS_bulk",   **_kw),
+        series  = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+                              limit="coniLCS_series", **_kw),
+        conilcs = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+                              limit="coniLCS",        **_kw),
     )
-    pfv = vp.PFV.from_quantum_numbers(
-        models, M_vec=_MVEC0, K_vec=_KVEC0, p_vec=_PVEC0, tau=_TAU0,
-        metadata={"model_name": _NAME},
+    pfv = types.SimpleNamespace(
+        x=jnp.asarray(_PFV_X), flux=jnp.asarray(_PFV_FLUX),
     )
     return models, pfv
 
@@ -99,7 +131,7 @@ except Exception as exc:
 
 _NEEDS_MODEL = pytest.mark.skipif(
     _MODELS is None,
-    reason=f"PromotionModels unavailable ({_LOAD_ERROR})",
+    reason=f"coniLCS fixture unavailable ({_LOAD_ERROR})",
 )
 
 

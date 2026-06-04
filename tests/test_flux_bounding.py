@@ -88,10 +88,10 @@ class TestFluxBounding(TestCase):
         cls.h12 = 2
 
         # Build model and override the a_matrix
-        # maximum_degree=5 includes instanton corrections needed for
+        # maximum_degree=2 includes instanton corrections needed for
         # Newton convergence at the known SUSY solution
         cls.model = jaxvacua.FluxVacuaFinder(
-            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=5,
+            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,
         )
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
 

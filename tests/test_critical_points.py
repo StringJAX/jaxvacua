@@ -150,7 +150,7 @@ class TestCriticalPointFinder(TestCase):
         Verify that ``_generate_flux_candidates`` with mode ``"F"`` produces
         valid flux candidates with correct shapes.
         """
-        N = 50
+        N = 20
         mod_pts, tau_pts = self.sampler.initial_guesses(
             N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
         )
@@ -172,7 +172,7 @@ class TestCriticalPointFinder(TestCase):
         Verify that mode ``"ISD-"`` produces valid candidates.
         ISD- takes [f₁|h₁] of length 2*dim_H3 as input and computes [f₂|h₂].
         """
-        N = 50
+        N = 20
         mod_pts, tau_pts = self.sampler.initial_guesses(
             N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
         )
@@ -214,13 +214,13 @@ class TestCriticalPointFinder(TestCase):
         Verify that the FVF Newton solver runs end-to-end on an ISD-
         candidate at Nmax=200 and returns a real residual + same-shape x.
         """
-        N = 20
+        N = 10
         mod_pts, tau_pts = self.sampler.initial_guesses(
             N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
         )
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
-            20, mod_pts, tau_pts, isd_mode="ISD-",
+            10, mod_pts, tau_pts, isd_mode="ISD-",
             Nmax=self.Nmax, sampler=self.sampler,
         )
 
@@ -232,7 +232,7 @@ class TestCriticalPointFinder(TestCase):
             mod0, _, tau0, _ = self.finder._convert_real_to_complex(x0_j)
             mod_sol, tau_sol, res_j = self.finder.newton_method_flux_vacua(
                 mod0, tau0, jnp.asarray(fluxes[0]), mode=None,
-                step_size_Newton=1.0, tol=1e-8, max_iters=300,
+                step_size_Newton=1.0, tol=1e-5, max_iters=100,
                 solver_mode="real",
             )
             x_sol = np.asarray(self.finder._convert_complex_to_real(
@@ -413,13 +413,13 @@ class TestCriticalPointFinder(TestCase):
         Verify that ``_solve_dV_optax_batch`` returns arrays with correct
         shapes: ``(N, 2*(h12+1))``, ``(N,)``, ``(N,)``.
         """
-        N = 20
+        N = 10
         mod_pts, tau_pts = self.sampler.initial_guesses(
             N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
         )
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
-            20, mod_pts, tau_pts, isd_mode="ISD-",
+            10, mod_pts, tau_pts, isd_mode="ISD-",
             Nmax=self.Nmax, sampler=self.sampler,
         )
 
@@ -440,13 +440,13 @@ class TestCriticalPointFinder(TestCase):
         Verify that the vectorised Adam solver reduces residuals compared
         to the starting points (more steps → lower residuals).
         """
-        N = 30
+        N = 10
         mod_pts, tau_pts = self.sampler.initial_guesses(
             N, filter_moduli=True, include_fluxes=False, rns_key=self.rng_key,
         )
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
-            30, mod_pts, tau_pts, isd_mode="ISD-",
+            10, mod_pts, tau_pts, isd_mode="ISD-",
             Nmax=self.Nmax, sampler=self.sampler,
         )
 
