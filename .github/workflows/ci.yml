@@ -150,7 +150,12 @@ jobs:
       - name: Run full test suite
         env:
           JAX_ENABLE_X64: "1"
-        run: pytest tests/ -v
+          # Force unbuffered stdio so pytest's per-test output (including the
+          # ``-s`` markers from test_css.py's autouse fixture) reaches the GHA
+          # log line-by-line in real time, rather than after a 4-8 KB buffer
+          # fills.  Remove together with ``-s`` once the css hang is diagnosed.
+          PYTHONUNBUFFERED: "1"
+        run: pytest tests/ -v -s
 
   test-sharded:
     name: Test sharded (py${{ matrix.python-version }}, shard ${{ matrix.shard }}/8)
@@ -197,4 +202,8 @@ jobs:
       - name: Run shard ${{ matrix.shard }}/8
         env:
           JAX_ENABLE_X64: "1"
-        run: pytest tests/ -v --splits=8 --group=${{ matrix.shard }}
+          # Unbuffered stdio so live progress reaches the GHA log without
+          # waiting for the Python 4-8 KB stdio buffer to fill.  Remove
+          # together with ``-s`` once the css hang is diagnosed.
+          PYTHONUNBUFFERED: "1"
+        run: pytest tests/ -v -s --splits=8 --group=${{ matrix.shard }}

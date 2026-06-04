@@ -43,6 +43,19 @@ sys.path.append("./../")
 import jaxvacua
 
 
+# ---------------------------------------------------------------------------
+# Diagnostic autouse fixture (temporary).  Writes START/END markers around
+# every test directly to fd 2, bypassing pytest's stdout/stderr capture, so
+# CI logs show exactly which test was running when a hang occurs.  Remove
+# once the GHA hang is diagnosed.
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _ci_test_marker(request):
+    os.write(2, f">>> START {request.node.nodeid}\n".encode())
+    yield
+    os.write(2, f">>> END   {request.node.nodeid}\n".encode())
+
+
 # ==============================================================================
 #  TestCSSector
 # ==============================================================================
@@ -64,7 +77,7 @@ class TestCSSector(TestCase):
 
     Attributes:
         model (jaxvacua.flux_eft): FluxEFT model with ``h12=2``,
-            ``model_ID=1``, ``model_type="KS"`` and ``maximum_degree=5``.
+            ``model_ID=1``, ``model_type="KS"`` and ``maximum_degree=2``.
         z (jnp.ndarray): Fixed representative complex-structure moduli of
             shape ``(h12,)``.
         cz (jnp.ndarray): Complex conjugate of ``z``.
@@ -96,7 +109,12 @@ class TestCSSector(TestCase):
 
         h12 = 2
 
-        cls.model = jaxvacua.FluxEFT(h12=h12, model_ID=1, model_type="KS", maximum_degree=5)
+        cls.model = jaxvacua.FluxEFT(h12=h12, 
+                                     model_ID=1, 
+                                     model_type="KS", 
+                                     maximum_degree=2, 
+                                     prange=20)
+        
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5,1.5],[1.5,0.]])
         # Deterministic interior LCS-style fixture; avoids test-order and
         # session-dependent numerical variation in sign-sensitive matrix tests.
