@@ -1217,7 +1217,30 @@ class TestFluxEFT(TestCase):
         # Conj DcDW equals conjugate of DcDW — mixed covariant derivative conjugation
         self.assertAllClose(DcDW_c,     jnp.conj(DcDW),     rtol=1e-11, atol=1e-11)
 
-        print("SUSY TESTS MISSING!")
+        # ---------------------------------------------------------------
+        # SUSY-locus identities
+        # ---------------------------------------------------------------
+        # At the SUSY minimum, D_I W = 0 and DDW_SUSY drops only terms
+        # proportional to D_I W, so it must agree with DDW_general there.
+        args_sol = (self.zsol, self.czsol, self.tausol, self.ctausol, self.f_solution)
+        DW_sol = self.variant(self.model.DW_x)(self.solution, self.f_solution)
+        # F-terms vanish at the SUSY solution
+        self.assertAllClose(
+            DW_sol, jnp.zeros(2 * (self.model.h12 + 1)),
+            rtol=1e-8, atol=1e-8,
+            msg="DW_x must vanish at the SUSY solution",
+        )
+        DDW_SUSY_sol = self.variant(
+            lambda x, y, z, u, v: self.model.DDW_SUSY(x, y, z, u, v, conj=conj)
+        )(*args_sol)
+        DDW_gen_sol = self.variant(
+            lambda x, y, z, u, v: self.model.DDW_general(x, y, z, u, v, conj=conj)
+        )(*args_sol)
+        # DDW_SUSY and DDW_general must coincide at the SUSY locus
+        self.assertAllClose(
+            DDW_SUSY_sol, DDW_gen_sol, rtol=1e-9, atol=1e-9,
+            msg="DDW_SUSY must equal DDW_general at the SUSY locus",
+        )
 
     # ==========================================================================
     #  10.  Scalar potential V
@@ -1377,7 +1400,31 @@ class TestFluxEFT(TestCase):
         self.assertAllClose(eigvals_SUSY_sol, eigvals_gen_sol,   rtol=1e-09, atol=1e-09)
         self.assertAllClose(eigvals_gen_sol  * 2, eigvals_sol_s, rtol=1e-09, atol=1e-09)
 
-        print("Add Tests for dV_real, ddV_real, ddV_real_real!")
+        # ---------------------------------------------------------------
+        # Autodiff consistency + symmetry for dV_x and ddV_x
+        # ---------------------------------------------------------------
+        # The analytical gradient must equal jax.grad(V_x) at the SUSY
+        # solution (V is smooth and real-valued there).
+        dV_autodiff = self.variant(jax.grad(self.model.V_x))(
+            self.solution, self.f_solution,
+        )
+        self.assertAllClose(
+            dV_real_sol, dV_autodiff, rtol=1e-8, atol=1e-8,
+            msg="dV_x must equal jax.grad(V_x) at the SUSY solution",
+        )
+        # The analytical Hessian must equal jax.hessian(V_x).
+        ddV_autodiff = self.variant(jax.hessian(self.model.V_x))(
+            self.solution, self.f_solution,
+        )
+        self.assertAllClose(
+            ddV_real_sol, ddV_autodiff, rtol=1e-6, atol=1e-6,
+            msg="ddV_x must equal jax.hessian(V_x) at the SUSY solution",
+        )
+        # ddV_x is the Hessian of a real-valued scalar -> must be symmetric.
+        self.assertAllClose(
+            ddV_real_sol, ddV_real_sol.T, rtol=1e-11, atol=1e-11,
+            msg="ddV_x must be symmetric (V_x is real-valued)",
+        )
 
     # ==========================================================================
     #  11.  D3-tadpole
