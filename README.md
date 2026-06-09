@@ -1,8 +1,11 @@
 # JAXVacua - Flux Vacua in String Theory with JAX
 
 <p align="center">
-  <a href="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
+    <a href="https://jaxvacua.readthedocs.io"><img src="https://readthedocs.org/projects/jaxvacua/badge/?version=latest" alt="Doc"/></a>
+    <a href="https://pypi.org/project/jaxvacua/"><img src="https://img.shields.io/pypi/v/jaxvacua.svg" alt="JAXVacua"/></a>
+    <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python"/></a>
+    <a href="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+    <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
 </p>
 
 
@@ -128,11 +131,7 @@ For offline / HPC use, pass `offline=True`; cached shards are then served locall
 
 > [!NOTE]
 > The database stack (`TDFDatabase` / `CICYDatabase` / `LCSDatabase`) and
-> the `vacua_vault` subpackage previously lived under `jaxvacua/` but have
-> been moved to the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge)
-> umbrella package as part of the May 2026 stringjax → stringforge
-> rename. The corresponding tutorials moved with them — see
-> `stringforge/documentation/source/tutorials/database_and_infrastructure/`.
+> the `vacua_vault` can be found in the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge) package.
 
 Tutorials are grouped by theme under [documentation/source/notebooks/](documentation/source/notebooks/):
 
