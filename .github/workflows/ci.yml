@@ -7,16 +7,12 @@ name: CI
 #    a few minutes of GHA wall time.  Includes tests/test_coniLCS_limit.py
 #    (the NB13-fingerprint coniLCS regression net) — those tests have no
 #    `slow` marker and are picked up by `pytest -m "not slow"`.
-#  * full — runs on every push/PR (plus weekly cron and manual dispatch).
-#    Serial run of the entire suite on a single runner. Multi-hour on GHA.
-#    NOTE: GitHub Actions caps every job at 6 hours of execution time
-#    regardless of `timeout-minutes`; suites that exceed this need to be
-#    split into shards or run on a self-hosted runner.
-#  * test-sharded — experimental matrix shard of the same suite as `full`,
-#    using pytest-split across python-version x shard-id.  Kept *alongside*
-#    `full` for an A/B comparison: each shard should finish well under the
-#    6h cap while collectively covering the same tests.  Once verified in
-#    practice the serial `full` job can be retired.
+#  * test-sharded — full-coverage suite, split into a matrix of shards via
+#    pytest-split across python-version x shard-id.  Each shard finishes well
+#    under GitHub's 6h per-job cap while the matrix collectively covers the
+#    whole suite.  This REPLACES the old serial `full` job, which ran the
+#    entire suite on a single runner and routinely hit the 6h cap and was
+#    cancelled.
 #
 # jaxpolylog version exclusion
 # ----------------------------
@@ -41,7 +37,7 @@ env:
   JAXPOLYLOG_PIN: "jaxpolylog>=0.1.0,!=0.2.0"
 
 # Cancel any in-flight runs on the same ref when a new commit lands.
-# Without this, every push spawns 20 jobs (fast=2 + docs=1 + full=1 +
+# Without this, every push spawns 19 jobs (fast=2 + docs=1 +
 # test-sharded=16) on top of the previous push's still-running ones,
 # quickly overflowing GitHub's ~20-concurrent-Ubuntu-job free-tier cap.
 concurrency:
@@ -122,54 +118,10 @@ jobs:
             -d /tmp/sphinx-doctree \
             documentation/source /tmp/sphinx-out
 
-  full:
-    name: Full (pytest tests/)
-    # Runs on every push/PR + weekly cron + manual dispatch.
-    # No explicit `timeout-minutes` — inherits the GHA platform cap (6 h).
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-
-      - name: Cache JAX compilation cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/jax
-          key: ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-full-${{ hashFiles('jaxvacua/**/*.py', 'tests/**/*.py') }}
-          restore-keys: |
-            ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-full-
-
-      - name: Install jaxvacua + all heavy deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest chex "${{ env.JAXPOLYLOG_PIN }}"
-          pip install platformdirs
-          pip install -e .
-
-      - name: Run full test suite
-        env:
-          JAX_ENABLE_X64: "1"
-          # Force unbuffered stdio so pytest's per-test output (including the
-          # ``-s`` markers from test_css.py's autouse fixture) reaches the GHA
-          # log line-by-line in real time, rather than after a 4-8 KB buffer
-          # fills.  Remove together with ``-s`` once the css hang is diagnosed.
-          PYTHONUNBUFFERED: "1"
-        run: pytest tests/ -v -s
-
   test-sharded:
     name: Test sharded (py${{ matrix.python-version }}, shard ${{ matrix.shard }}/8)
-    # Same scope as `full`, but split into N parallel shards via pytest-split.
-    # Runs on every push/PR + weekly cron + manual dispatch, in parallel with
-    # `full` so the two can be compared on the same commit.
+    # Full-coverage suite split into N parallel shards via pytest-split.
+    # Runs on every push/PR + weekly cron + manual dispatch.
     #
     # Shard count: 8.  Bumped from 4 after one shard hit the 6h GHA cap due
     # to pytest-split's default *count-based* balancing (JIT-heavy tests
