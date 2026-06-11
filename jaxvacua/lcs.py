@@ -579,13 +579,15 @@ class lcs_tree(object):
                 
                 for I1 in range(self.h12):
                     for I2 in range(self.h12):
-                        if I1>=I2:
-                            a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
-                        elif I1<I2:
+                        
+                        if type(self.model_ID)==int:
                             a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
+                        else:
+                            if I1>=I2:
+                                a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
+                            elif I1<I2:
+                                a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
                             
-                            
-                
                 self.a_matrix = jnp.array(a_matrix)
                 
                 
