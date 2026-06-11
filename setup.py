@@ -15,7 +15,7 @@ Runtime package behaviour lives in ``jaxvacua``.  Keep this file focused on
 packaging metadata and avoid importing heavy project modules here.
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 from pathlib import Path
 
 setup(
@@ -28,7 +28,10 @@ setup(
     author_email='as3475@cornell.edu',
     url='https://github.com/AndreasSchachner/jaxvacua',
     license='GPL-3.0-or-later',
-    packages=['jaxvacua'],
+    # find_packages() picks up jaxvacua AND its subpackages (jaxvacua.conifold,
+    # ...).  The old packages=['jaxvacua'] shipped a broken wheel that failed at
+    # import with `ModuleNotFoundError: No module named 'jaxvacua.conifold'`.
+    packages=find_packages(exclude=['tests', 'tests.*']),
     # Ship the bundled Kreuzer-Skarke model files (jaxvacua/models/h12_<N>/
     # model_<M>.p) so `FluxVacuaFinder(h12=..., model_ID=...)` works straight
     # from a PyPI install.  ``models/*/*.p`` matches the two-level layout
