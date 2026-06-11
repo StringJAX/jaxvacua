@@ -29,6 +29,12 @@ setup(
     url='https://github.com/AndreasSchachner/jaxvacua',
     license='GPL-3.0-or-later',
     packages=['jaxvacua'],
+    # Ship the bundled Kreuzer-Skarke model files (jaxvacua/models/h12_<N>/
+    # model_<M>.p) so `FluxVacuaFinder(h12=..., model_ID=...)` works straight
+    # from a PyPI install.  ``models/*/*.p`` matches the two-level layout
+    # exactly (and excludes any ``.ipynb_checkpoints`` a recursive glob would
+    # otherwise sweep in).
+    package_data={'jaxvacua': ['models/*/*.p']},
     python_requires='>=3.12',
     install_requires=[
         'numpy',
