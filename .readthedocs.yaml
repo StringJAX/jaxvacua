@@ -18,12 +18,12 @@ formats:
   - htmlzip
   - pdf
 
-# Install only the documentation toolchain.  Unlike jaxpolylog we do NOT
-# `pip install .` here: jaxvacua's runtime dependencies (cytools, gurobipy,
-# python-flint) are not installable on Read the Docs and would hard-fail the
-# build.  `documentation/source/conf.py` instead prepends the repo root to
-# `sys.path` so jaxvacua is importable from source for autodoc; the version is
-# read from `jaxvacua/__init__.py` without importing the package.
+# Install the doc toolchain (documentation/requirements.txt -- which pins
+# `platformdirs` ahead of the cytools install) and then jaxvacua itself, so
+# autodoc can import the package and its runtime deps (cytools, gurobipy,
+# python-flint, jaxpolylog) -- all available on PyPI.
 python:
   install:
     - requirements: documentation/requirements.txt
+    - method: pip
+      path: .
