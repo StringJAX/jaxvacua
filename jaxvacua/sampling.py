@@ -708,7 +708,7 @@ class data_sampler():
             np.ndarray or Array: Array of interior points.
             
         Raises:
-            RuntimeError: If the optimization fails.
+            RuntimeError: If the optimisation fails.
         """
         
         if gp is None:
@@ -720,7 +720,7 @@ class data_sampler():
         # Retrieve hyperplanes defining the Kähler cone
         H = self._hyperplanes
 
-        # Create a new optimization model
+        # Create a new optimisation model
         m = gp.Model("interior point finder")
         m.setParam('OutputFlag', verbosity > 0)  # Set verbosity for output
         

@@ -8,7 +8,7 @@ authors:
     email: as3475@cornell.edu
     affiliation: Cornell University
     orcid: "https://orcid.org/0000-0002-2855-7481"
-repository-code: "https://github.com/AndreasSchachner/jaxvacua"
+repository-code: "https://github.com/StringJAX/jaxvacua"
 license: GPL-3.0-or-later
 preferred-citation:
   type: article

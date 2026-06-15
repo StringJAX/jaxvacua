@@ -65,7 +65,7 @@ $$
 $$
 
 the *fundamental period* $\varpi_0(\psi)$ is defined by integrating $\Omega$ over the
-SYZ $T^3$ fiber:
+SYZ $T^3$ fibre:
 
 $$
 \varpi_0(\psi) \coloneqq \Psi^0 \int_{T^3} \Omega = \Psi^0 \oint_{|\mathbbm{t}^1|=\epsilon} \frac{d\mathbbm{t}^1}{2\pi i} \cdots \oint_{|\mathbbm{t}^4|=\epsilon} \frac{d\mathbbm{t}^4}{2\pi i} \frac{1}{f(\mathbbm{t})}\;.

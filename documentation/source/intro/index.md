@@ -1,6 +1,6 @@
 # Introduction
 
-JAXVacua provides a unified, JAX-native pipeline from Calabi–Yau
+JAXVacua provides a unified, JAX-native pipeline from Calabi-Yau
 compactification data to four-dimensional flux-vacuum solutions.
 The introduction chapters below cover the physics and mathematics
 that the rest of the documentation builds on. This page sketches the
@@ -441,7 +441,7 @@ The four stages are:
    [stringforge cy-database](https://huggingface.co/datasets/aschachner/cy-database),
    a local CICY identifier, or an explicit dictionary). All four
    feed an `lcs_tree` — JAXVacua's data interface for a
-   Calabi–Yau threefold.
+   Calabi-Yau threefold.
 2. **Build the EFT** — the linear pipeline `periods → css →
    FluxEFT → FluxVacuaFinder` constructs the period vector,
    complex-structure Kähler geometry, GVW superpotential, and
@@ -460,7 +460,7 @@ The four stages are:
 
 The chapters that follow in the **Introduction** caption of the master
 TOC cover the physics in the order you will encounter it when
-constructing a model: supergravity background, Calabi–Yau geometries,
+constructing a model: supergravity background, Calabi-Yau geometries,
 flux compactifications, moduli stabilisation, periods, and
 perturbatively flat vacua. For the corresponding code-level
 walkthroughs, see the **Tutorials — Basics** chapter.

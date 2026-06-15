@@ -4,7 +4,7 @@
     <a href="https://jaxvacua.readthedocs.io"><img src="https://readthedocs.org/projects/jaxvacua/badge/?version=latest" alt="Doc"/></a>
     <a href="https://pypi.org/project/jaxvacua/"><img src="https://img.shields.io/pypi/v/jaxvacua.svg" alt="JAXVacua"/></a>
     <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python"/></a>
-    <a href="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/AndreasSchachner/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+    <a href="https://github.com/StringJAX/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/StringJAX/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
     <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
 </p>
 
@@ -30,7 +30,7 @@ Next, choose the installation method that best fits your use case:
 
 - **Editable install directly from GitHub:** 
   If you only want to use the package or make light modifications, you can install it directly from the repository with:
-  `pip install -e git+https://github.com/AndreasSchachner/jaxvacua.git#egg=jaxvacua`
+  `pip install -e git+https://github.com/StringJAX/jaxvacua.git#egg=jaxvacua`
 
 - **Editable install from a local clone (recommended for development):**  
   If you plan to actively develop or experiment with the code, first download or clone the repository. Then navigate to the root directory of the project in a terminal and run:
@@ -74,7 +74,7 @@ tree = jvc.lcs_tree.from_cytools(cy, maximum_degree=1)
 model = jvc.FluxEFT(lcs_tree=tree)
 ```
 
-**3. From the CY database (new).** The [`cy-database`](https://huggingface.co/datasets/aschachner/cy-database) HuggingFace dataset hosts precomputed topological data for millions of Calabi-Yau geometries. The database stack lives in the [`stringforge`](https://github.com/AndreasSchachner/stringforge) umbrella package: `TDFDatabase` / `CICYDatabase` for pure I/O, and `LCSDatabase` for ready-to-use `FluxVacuaFinder` instances. The interface downloads only the catalog (~10 MB) upfront and pulls individual model shards on demand:
+**3. From the CY database (new).** The [`cy-database`](https://huggingface.co/datasets/aschachner/cy-database) HuggingFace dataset hosts precomputed topological data for millions of Calabi-Yau geometries. The database stack lives in the [`stringforge`](https://github.com/StringJAX/stringforge) umbrella package: `TDFDatabase` / `CICYDatabase` for pure I/O, and `LCSDatabase` for ready-to-use `FluxVacuaFinder` instances. The interface downloads only the catalog (~10 MB) upfront and pulls individual model shards on demand:
 
 ```python
 from stringforge.lcs_database import LCSDatabase
@@ -85,7 +85,7 @@ model = db.load_model(ks_id=int(df.iloc[0]["ks_id"]),
                       include_gv=True, include_conifolds=True)
 ```
 
-For offline / HPC use, pass `offline=True`; cached shards are then served locally. Flux-vacuum solutions can be stored in a local vacua vault and, optionally, pushed to the community [`vacua_vault`](https://huggingface.co/datasets/aschachner/vacua_vault) repository. The database stack, the `vacua_vault` subpackage, and the corresponding tutorials live in the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge) package — see `stringforge/documentation/source/tutorials/database_and_infrastructure/` for the full walkthrough.
+For offline / HPC use, pass `offline=True`; cached shards are then served locally. Flux-vacuum solutions can be stored in a local vacua vault and, optionally, pushed to the community [`vacua_vault`](https://huggingface.co/datasets/aschachner/vacua_vault) repository. The database stack, the `vacua_vault` subpackage, and the corresponding tutorials live in the sibling [`stringforge`](https://github.com/StringJAX/stringforge) package — see `stringforge/documentation/source/tutorials/database_and_infrastructure/` for the full walkthrough.
 
 
 ## Repository structure
@@ -131,7 +131,7 @@ For offline / HPC use, pass `offline=True`; cached shards are then served locall
 
 > [!NOTE]
 > The database stack (`TDFDatabase` / `CICYDatabase` / `LCSDatabase`) and
-> the `vacua_vault` can be found in the sibling [`stringforge`](https://github.com/AndreasSchachner/stringforge) package.
+> the `vacua_vault` can be found in the sibling [`stringforge`](https://github.com/StringJAX/stringforge) package.
 
 Tutorials are grouped by theme under [documentation/source/notebooks/](documentation/source/notebooks/):
 

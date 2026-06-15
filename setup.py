@@ -26,7 +26,7 @@ setup(
     long_description_content_type='text/markdown',
     author='Andreas Schachner',
     author_email='as3475@cornell.edu',
-    url='https://github.com/AndreasSchachner/jaxvacua',
+    url='https://github.com/StringJAX/jaxvacua',
     license='GPL-3.0-or-later',
     # find_packages() picks up jaxvacua AND its subpackages (jaxvacua.conifold,
     # ...).  The old packages=['jaxvacua'] shipped a broken wheel that failed at

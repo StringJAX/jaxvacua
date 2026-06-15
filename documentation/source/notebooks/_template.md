@@ -131,7 +131,7 @@ result = ...
 
 * Use `notebooks/plot_utils.py` for shared styling.  Default DPI is **130**
   (publication-figure recipes in NB14 use **200–300**).
-* Default colormap: `viridis`.  Default font family: `serif`.
+* Default colourmap: `viridis`.  Default font family: `serif`.
 * Figures rendering more than ~50 KB of pixel data should pass
   `rasterized=True` to keep PDF / HTML builds light.
 

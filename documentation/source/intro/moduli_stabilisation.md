@@ -5,7 +5,7 @@
 A generic Calabi-Yau compactification gives rise to massless scalar fields (moduli)
 in four dimensions:
 the complex structure moduli $z^i$, the axio-dilaton $\tau$, and the Kähler moduli $T_\alpha$.
-These parametrize flat directions of the classical scalar potential and are phenomenologically
+These parametrise flat directions of the classical scalar potential and are phenomenologically
 unacceptable: massless scalars mediate long-range fifth forces, cause time-varying
 fundamental constants, and produce overabundant non-relativistic matter in the early
 universe (the *cosmological moduli problem*).

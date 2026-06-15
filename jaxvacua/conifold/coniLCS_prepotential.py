@@ -569,7 +569,7 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     # ----------------------------------------
     # This includes the logarithmic term:
     #   F_coni ~ (X_cf)^2 log(X_cf / X0)
-    # and captures the singular behavior at the conifold point
+    # and captures the singular behaviour at the conifold point
     # F_coni_per is basis-aware (identifies X^cf via the conifold charge), so
     # pass the full period vector rather than the index-0/1 slice.
     val = self.F_coni_per(XPer, conj=conj)
@@ -801,7 +801,7 @@ def F_coniLCS_series(self,
 
         where :math:`z_{\mathrm{cf}}` is the conifold modulus and :math:`z^a` are the bulk complex structure moduli.
 
-        The conifold part :math:`F_{\mathrm{coni}}` encodes the singular behavior near the conifold point:
+        The conifold part :math:`F_{\mathrm{coni}}` encodes the singular behaviour near the conifold point:
 
         .. math::
             F_{\mathrm{coni}}(z_{\mathrm{cf}}) = \dfrac{1}{2}\, n_{\mathrm{cf}}\, \left ( \dfrac{z_{\mathrm{cf}}^2}{2\pi \mathrm{i}}\, \log \left ( -2\pi \mathrm{i} z_{\mathrm{cf}} \right ) \right )

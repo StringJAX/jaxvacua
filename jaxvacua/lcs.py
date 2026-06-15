@@ -550,7 +550,7 @@ class lcs_tree(object):
         
         else:
             # Compute coordinate representation for triple intersection numbers
-            # Each row contains entries: [i,j,k,\kappa_{ijk}*perm({i,j,k})] with i,j,k labeling the different moduli 
+            # Each row contains entries: [i,j,k,\kappa_{ijk}*perm({i,j,k})] with i,j,k labelling the different moduli
             # and \kappa_{ijk} the corresponding triple intersection number.
             # The multiplicative factor perm({i,j,k}) takes care of symmetrisation over indices in the calculations below.
             dlist=[]
