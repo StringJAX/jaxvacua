@@ -58,7 +58,7 @@ import jax
 import jax.numpy as jnp
 from jax import jit, vmap, Array
 from numpy.typing import ArrayLike
-from typing import Tuple, Any, Callable
+from typing import Tuple, Any, Callable, Literal
 from jax.numpy import pi
 # Self-made modules
 from .util import random_integer, random_uniform, vmapping_func, vmapping_func_cached, PRNGSequence
@@ -333,15 +333,22 @@ class data_sampler():
         """
 
         self.use_jax = use_jax
+        
+        if self.use_jax and seed is None:
+            raise ValueError("When use_jax=True, a seed must be provided for the internal PRNG.")
+        
         self._rng = PRNGSequence(seed)
+        
+        self._np_rng = np.random.default_rng(seed)
+            
         self.model = model
         self.flux_upper = flux_bounds[1]
         self.flux_lower = flux_bounds[0]
         self._n_fluxes = self.model.n_fluxes
         self._h12 = self.model.h12
         self._tadpole = jit(vmap(self.model.tadpole))
-        self._D3_tadpole = self.model.D3_tadpole
-
+        self._Q = self.model.Q()
+        
         self._kahler_metric = jit(vmap(model.kahler_metric))
         
         _gen = self.model.lcs_tree.generators_kahler_cone
@@ -434,25 +441,25 @@ class data_sampler():
         r"""Return a uniform float array of the given *shape* on ``[lo, hi)``."""
         if self.use_jax:
             return random_uniform(lo, hi, rns_key=rns_key if rns_key is not None else self._rng, shape=shape)
-        return np.random.uniform(lo, hi, shape)
+        return self._np_rng.uniform(lo, hi, shape)
 
     def _rand_integer(self, lo, hi, shape, rns_key):
         r"""Return a uniform integer array of the given *shape* on ``[lo, hi)``."""
         if self.use_jax:
             return random_integer(lo, hi, rns_key=rns_key if rns_key is not None else self._rng, shape=shape)
-        return np.random.randint(lo, hi, shape)
+        return self._np_rng.integers(lo, hi, shape)
 
     def _rand_permutation(self, arr, rns_key):
         r"""Return a randomly permuted copy of *arr* (non-destructive)."""
         if self.use_jax:
             return jax.random.permutation(self._get_jax_key(rns_key), arr)
-        return np.random.permutation(arr)
+        return self._np_rng.permutation(arr)
 
     def _rand_choice(self, n, k, replace, rns_key):
         r"""Return *k* random indices drawn from ``[0, n)``."""
         if self.use_jax:
             return jax.random.choice(self._get_jax_key(rns_key), n, shape=(k,), replace=replace)
-        return np.random.choice(n, size=k, replace=replace)
+        return self._np_rng.choice(n, size=k, replace=replace)
 
     def _collect_batches(self, batches: list, n: int):
         r"""
@@ -544,6 +551,9 @@ class data_sampler():
         # Append existing cone points to the new cone points if available
         if len(self._cone_points) > 0:
             cone_point = np.concatenate([np.asarray(cone_point), self._cone_points], axis=0)
+            
+            flag = np.all(np.asarray(cone_point) @ H.T >= stretching, axis=1)
+            valid = np.asarray(cone_point)[flag]
 
         # Update the internal state with the new cone points
         self._cone_points = cone_point
@@ -1192,7 +1202,9 @@ class data_sampler():
             minval_moduli: Any = None,
             maxval_moduli: Any = None,
             axion_sampling_mode: str = "box",
-            moduli_sampling_mode: str = "cone"
+            moduli_sampling_mode: str = "cone",
+            use_rays: bool = False,
+            time_out: float = 60.0,
         ) -> np.ndarray | Array:
         r"""
         **Description:**
@@ -1227,7 +1239,7 @@ class data_sampler():
         
         moduli_val = self.get_axions(N,rns_key=rns_key,minval=minval_axions,maxval=maxval_axions,sampling_mode=axion_sampling_mode)
         
-        moduli_val += 1j*self.get_moduli(N,rns_key=rns_key,minval=minval_moduli,maxval=maxval_moduli,sampling_mode=moduli_sampling_mode)
+        moduli_val += 1j*self.get_moduli(N,rns_key=rns_key,minval=minval_moduli,maxval=maxval_moduli,sampling_mode=moduli_sampling_mode,use_rays=use_rays,time_out=time_out)
         
         return moduli_val
 
@@ -1497,7 +1509,9 @@ class data_sampler():
         flux_mode: str = "full",
         flux_radius: float = 10.0,
         filter_moduli: bool = False,
-        include_fluxes: bool = True
+        include_fluxes: bool = True,
+        use_rays: bool = False,
+        time_out: float = 60.0,
     ) -> Tuple[Array, Array] | Tuple[Array, Array, Array]:
         r"""
         **Description:**
@@ -1593,7 +1607,9 @@ class data_sampler():
                 minval_moduli=minval_moduli,
                 maxval_moduli=maxval_moduli,
                 axion_sampling_mode="box",
-                moduli_sampling_mode=moduli_sampling_mode
+                moduli_sampling_mode=moduli_sampling_mode,
+                use_rays=use_rays,
+                time_out=time_out
             )
             if filter_moduli:
                 tmp = self.filter_moduli(tmp, tau, inst_cutoff=1e-1)
@@ -2022,6 +2038,8 @@ class data_sampler():
         mode: str = "ISD+",
         vmap_dim: int | None = None,
         ISD_oversample_factor: int = 10,
+        use_rays: bool = False,
+        time_out: float = 60.0,
         print_progress: bool = False,
     ) -> Tuple[Array, Array, Array]:
         r"""
@@ -2085,7 +2103,7 @@ class data_sampler():
             fluxes_sampling_mode (str): Sampling mode for fluxes.  Default ``"box"``.
             flux_mode (str): Flux generation mode (``"full"`` or ``"half"``).  Default ``"full"``.
             Nmax (float | None): Maximum D3-tadpole.  If ``None``, uses the model's
-                ``D3_tadpole`` value.  Default ``None``.
+                ``Q()`` value.  Default ``None``.
             filter_moduli (bool): Filter moduli by instanton effects.  Default ``False``.
             mode (str): ISD mode — ``"ISD+"``, ``"ISD-"``, ``"F"``, or ``"H"``.
                 Default ``"ISD+"``.
@@ -2154,6 +2172,8 @@ class data_sampler():
                     moduli_sampling_mode=moduli_sampling_mode,
                     filter_moduli=filter_moduli,
                     include_fluxes=False,
+                    use_rays=use_rays,
+                    time_out=time_out
                 )
 
                 fluxes0 = self.get_fluxes(
@@ -2177,7 +2197,11 @@ class data_sampler():
                 Nflux = self._tadpole(fluxes_ISD_integer)
 
                 if Nmax is None:
-                    Nmax = self._D3_tadpole
+                    if self._Q is None:
+                        raise ValueError(
+                            "Model does not have a defined D3-tadpole Q. Please provide an explicit value!"
+                        )
+                    Nmax = self._Q
 
                 flag = (Nflux <= Nmax) & (Nflux >= 0)
                 z0_valid = z0[flag]
@@ -2204,6 +2228,176 @@ class data_sampler():
             fluxes = jnp.empty((0, 2 * self._n_fluxes), dtype=jnp.int32)
 
         return moduli, tau, fluxes
-        
 
-    
+
+# ======================================================================
+# Ellipsoid helpers for tadpole-aware ISD flux sampling
+# ----------------------------------------------------------------------
+# At fixed complex-structure moduli and axio-dilaton, the ISD condition makes
+# the full flux vector a linear function of the selected input-half flux ``u``.
+# The D3-tadpole is therefore a quadratic form ``N_flux = 1/2 u.T @ M @ u``.
+# For physical ISD data this form is positive definite, so the tadpole bound
+# defines an ellipsoid in the input-half flux space.  The routines below are
+# stateless and do not orchestrate full sampling batches; a caller should
+# combine them with ``data_sampler`` and then re-check the signed integer
+# tadpole after rounding.  They follow the active JAX precision: use x64 for
+# high-dimensional or ill-conditioned ellipsoids.
+# ======================================================================
+
+ISDMode = Literal["ISD+", "ISD-", "F", "H"]
+
+_PM_MODES = ("ISD+", "ISD-")
+_FH_MODES = ("F", "H")
+_ALL_MODES = (*_PM_MODES, *_FH_MODES)
+
+
+def tadpole_quadratic(eft: Any, z: Array, tau: Array, mode: ISDMode) -> Array:
+    r"""
+    **Description:**
+    Return the closed-form tadpole quadratic for one moduli point and ISD
+    input mode.
+
+    For an input-half flux ``u`` produced by the corresponding ISD sampling
+    mode, the continuous tadpole is
+
+    .. math::
+
+        N_{\rm flux} = \frac{1}{2} u^T M(z,\tau)u .
+
+    The ``"F"`` and ``"H"`` modes use the ISD matrix and the symplectic
+    form.  The ``"ISD+"`` and ``"ISD-"`` modes use the gauge-kinetic matrix
+    relation implemented by ``data_sampler.ISD_sampling``.
+
+    Args:
+        eft: ``FluxEFT``-like object exposing ``ISD_matrix``,
+            ``gauge_kinetic_matrix`` and ``periods.sigma``.
+        z: Complex-structure moduli of shape ``(h12,)``.
+        tau: Axio-dilaton value.
+        mode: One of ``"ISD+"``, ``"ISD-"``, ``"F"``, ``"H"``.
+
+    Returns:
+        Array: Symmetric real matrix ``M`` of shape
+        ``(2*(h12+1), 2*(h12+1))``.
+
+    Raises:
+        ValueError: If ``mode`` is not supported.
+    """
+    s = jnp.imag(tau)
+    c0 = jnp.real(tau)
+    tabs = c0**2 + s**2
+
+    if mode in _FH_MODES:
+        sigma = jnp.asarray(eft.periods.sigma)
+        m_isd = eft.ISD_matrix(z, jnp.conj(z))
+        base = sigma.T @ m_isd @ sigma
+        scale = 2.0 * s if mode == "H" else 2.0 * s / tabs
+        m = scale * base
+    elif mode in _PM_MODES:
+        n = eft.gauge_kinetic_matrix(z, jnp.conj(z))
+        if mode == "ISD+":
+            g = jnp.imag(n)
+            top = jnp.concatenate([-g, c0 * g], axis=1)
+            bot = jnp.concatenate([c0 * g, -tabs * g], axis=1)
+        else:  # ISD-
+            g = jnp.imag(jnp.linalg.inv(n))
+            top = jnp.concatenate([g, -c0 * g], axis=1)
+            bot = jnp.concatenate([-c0 * g, tabs * g], axis=1)
+        m = (2.0 / s) * jnp.concatenate([top, bot], axis=0)
+    else:
+        raise ValueError(f"Unknown mode {mode!r}; use one of {_ALL_MODES}.")
+
+    # Numerical roundoff can leave a zero imaginary part and tiny asymmetry.
+    # The tadpole quadratic is mathematically real and symmetric.
+    return jnp.real(0.5 * (m + m.T))
+
+
+def tadpole_quadratic_hessian(
+    eft: Any,
+    sampler: Any,
+    z: Array,
+    tau: Array,
+    mode: ISDMode,
+) -> Array:
+    r"""
+    **Description:**
+    Return the tadpole quadratic as the Hessian of the reconstructed
+    ISD-tadpole function.
+
+    The map ``u -> tadpole(ISD_sampling(u))`` is quadratic in ``u``, so
+    its Hessian at the origin is the matrix ``M``.  This routine is slower
+    than :func:`tadpole_quadratic` and is mainly useful as a verification
+    oracle or fallback for future input modes.
+
+    Args:
+        eft: ``FluxEFT``-like object exposing ``tadpole`` and
+            ``periods.sigma``.
+        sampler: ``data_sampler``-like object exposing ``ISD_sampling``.
+        z: Complex-structure moduli of shape ``(h12,)``.
+        tau: Axio-dilaton value.
+        mode: One of ``"ISD+"``, ``"ISD-"``, ``"F"``, ``"H"``.
+
+    Returns:
+        Array: Symmetric real matrix ``M`` of shape
+        ``(2*(h12+1), 2*(h12+1))``.
+    """
+    dim = jnp.asarray(eft.periods.sigma).shape[0]
+    real_dtype = jnp.result_type(jnp.real(tau), jnp.real(z))
+    complex_dtype = jnp.result_type(z, tau, 1j)
+
+    def _nflux(u: Array) -> Array:
+        full = sampler.ISD_sampling(
+            z,
+            jnp.conj(z),
+            tau,
+            jnp.conj(tau),
+            u.astype(complex_dtype),
+            mode=mode,
+            output="full",
+            vmap=False,
+        )
+        return jnp.real(eft.tadpole(jnp.real(full)))
+
+    m = jax.hessian(_nflux)(jnp.zeros(dim, dtype=real_dtype))
+    return jnp.real(0.5 * (m + m.T))
+
+
+def sample_in_ellipsoid(key: Array, m: Array, q: float | Array, n: int) -> Array:
+    r"""
+    **Description:**
+    Draw rounded integer points from a positive-definite ellipsoid.
+
+    A uniform draw ``x`` in the unit ball is mapped to
+    ``u = sqrt(2*q) M^{-1/2} x``.  Before rounding this satisfies
+    ``1/2 u.T @ M @ u <= q``.  Rounding can move some points across the
+    bound, so callers should reconstruct the full flux and re-check the
+    signed tadpole.
+
+    Args:
+        key: PRNG key.
+        m: Symmetric positive-definite matrix of shape ``(d, d)``.
+        q: Ellipsoid bound for the continuous draw.
+        n: Number of points to draw.
+
+    Returns:
+        Array: Rounded integer-valued samples with shape ``(n, d)`` and
+        the same real dtype as ``m``.
+
+    Note:
+        This routine assumes positive-definite input.  Eigenvalues are
+        floored at machine resolution before the inverse square root to
+        avoid NaNs from roundoff in numerically flat directions.
+    """
+    evals, evecs = jnp.linalg.eigh(m)
+    floor = jnp.finfo(m.dtype).eps * jnp.max(evals)
+    inv_sqrt = (evecs * (1.0 / jnp.sqrt(jnp.maximum(evals, floor)))) @ evecs.T
+    d = m.shape[0]
+    k_dir, k_rad = jax.random.split(key)
+
+    # Uniform-in-volume unit-ball draw: random direction times r^(1/d).
+    g = jax.random.normal(k_dir, (n, d), dtype=m.dtype)
+    g = g / jnp.linalg.norm(g, axis=1, keepdims=True)
+    r = jax.random.uniform(k_rad, (n, 1), dtype=m.dtype) ** (1.0 / d)
+    x = g * r
+    u_real = jnp.sqrt(2.0 * q) * (x @ inv_sqrt)
+    return jnp.round(u_real)
+

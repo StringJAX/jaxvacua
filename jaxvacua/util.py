@@ -879,7 +879,7 @@ _STATIC_KEYS: Tuple[str, ...] = (
 _PYTREE_IGNORE: frozenset = frozenset((
     "_sampler", "_sampler_kwargs",
     "_calibrated_sigmas", "_M_eigvecs", "_M_scales", "_calibration_isd_modes",
-    "_s_min", "_tr_Minv_median", "_M_cond",
+    "_s_min", "_tr_Minv_median", "_M_cond","_Q",
 ))
 
 
