@@ -2268,7 +2268,7 @@ class css:
     ########################################### MONODROMY MATRICES ##################################################################
     ###################################################################################################################################
 
-    def monodromy_matrix_single(self, b: int) -> np.ndarray:
+    def monodromy_matrix_single(self, b: int) -> Array:
         r"""
         **Description:**
         Computes the monodromy matrix :math:`T_b` for the shift :math:`z^b \to z^b + 1`.
@@ -2277,7 +2277,12 @@ class css:
 
         At LCS, uses the analytical formula from the intersection numbers,
         a-matrix, and b-vector. For other limits, falls back to a numerical
-        computation via the period vector.
+        computation via the polynomial period vector.
+
+        In the HKTY-canonical convention used by ``lcs_tree`` since the
+        2026-06-17 fix, :math:`T_b` is integer-valued and symplectic in
+        :math:`\mathrm{Sp}(2 h_{12} + 2,\,\mathbb{Z})` on every tested
+        geometry.
 
         .. note::
 
@@ -2289,16 +2294,18 @@ class css:
             b (int): Index of the modulus to shift (0-based: ``b = 0, ..., h12-1``).
 
         Returns:
-            np.ndarray: Integer monodromy matrix of shape ``(2*h12+2, 2*h12+2)``.
+            Array: Integer (``jnp.int32``) monodromy matrix of shape
+                ``(2*h12+2, 2*h12+2)``.
 
         See also: :func:`monodromy_matrix`, :func:`verify_monodromy`
         """
+
         if self.periods.limit in ["LCS", "coniLCS", "coniLCS_bulk", "coniLCS_series"]:
             return self._monodromy_matrix_LCS(b)
         else:
             return self._monodromy_matrix_numerical(b)
 
-    def monodromy_matrix(self, n) -> np.ndarray:
+    def monodromy_matrix(self, n) -> Array:
         r"""
         **Description:**
         Computes the monodromy matrix :math:`T(\vec{n})` for a general integer shift
@@ -2311,114 +2318,190 @@ class css:
             n (array-like): Integer shift vector of shape ``(h12,)``.
 
         Returns:
-            np.ndarray: Integer monodromy matrix of shape ``(2*h12+2, 2*h12+2)``.
+            Array: Integer (``jnp.int32``) monodromy matrix of shape
+                ``(2*h12+2, 2*h12+2)``.
 
         See also: :func:`monodromy_matrix_single`
         """
         n_arr = np.asarray(n, dtype=int)
         h = self.h12
-        assert n_arr.shape == (h,), f"Shift vector must have shape ({h},), got {n_arr.shape}"
+        assert n_arr.shape == (h,), (
+            f"Shift vector must have shape ({h},), got {n_arr.shape}"
+        )
 
         dim = 2 * h + 2
-        T = np.eye(dim, dtype=int)
+        T = jnp.eye(dim, dtype=jnp.int32)
 
         for b in range(h):
-            if n_arr[b] == 0:
+            exp = int(n_arr[b])
+            if exp == 0:
                 continue
             T_b = self.monodromy_matrix_single(b)
-            T = T @ np.linalg.matrix_power(T_b, int(n_arr[b]))
+            T = T @ jnp.linalg.matrix_power(T_b, exp)
 
         return T
 
-    def _monodromy_matrix_LCS(self, b: int) -> np.ndarray:
+    @partial(jit, static_argnums=(1,))
+    def _monodromy_matrix_LCS(self, b: int) -> Array:
         r"""
         **Description:**
-        Analytical monodromy matrix :math:`T_b` from LCS topological data.
+        Analytical monodromy matrix :math:`T_b` from LCS topological data
+        for the shift :math:`z^b \to z^b + 1`, in jaxvacua's period basis
+        :math:`\Pi = (\mathcal{F}_0,\,\mathcal{F}_a,\,X^0,\,X^a)`.
 
-        Uses the formula:
+        Uses the formula (with the symmetrised
+        :math:`a^{\mathrm{sym}} = (a + a^\top)/2`, since only the symmetric
+        part of :math:`a_{ij}` enters the bilinear
+        :math:`(1/2)\,a_{ij}\,X^i X^j` of :math:`F_{\mathrm{poly}}`):
 
         * :math:`T[\mathcal{F}_a, z^c] = -\kappa_{abc}`
-        * :math:`T[\mathcal{F}_a, 1] = -\kappa_{abb}/2 + a_{ab}`
+        * :math:`T[\mathcal{F}_a, 1] = -\kappa_{abb}/2 + a^{\mathrm{sym}}_{ab}`
         * :math:`T[\mathcal{F}_0, \mathcal{F}_b] = -1`
-        * :math:`T[\mathcal{F}_0, z^c] = \kappa_{bbc}/2 + a_{bc}`
+        * :math:`T[\mathcal{F}_0, z^c] = \kappa_{bbc}/2 + a^{\mathrm{sym}}_{bc}`
         * :math:`T[\mathcal{F}_0, 1] = \kappa_{bbb}/6 + 2 b_b`
 
+        For the HKTY canonical convention loaded by ``lcs_tree`` (since the
+        2026-06-17 fix in :class:`jaxvacua.lcs.lcs_tree`), ``a_matrix`` is
+        already symmetric and :math:`T_b` is integer-valued and symplectic
+        in :math:`\mathrm{Sp}(2 h_{12}+2,\,\mathbb{Z})`.  The
+        :math:`a^{\mathrm{sym}}` factor is kept as a safety net so that
+        callers passing a user-supplied asymmetric ``a_matrix`` via
+        ``lcs_tree(a_matrix=...)`` still obtain a symplectic ``T``.
+
         Args:
-            b (int): Direction index (0-based).
+            b (int): Direction index (0-based, static under JIT).
 
         Returns:
-            np.ndarray: Integer monodromy matrix.
+            Array: Integer (``jnp.int32``) monodromy matrix of shape
+                ``(2*h12+2, 2*h12+2)``.
+
+        Raises:
+            ValueError: at construction time if the raw float ``T`` differs
+                from its integer round by more than :math:`10^{-8}` — flags
+                a non-HKTY-canonical ``a_matrix`` that breaks integrality.
+
+        See also: :func:`_monodromy_matrix_numerical`
         """
         h = self.h12
         n = 2 * h + 2
-        kappa = np.array(self.lcs_tree.intnums)
-        a_mat = np.array(self.lcs_tree.a_matrix)
-        b_vec = np.array(self.lcs_tree.b_vector)
 
-        T = np.eye(n, dtype=float)
+        kappa = jnp.asarray(self.lcs_tree.intnums)
+        a_mat = jnp.asarray(self.lcs_tree.a_matrix)
+        b_vec = jnp.asarray(self.lcs_tree.b_vector)
+        a_sym = 0.5 * (a_mat + a_mat.T)
 
-        # Index map: F_0=0, F_a=1..h, X^0=h+1, z^a=h+2..2h+1
+        T = jnp.eye(n, dtype=jnp.float_)
+
+        # Index map: F_0 = 0, F_a = 1..h, X^0 = h+1, z^a = h+2..2h+1
 
         # z block: z^b -> z^b + 1
-        T[h + 2 + b, h + 1] = 1.0
+        T = T.at[h + 2 + b, h + 1].add(1.0)
 
-        # F_a block
-        for aa in range(h):
-            for c in range(h):
-                T[1 + aa, h + 2 + c] += -kappa[aa, b, c]
-            T[1 + aa, h + 1] += -0.5 * kappa[aa, b, b] + a_mat[aa, b]
+        # F_a block (vectorised over aa = 0..h-1 and c = 0..h-1):
+        #   T[1+aa, h+2+c] += -kappa[aa, b, c]
+        #   T[1+aa, h+1]   += -0.5 * kappa[aa, b, b] + a_sym[aa, b]
+        T = T.at[1:1 + h, h + 2:n].add(-kappa[:, b, :])
+        T = T.at[1:1 + h, h + 1].add(-0.5 * kappa[:, b, b] + a_sym[:, b])
 
         # F_0 row
-        T[0, 1 + b] += -1.0
-        for c in range(h):
-            T[0, h + 2 + c] += 0.5 * kappa[b, b, c] + a_mat[b, c]
-        T[0, h + 1] += kappa[b, b, b] / 6.0 + 2.0 * b_vec[b]
+        T = T.at[0, 1 + b].add(-1.0)
+        T = T.at[0, h + 2:n].add(0.5 * kappa[b, b, :] + a_sym[b, :])
+        T = T.at[0, h + 1].add(kappa[b, b, b] / 6.0 + 2.0 * b_vec[b])
 
-        return np.round(T).astype(int)
+        return jnp.round(T).astype(jnp.int32)
 
-    def _monodromy_matrix_numerical(self, b: int, n_samples: int = 15) -> np.ndarray:
+    @partial(jit, static_argnums=(1, 2))
+    def _monodromy_matrix_numerical_kernel(
+        self, b: int, n_samples: int, key: Array,
+    ) -> Array:
         r"""
         **Description:**
-        Numerical monodromy matrix :math:`T_b` computed by solving the linear system
-        :math:`T_b \cdot \Pi(z) = \Pi(z + e_b)` at multiple random points.
+        JIT'd kernel that constructs the float-valued numerical monodromy
+        matrix from the **polynomial-only** period vector
+        :math:`\Pi_{\rm poly}(z) = (F_{\rm poly}, \partial_a F_{\rm poly}, X^0, X^a)`
+        and solves the linear system
+        :math:`T_b \cdot \Pi_{\rm poly}(z_i) = \Pi_{\rm poly}(z_i + e_b)`
+        via least-squares.
+
+        Using :math:`\Pi_{\rm poly}` rather than the full period vector
+        is essential: the analytical LCS monodromy is purely classical
+        (instanton sums :math:`e^{2\pi i q_a z^a}` are invariant under
+        :math:`z^b \to z^b + 1`), and the full :math:`\Pi` can overflow on
+        sampling cubes that fall outside a geometry's Kähler cone, yielding
+        garbage :math:`T`.  Polynomial :math:`\Pi` is exact and bounded
+        everywhere.
+
+        Args:
+            b (int): Direction index (static under JIT).
+            n_samples (int): Number of sample points (static under JIT).
+            key (Array): JAX PRNG key for the sampling.
+
+        Returns:
+            Array: Float-valued monodromy matrix (pre-rounding) of shape
+                ``(2*h12+2, 2*h12+2)``.
+        """
+        h = self.h12
+        key_re, key_im = jax.random.split(key)
+        re = jax.random.uniform(key_re, (n_samples, h), minval=-0.3, maxval=0.3)
+        im = jax.random.uniform(key_im, (n_samples, h), minval=0.7, maxval=1.5)
+        zs = (re + 1j * im).astype(jnp.complex_)
+
+        def Pi_poly(z):
+            X = jnp.concatenate(
+                [jnp.array([1.0 + 0j], dtype=jnp.complex_),
+                 z.astype(jnp.complex_)]
+            )
+            Fa = jax.grad(self.periods.F_LCS_poly_per, holomorphic=True)(X)
+            return jnp.concatenate([Fa, X])
+
+        A = vmap(Pi_poly)(zs)
+        B = vmap(lambda z: Pi_poly(z.at[b].add(1.0)))(zs)
+
+        T_T, _, _, _ = jnp.linalg.lstsq(A, B, rcond=None)
+        return T_T.T.real
+
+    def _monodromy_matrix_numerical(
+        self, b: int, n_samples: int = 30, seed: int = 42,
+    ) -> Array:
+        r"""
+        **Description:**
+        Numerical monodromy matrix :math:`T_b` from a least-squares fit on
+        sampled polynomial periods.  Solves
+        :math:`T_b\cdot\Pi_{\rm poly}(z) = \Pi_{\rm poly}(z+e_b)`
+        and snaps the float result to integer.
 
         Args:
             b (int): Direction index (0-based).
             n_samples (int): Number of sample points for the linear solve.
+                Default 30; rounded up automatically for high :math:`h^{2,1}`.
+            seed (int): Seed for the JAX PRNG used to sample the linear
+                system.
 
         Returns:
-            np.ndarray: Integer monodromy matrix.
+            Array: Integer (``jnp.int32``) monodromy matrix of shape
+                ``(2*h12+2, 2*h12+2)``.
+
+        Raises:
+            ValueError: If the float-valued lstsq solution deviates from
+                integer by more than :math:`10^{-4}`.  Indicates either a
+                non-HKTY-canonical ``a_matrix`` or an ill-conditioned linear
+                system.
+
+        See also: :func:`_monodromy_matrix_LCS`
         """
-        h = self.h12
-        rng = np.random.default_rng(42)
-
-        A_rows = []
-        B_rows = []
-
-        for _ in range(n_samples):
-            z = jnp.array(rng.uniform(-0.3, 0.3, h) + 1j * rng.uniform(2, 5, h))
-            Pi_z = np.array(self.period_vector(z))
-            z_shifted = z.at[b].add(1.0)
-            Pi_shifted = np.array(self.period_vector(z_shifted))
-            A_rows.append(Pi_z)
-            B_rows.append(Pi_shifted)
-
-        A = np.array(A_rows)
-        B = np.array(B_rows)
-
-        T_T, _, _, _ = np.linalg.lstsq(A, B, rcond=None)
-        T = T_T.T
-
-        T_int = np.round(T.real).astype(int)
-
-        int_err = np.max(np.abs(T - T_int))
-        if int_err > 1e-6:
-            import warnings
-            warnings.warn(
-                f"Monodromy matrix T_{b} deviates from integer by {int_err:.2e}. "
-                f"This may indicate a problem with the period vector computation."
+        n_samples = max(int(n_samples), 4 * (2 * self.h12 + 2))
+        key = jax.random.PRNGKey(int(seed))
+        T_f = self._monodromy_matrix_numerical_kernel(b, n_samples, key)
+        T_int = jnp.round(T_f).astype(jnp.int32)
+        int_err = float(jnp.max(jnp.abs(T_f - T_int.astype(T_f.dtype))))
+        if int_err > 1e-4:
+            raise ValueError(
+                f"_monodromy_matrix_numerical: T_{b} deviates from integer "
+                f"by {int_err:.2e}.  Check that ``lcs_tree.a_matrix`` follows "
+                f"the HKTY-canonical convention "
+                f"a[I,J] = κ[max(I,J), max(I,J), min(I,J)]/2 and that the "
+                f"linear system is well-conditioned (try increasing n_samples)."
             )
-
         return T_int
 
     def conifold_monodromy_matrix(self, conifold_curve=None, conifold_index=None):
@@ -2474,22 +2557,50 @@ class css:
                 )
 
         if conifold_index is not None:
-            c = np.zeros(h, dtype=int)
-            c[conifold_index] = 1
+            c = jnp.zeros(h, dtype=jnp.int32).at[conifold_index].set(1)
         else:
-            c = np.asarray(conifold_curve, dtype=int).ravel()
-            if c.shape[0] != h:
+            c_np = np.asarray(conifold_curve, dtype=int).ravel()
+            if c_np.shape[0] != h:
                 raise ValueError(
-                    f"conifold_curve has length {c.shape[0]}, expected h12={h}."
+                    f"conifold_curve has length {c_np.shape[0]}, expected h12={h}."
                 )
+            c = jnp.asarray(c_np, dtype=jnp.int32)
 
         n = 2 * h + 2
-        T = np.eye(n, dtype=int)
+        T = jnp.eye(n, dtype=jnp.int32)
         # F_a rows (1..h), z^b columns (h+2..2h+1): += c_a c_b
-        T[1:h + 1, h + 2:n] += np.outer(c, c)
+        T = T.at[1:h + 1, h + 2:n].add(jnp.outer(c, c))
         return T
 
-    def verify_monodromy(self, b: int, z=None, tol: float = 1e-8) -> dict:
+    def _Pi_poly(self, z: Array) -> Array:
+        r"""
+        **Description:**
+        Polynomial-only period vector
+        :math:`\Pi_{\rm poly} = (F_{\rm poly},\,\partial_a F_{\rm poly},\,X^0,\,X^a)`
+        evaluated at homogeneous coords :math:`X = (1, z)`.
+
+        Used as the safe (overflow-free, instanton-free) period for monodromy
+        cross-checks.  The bare monodromy acts only on the polynomial part of
+        :math:`\Pi`; the instanton sum
+        :math:`F_{\rm inst} = \sum_q n_q\,\mathrm{Li}_3(e^{2\pi i q\cdot z})`
+        is invariant under :math:`z^b \to z^b + 1`.
+
+        Args:
+            z (Array): Complex moduli of length ``h12``.
+
+        Returns:
+            Array: Polynomial period vector of length ``2*h12+2``.
+        """
+        X = jnp.concatenate(
+            [jnp.array([1.0 + 0j], dtype=jnp.complex_),
+             jnp.asarray(z, dtype=jnp.complex_)]
+        )
+        Fa = jax.grad(self.periods.F_LCS_poly_per, holomorphic=True)(X)
+        return jnp.concatenate([Fa, X])
+
+    def verify_monodromy(
+        self, b: int, z=None, tol: float = 1e-8, mode: str = "poly",
+    ) -> dict:
         r"""
         **Description:**
         Numerically verify the monodromy matrix by checking
@@ -2497,8 +2608,18 @@ class css:
 
         Args:
             b (int): Direction index for the shift.
-            z (Array, optional): Test point. If ``None``, a random point is generated.
+            z (Array, optional): Test point. If ``None``, a random point is
+                generated in :math:`{\rm Re}\,z \in [-0.3, 0.3]`,
+                :math:`{\rm Im}\,z \in [0.7, 1.5]` (well inside any
+                reasonable Kähler cone).
             tol (float): Tolerance for the check.
+            mode (str): Which period vector to compare against:
+
+                * ``"poly"`` (default) — polynomial :math:`\Pi`, overflow-free
+                  and exact for the LCS bare monodromy.
+                * ``"full"`` — full :math:`\Pi` including instantons.  Stronger
+                  check, but may overflow when ``z`` lies outside the geometry's
+                  Kähler cone.
 
         Returns:
             dict: Dictionary with keys ``'T_b'``, ``'max_error'``, ``'passed'``.
@@ -2506,21 +2627,29 @@ class css:
         h = self.h12
         if z is None:
             rng = np.random.default_rng(123)
-            z = jnp.array(rng.uniform(-0.3, 0.3, h) + 1j * rng.uniform(2, 5, h))
+            z = jnp.array(rng.uniform(-0.3, 0.3, h) + 1j * rng.uniform(0.7, 1.5, h))
+        z = jnp.asarray(z)
 
         T_b = self.monodromy_matrix_single(b)
 
-        Pi = np.array(self.period_vector(z))
-        z_shifted = z.at[b].add(1.0)
-        Pi_shifted = np.array(self.period_vector(z_shifted))
+        if mode == "poly":
+            Pi = self._Pi_poly(z)
+            Pi_shifted = self._Pi_poly(z.at[b].add(1.0))
+        elif mode == "full":
+            Pi = jnp.asarray(self.period_vector(z))
+            Pi_shifted = jnp.asarray(self.period_vector(z.at[b].add(1.0)))
+        else:
+            raise ValueError(
+                f"verify_monodromy: mode must be 'poly' or 'full', got {mode!r}."
+            )
 
-        T_Pi = T_b @ Pi
-        error = np.max(np.abs(T_Pi - Pi_shifted))
+        T_Pi = T_b.astype(Pi.dtype) @ Pi
+        error = float(jnp.max(jnp.abs(T_Pi - Pi_shifted)))
 
         return {
-            'T_b': T_b,
-            'max_error': float(error),
-            'passed': error < tol,
+            "T_b": T_b,
+            "max_error": error,
+            "passed": error < tol,
         }
 
 
