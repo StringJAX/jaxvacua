@@ -91,3 +91,23 @@ Initial guesses
 
     data_sampler.initial_guesses
     data_sampler.initial_guesses_ISD
+
+
+Ellipsoid sampling (tadpole-feasible)
+-----------------------------------
+
+At fixed complex-structure moduli and axio-dilaton the ISD condition makes the
+full flux a linear function of the chosen input half ``u``, so the signed D3
+tadpole is a positive-definite quadratic form
+``N_flux = 1/2 u.T @ M @ u``.  The bound ``0 <= N_flux <= Q`` is then an
+ellipsoid in input-half flux space; drawing ``u`` inside it satisfies the
+tadpole by construction.  Use ``tadpole_quadratic`` to build ``M`` and
+``sample_in_ellipsoid`` to draw integer points; reconstruct the full flux with
+``data_sampler.ISD_sampling`` and re-check the signed tadpole after rounding.
+
+.. autosummary::
+    :toctree: _autosummary
+
+    tadpole_quadratic
+    tadpole_quadratic_hessian
+    sample_in_ellipsoid

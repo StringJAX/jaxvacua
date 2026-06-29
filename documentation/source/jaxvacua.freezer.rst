@@ -27,6 +27,10 @@ Reduced-EFT workflow
 4. Evaluate reduced quantities with ``superpotential``, ``DW_light``,
    ``DW_x_light``, ``dDW_x_light``, ``V_x_light``, ``dV_x_light``, and
    ``ddV_x_light``.
+5. Compute the reduced light-field mass spectrum with ``light_mass_spectrum``
+   (aliased as ``bulk_mass_spectrum`` on ``ConifoldFreezer``), passing the
+   stored vacuum point through ``x_full`` so the reduced Hessian is evaluated
+   with the heavy modulus on-shell.
 
 Index conventions
 -----------------------------------
@@ -67,6 +71,32 @@ Light-field EFT interface
     Freezer.ddV_x_light
 
 
+Reduced mass spectrum
+-----------------------------------
+
+The reduced light-field masses follow from integrating out the heavy moduli
+and solving the generalised eigenproblem
+:math:`H_{\rm eff}\,v = \lambda\,K_{\rm eff}\,v` in the real interleaved basis,
+which avoids the ill-conditioning of the full ``FluxEFT.mass_matrix`` near a
+conifold.  ``ddV_x_light`` supplies the reduced Hessian :math:`H_{\rm eff}`
+(through the ``reduction`` schemes ``"frozen"``, ``"schur"`` and ``"autodiff"``),
+``K_x_light`` and ``G_x_light`` the substituted Kähler potential and reduced
+metric :math:`K_{\rm eff}`, and ``light_mass_spectrum`` returns the spectrum
+together with its stability diagnostics as a ``LightSpectrum``.
+
+.. autosummary::
+
+    Freezer.K_x_light
+    Freezer.G_x_light
+    Freezer.light_mass_spectrum
+
+.. autosummary::
+    :toctree: _autosummary
+    :template: custom-class-template.rst
+
+    LightSpectrum
+
+
 Conifold freezer
 -----------------------------------
 
@@ -77,10 +107,12 @@ Conifold freezer
     ConifoldFreezer
 
 
-Conifold EOM
+Conifold EOM and spectrum
 -----------------------------------
 
 .. autosummary::
 
     ConifoldFreezer.solve_heavy
     ConifoldFreezer.reconstruct_full_moduli
+    ConifoldFreezer.light_mass_spectrum
+    ConifoldFreezer.bulk_mass_spectrum

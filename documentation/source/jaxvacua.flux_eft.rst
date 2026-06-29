@@ -14,9 +14,9 @@ scalar potential, and the D3-tadpole contribution. The defining
 relations are
 
 .. math::
-   :nowrap:
+   :label: eq:jaxvacua-flux-eft-01
 
-   \begin{align*}
+   \begin{aligned}
        W_{\text{GVW}}(z, \tau;\, \text{flux})
            &= \int_X G_3 \wedge \Omega
             = \bigl(F - \tau H\bigr) \cdot \Pi(z), \\[2pt]
@@ -27,7 +27,7 @@ relations are
               + (\operatorname{Im}\tau)^{-2} |D_\tau W|^2
            \right), \\[2pt]
        N_{\text{flux}} &= f^T \Sigma\, h,
-   \end{align*}
+   \end{aligned}
 
 with :math:`G_3 = F_3 - \tau H_3` the complex three-form flux and
 :math:`\Sigma` the symplectic intersection form on

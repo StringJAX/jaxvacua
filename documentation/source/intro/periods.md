@@ -17,19 +17,27 @@ The complex structure moduli space $\mathcal{M}_{\text{cs}}(X)$ is classically e
 and is identified, via mirror symmetry, with the complexified K&auml;hler moduli space
 $\mathcal{K}_{\widetilde{X}}$ of the mirror $\widetilde{X}$:
 
-$$
+
+```{math}
+:label: eq:mirrorsays
+
 \vec{\Pi}_{\text{IIB}} = \vec{\Pi}_{\text{IIA}} \equiv \vec{\Pi}\;.
-$$ (eq:mirrorsays)
+```
+
 
 In the symplectic basis $\{\alpha_A, \beta^A\}$, $A = 0, \ldots, h^{2,1}$, the periods
 of the holomorphic $(3,0)$-form $\Omega$ are
 
-$$
+
+```{math}
+:label: eq:iibperdef
+
 \vec{\Pi}_{\text{IIB}} \coloneqq \begin{pmatrix}
 \int_X \Omega \wedge \beta_A \\
 \int_X \Omega \wedge \alpha^A
 \end{pmatrix}\;.
-$$ (eq:iibperdef)
+```
+
 
 Computing these periods directly is difficult in general.
 However, when $X$ is a hypersurface in a toric variety, one can obtain the periods
@@ -46,9 +54,13 @@ $(\widetilde{\mathcal{T}}, \mathcal{T})$ of a dual pair of reflexive polytopes
 $(\Delta, \Delta^\circ)$.
 We take $X$ to be the vanishing locus of a generic anticanonical polynomial
 
-$$
+
+```{math}
+:label: eq:DefFX
+
 f(\mathbbm{t}) = \Psi^0 S_0(\mathbbm{t}) - \sum_{I=1}^m \Psi^I S_I(\mathbbm{t})\;,
-$$ (eq:DefFX)
+```
+
 
 specified in terms of $m+1$ complex parameters $\Psi^I$ and monomials $S_I(\mathbbm{t})$
 of the toric coordinates $(\mathbbm{t}^1, \ldots, \mathbbm{t}^4)$.
@@ -60,22 +72,34 @@ The anticanonical charge is $Q^a_{~0} \coloneqq \sum_I Q^a_{~I}$.
 
 Writing the holomorphic $3$-form as
 
-$$
+
+```{math}
+:label: eq:intro-periods-01
+
 \Omega = \oint_{f=0} \frac{d\mathbbm{t}^1 \wedge d\mathbbm{t}^2 \wedge d\mathbbm{t}^3 \wedge d\mathbbm{t}^4}{(2\pi i)^4 \cdot f(\mathbbm{t})}\;,
-$$
+```
+
 
 the *fundamental period* $\varpi_0(\psi)$ is defined by integrating $\Omega$ over the
 SYZ $T^3$ fibre:
 
-$$
+
+```{math}
+:label: eq:fundef
+
 \varpi_0(\psi) \coloneqq \Psi^0 \int_{T^3} \Omega = \Psi^0 \oint_{|\mathbbm{t}^1|=\epsilon} \frac{d\mathbbm{t}^1}{2\pi i} \cdots \oint_{|\mathbbm{t}^4|=\epsilon} \frac{d\mathbbm{t}^4}{2\pi i} \frac{1}{f(\mathbbm{t})}\;.
-$$ (eq:fundef)
+```
+
 
 Applying the residue theorem and multinomial expansion, one arrives at the expression
 
-$$
+
+```{math}
+:label: eq:fundamental_period
+
 \varpi_0(\psi) = \sum_{\tilde{\mathbf{q}} \in \mathcal{M}_{\widetilde{V}} \cap H^2(\widetilde{V}, \mathbb{Z})} \frac{\Gamma(1 + \tilde{q}_a Q^a_{~0})}{\prod_I \Gamma(1 + \tilde{q}_a Q^a_{~I})} \, \psi^{\tilde{\mathbf{q}}} =: \sum_{\tilde{\mathbf{q}}} c_{\tilde{\mathbf{q}}} \, \psi^{\tilde{\mathbf{q}}}\;,
-$$ (eq:fundamental_period)
+```
+
 
 where the sum runs over the Mori cone $\mathcal{M}_{\widetilde{V}}$ of the mirror toric
 variety $\widetilde{V}$, and $\psi^{\tilde{\mathbf{q}}} \coloneqq \prod_a (\psi^a)^{\tilde{q}_a}$.
@@ -87,25 +111,39 @@ All remaining periods are determined by the fundamental period
 $\varpi_0(\psi) = \sum_{\tilde{\mathbf{q}}} c_{\tilde{\mathbf{q}}} \, \psi^{\tilde{\mathbf{q}}}$
 via $\rho$-derivatives [[hep-th/9308122](https://arxiv.org/abs/hep-th/9308122)]:
 
-$$
+
+```{math}
+:label: eq:pfrelations1
+
 \varpi^a(\psi) = \sum_{\tilde{\mathbf{q}}} \left. \frac{\partial_{\rho_a}}{2\pi i} \left( c_{\tilde{\mathbf{q}}+\vec{\rho}} \, \psi^{\tilde{\mathbf{q}}+\vec{\rho}} \right) \right|_{\vec{\rho}=0}\;, \quad
 \varpi^{ab}(\psi) = \sum_{\tilde{\mathbf{q}}} \left. \frac{\partial_{\rho_a} \partial_{\rho_b}}{(2\pi i)^2} \left( c_{\tilde{\mathbf{q}}+\vec{\rho}} \, \psi^{\tilde{\mathbf{q}}+\vec{\rho}} \right) \right|_{\vec{\rho}=0}\;,
-$$ (eq:pfrelations1)
+```
 
-$$
+
+```{math}
+:label: eq:pfrelations2
+
 \varpi^{abc}(\psi) = \sum_{\tilde{\mathbf{q}}} \left. \frac{\partial_{\rho_a} \partial_{\rho_b} \partial_{\rho_c}}{(2\pi i)^3} \left( c_{\tilde{\mathbf{q}}+\vec{\rho}} \, \psi^{\tilde{\mathbf{q}}+\vec{\rho}} \right) \right|_{\vec{\rho}=0}\;.
-$$ (eq:pfrelations2)
+```
+
 
 At zeroth order in $\psi$, these reduce to
 
-$$
+
+```{math}
+:label: eq:intro-periods-02
+
 \varpi_0 \simeq 1\;, \quad \varpi^a \simeq \frac{\log(\psi^a)}{2\pi i}\;, \quad
 \frac{1}{2} \widetilde{\kappa}_{abc} \varpi^{ab} \simeq \frac{1}{2} \widetilde{\kappa}_{abc} \varpi^a \varpi^b - \frac{1}{24} \tilde{c}_a\;,
-$$
+```
 
-$$
+
+```{math}
+:label: eq:intro-periods-03
+
 \frac{1}{3!} \widetilde{\kappa}_{abc} \varpi^{abc} \simeq \frac{1}{3!} \widetilde{\kappa}_{abc} \varpi^a \varpi^b \varpi^c - \frac{1}{24} \tilde{c}_a \varpi^a + \frac{\zeta(3)}{(2\pi i)^3} \chi(\widetilde{X})\;,
-$$
+```
+
 
 in terms of the triple intersection numbers $\widetilde{\kappa}_{abc}$ of the mirror
 $\widetilde{X}$, the second Chern class integrals
@@ -121,32 +159,43 @@ intersection form of $\widetilde{X}$.
 Using these monodromies to fix all integration constants and adopting a suitable
 normalisation, one obtains the periods in an integral symplectic basis:
 
-$$
+
+```{math}
+:label: eq:period_symplectic
+
 \Pi(\psi) = \frac{1}{\varpi_0} \begin{pmatrix}
 \frac{1}{3!} \widetilde{\kappa}_{abc} \varpi^{abc} + \frac{1}{12} \tilde{c}_a \varpi^a \\
 -\frac{1}{2} \widetilde{\kappa}_{abc} \varpi^{bc} + \tilde{a}_{ab} \varpi^b \\
 \varpi_0 \\
 \varpi^a
 \end{pmatrix}\;,
-$$ (eq:period_symplectic)
+```
+
 
 where the matrix $\tilde{a}_{ab}$ is defined as
 
-$$
+
+```{math}
+:label: eq:intro-periods-04
+
 \tilde{a}_{ab} \equiv \frac{1}{2} \begin{cases}
 \widetilde{\kappa}_{aab} & a \geq b \\
 \widetilde{\kappa}_{abb} & a < b
 \end{cases}\;.
-$$
+```
 
 
 ## Gopakumar-Vafa invariants
 
 The flat coordinates $z^a$ are related to the algebraic coordinates $\psi^a$ via
 
-$$
+
+```{math}
+:label: eq:flatcoords
+
 z^a = \frac{\varpi^a}{\varpi_0} = \frac{\log(\psi^a)}{2\pi i} + \frac{1}{2\pi i} \frac{c^a(\psi)}{\varpi_0}\;,
-$$ (eq:flatcoords)
+```
+
 
 with correction terms $c^a(\psi) = \sum_{\tilde{\mathbf{q}}} c^a_{\tilde{\mathbf{q}}} \psi^{\tilde{\mathbf{q}}}$ where $c^a_{\tilde{\mathbf{q}}} = \partial_{\rho_a} c_{\tilde{\mathbf{q}}+\vec{\rho}} |_{\vec{\rho}=0}$.
 The LCS limit corresponds to $e^{2\pi i z^a} \ll 1$.
@@ -156,9 +205,13 @@ genus-zero *Gopakumar-Vafa (GV) invariants* $\mathscr{N}_{\tilde{\mathbf{q}}} \i
 [[hep-th/9809187](https://arxiv.org/abs/hep-th/9809187)],
 [[hep-th/9812127](https://arxiv.org/abs/hep-th/9812127)]:
 
-$$
+
+```{math}
+:label: eq:IIAprep
+
 \mathcal{F}_{\text{inst}}(z) = -\frac{1}{(2\pi i)^3} \sum_{\tilde{\mathbf{q}} \in \mathcal{M}(\widetilde{X})} \mathscr{N}_{\tilde{\mathbf{q}}} \, \text{Li}_3\!\left(e^{2\pi i \, \tilde{\mathbf{q}} \cdot \mathbf{z}}\right)\;,
-$$ (eq:IIAprep)
+```
+
 
 where the sum runs over effective curve classes in the Mori cone $\mathcal{M}_{\widetilde{X}}$.
 By comparing the instanton expansion {eq}`eq:IIAprep` with the period expressions, one
@@ -171,15 +224,23 @@ in [[2303.00757](https://arxiv.org/abs/2303.00757)].
 
 The prepotential $\mathcal{F}$ in the LCS patch decomposes as
 
-$$
+
+```{math}
+:label: eq:prepotential_decomp
+
 \mathcal{F}(z) = \mathcal{F}_{\text{poly}}(z) + \mathcal{F}_{\text{inst}}(z)\;,
-$$ (eq:prepotential_decomp)
+```
+
 
 with the polynomial part
 
-$$
+
+```{math}
+:label: eq:fpoly
+
 \mathcal{F}_{\text{poly}}(z) = -\frac{1}{3!} \widetilde{\kappa}_{abc} z^a z^b z^c + \frac{1}{2} \tilde{a}_{ab} z^a z^b + \frac{1}{24} \tilde{c}_a z^a + \frac{\zeta(3) \chi(\widetilde{X})}{2(2\pi i)^3}\;,
-$$ (eq:fpoly)
+```
+
 
 and the instanton part $\mathcal{F}_{\text{inst}}(z)$ given in {eq}`eq:IIAprep`, in terms
 of the polylogarithm $\text{Li}_k(x) = \sum_{n=1}^\infty x^n / n^k$.
@@ -187,14 +248,18 @@ of the polylogarithm $\text{Li}_k(x) = \sum_{n=1}^\infty x^n / n^k$.
 The polynomial terms are computed from the triple intersection numbers
 $\widetilde{\kappa}_{abc}$ of the mirror threefold $\widetilde{X}$, together with
 
-$$
+
+```{math}
+:label: eq:intro-periods-05
+
 \tilde{c}_a = \int_{\widetilde{X}} c_2(\widetilde{X}) \wedge \tilde{\beta}_a\;, \quad
 \tilde{a}_{ab} \equiv \frac{1}{2} \begin{cases}
 \widetilde{\kappa}_{aab} & a \geq b \\
 \widetilde{\kappa}_{abb} & a < b
 \end{cases}\;, \quad
 \chi(\widetilde{X}) = \int_{\widetilde{X}} c_3(\widetilde{X})\;,
-$$
+```
+
 
 for a basis $\{\tilde{\beta}_a\}_{a=1}^{h^{1,1}(\widetilde{X})}$ of
 $H^2(\widetilde{X}, \mathbb{Z})$.

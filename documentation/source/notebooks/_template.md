@@ -14,13 +14,14 @@ when in doubt about prose density or figure framing.
 ## File-naming convention
 
 * **Filename**: `<NN>_<slug>.ipynb` where `<NN>` is the global notebook
-  number (zero-padded two digits, sequential 01–16 across the four
-  thematic subdirs) and `<slug>` is `lower_snake_case`.
-* **Subdirs**: only the four thematic dirs are valid:
+  number (zero-padded two digits, sequential 01–18 across the thematic
+  subdirs) and `<slug>` is `lower_snake_case`.
+* **Subdirs**: only the five thematic dirs are valid:
   - `01_basics/` (notebooks 01–04)
   - `02_vacuum_finding/` (notebooks 05–08)
   - `03_geometry_and_limits/` (notebooks 09–11)
-  - `04_analysis_and_pipelines/` (notebooks 12–16)
+  - `04_analysis_and_pipelines/` (notebooks 12–15)
+  - `05_advanced/` (notebooks 16–19)
 * **Special**: `quickstart.ipynb` is the only unnumbered notebook (lives
   at `notebooks/quickstart.ipynb`).
 
@@ -137,9 +138,11 @@ result = ...
 
 ### Math
 
-* Inline math in `$...$`; display math in `$$...$$`.  No `\begin{align}`
-  blocks unless multi-line equations are unavoidable (Sphinx + nbconvert
-  render both, but `$$` is more portable).
+* Inline math in `$...$`; display math in `$$...$$`.  Rendered documentation
+  numbers every display equation; add an explicit equation label whenever the
+  equation is referenced from prose.  No `\begin{align}` blocks unless
+  multi-line equations are unavoidable (Sphinx + nbconvert render both, but
+  `$$` is more portable).
 * **First use** of every recurring symbol gets a short definition and, where
   useful, a link to the cross-notebook glossary at
   `notebooks/_glossary.md`.
@@ -170,6 +173,9 @@ result = ...
 * **`04_analysis_and_pipelines/`** — assume working knowledge of the upstream
   notebooks; focus on the analysis / pipeline workflow rather than API
   basics.
+* **`05_advanced/`** — assume the reader has already worked through the
+  relevant core notebook.  Keep expensive scans opt-in and document runtime
+  or memory caveats next to the controlling flags.
 
 ---
 

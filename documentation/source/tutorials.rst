@@ -38,6 +38,13 @@ Choosing a path
       Use these notebooks when you need moduli-space limits, coni-LCS
       expansions, or one-modulus model data.
 
+   .. grid-item-card:: Advanced checks
+      :link: tutorials/advanced
+      :link-type: doc
+
+      Use these notebooks for performance comparisons and literature
+      dataset validation after the core workflows are familiar.
+
 Tutorial catalogue
 ------------------
 
@@ -126,6 +133,32 @@ Analysis and pipelines
    * - :doc:`Landscape statistics <notebooks/04_analysis_and_pipelines/15_landscape_statistics>`
      - Distribution-level analysis of vacuum ensembles.
 
+Advanced and case studies
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 66
+
+   * - Notebook
+     - Use it for
+   * - :doc:`Sampling benchmarks and performance <notebooks/05_advanced/16_sampling_benchmarks_and_performance>`
+     - Runtime, memory, solver, and sampler comparisons with expensive cells disabled by default.
+   * - :doc:`Flux-bounding case studies <notebooks/05_advanced/17_flux_bounding_case_studies>`
+     - Local Dataset B and mirror-octic literature checks with full scans left opt-in.
+   * - :doc:`Hulek--Verrill attractor demo <notebooks/05_advanced/18_hulek_verrill_jaxvacua_demo>`
+     - A compact custom-period example connecting attractor points and flux-vacuum notation.
+
+Standalone helper packages
+--------------------------
+
+The experimental auto-vectorisation helper has been moved into
+``packages/auto_vectorise`` so it can be promoted to a separate GitHub and
+PyPI package.  New examples should import directly from ``auto_vectorise``;
+the JAXVacua package tree no longer contains the helper module.  The
+standalone tutorial now lives at
+``packages/auto_vectorise/docs/notebooks/01_auto_vectorisation_helpers.ipynb``.
+
 External workflow tutorials
 ---------------------------
 
@@ -143,3 +176,4 @@ and storage layer.  See the
    tutorials/vacuum_finding
    tutorials/geometry_and_limits
    tutorials/analysis_and_pipelines
+   tutorials/advanced

@@ -133,6 +133,10 @@ nb_execution_allow_errors = False
 nb_merge_streams = True
 nb_execution_timeout = 120
 
+# Number every displayed equation in the rendered documentation.  Explicit
+# labels should still be used for equations that are referenced from prose.
+math_number_all = True
+
 # -- Custom CSS / MathJax for raw-HTML figures --------------------
 # Shared stylesheet for the workflow / module-graph figures embedded
 # via raw HTML in `intro/index.md` and the API rst pages.

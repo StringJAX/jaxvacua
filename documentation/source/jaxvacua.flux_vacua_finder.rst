@@ -12,20 +12,21 @@ The vacuum-search loop wraps a :class:`jaxvacua.flux_eft.FluxEFT`
 instance and runs a Newton iteration on the F-term residual
 
 .. math::
-   :nowrap:
+   :label: eq:jaxvacua-flux-vacua-finder-01
 
-   \begin{align*}
+   \begin{aligned}
        r_I(z, \bar z, \tau, \bar\tau;\, \mathrm{flux})
            &= D_I W = \partial_I W + (\partial_I K)\, W,
               \quad I = (z^i,\, \tau), \\[2pt]
        \text{converged when } \;
            \lVert r \rVert_\infty &< \texttt{tol}.
-   \end{align*}
+   \end{aligned}
 
 For each converged point the layer also computes the bosonic
 mass-squared spectrum,
 
 .. math::
+   :label: eq:jaxvacua-flux-vacua-finder-02
 
    m^2 = \operatorname{eig}\!\left(M^2_{IJ}\right),
    \qquad
@@ -47,7 +48,7 @@ Flux vacua finder
 
 .. autosummary::
     :toctree: _autosummary
-    :template: custom-class-template.rst
+    :template: custom-class-no-inherited-template.rst
 
     FluxVacuaFinder
 
@@ -88,7 +89,7 @@ Critical-point sampling (non-SUSY)
 
 The non-SUSY workflow — sampling Gaussian-M-prior fluxes, ISD-completing
 them, refining via Newton / optax / scipy, and filtering — lives directly
-on :class:`FluxVacuaFinder` post-merge.  
+on :class:`FluxVacuaFinder`.
 
 .. autosummary::
 

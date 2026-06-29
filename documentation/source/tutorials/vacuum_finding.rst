@@ -2,7 +2,9 @@ Vacuum Finding
 ==============
 
 These tutorials cover the main flux-vacuum search workflows, from Newton
-refinement to ISD sampling and bounded-flux searches.
+refinement to ISD sampling and bounded-flux searches.  The core tutorials
+keep laptop-safe defaults; performance comparisons and literature
+reproductions live in the advanced notebooks.
 
 .. toctree::
    :maxdepth: 1

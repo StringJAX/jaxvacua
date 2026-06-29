@@ -71,9 +71,13 @@ Calabi-Yau threefold hypersurfaces in toric varieties $V$ resulting from triangu
 of trilayer polytopes admit very convenient orientifold involutions.
 In each case there exists a toric coordinate $x_1$ such that the involution defined by
 
-$$
+
+```{math}
+:label: eq:odef
+
     x_1 \to -x_1
-$$ (eq:odef)
+```
+
 
 yields, when restricted to the generic invariant hypersurface $X \subset V$, an
 orientifold with $h^{1,1}_-=h^{2,1}_+=0$, which we refer to as a **trilayer orientifold**.
@@ -81,9 +85,13 @@ All orientifolds considered in this work are of this type.
 
 Given a Calabi-Yau orientifold $X/\mathcal{I}$, the D3-brane tadpole charge is
 
-$$
+
+```{math}
+:label: eq:qdef
+
 Q_{\text{O}} =  2+h^{1,1}+h^{2,1}\,.
-$$ (eq:qdef)
+```
+
 
 A larger tadpole $Q_O$ admits more flux configurations and thus a richer landscape of
 vacua (see {doc}`flux_compactifications`).

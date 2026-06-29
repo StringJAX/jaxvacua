@@ -14,9 +14,9 @@ and the Kähler potential :math:`K(z, \bar z)` from
 matrix and the gauge-kinetic matrix:
 
 .. math::
-   :nowrap:
+   :label: eq:jaxvacua-css-01
 
-   \begin{align*}
+   \begin{aligned}
        g_{i \bar\jmath}(z, \bar z)
            &= \partial_i \partial_{\bar\jmath}\, K(z, \bar z), \\[2pt]
        M_{AB}(z, \bar z)
@@ -26,7 +26,7 @@ matrix and the gauge-kinetic matrix:
               + 2 i\, \frac{\bigl(\operatorname{Im} F\bigr)_{IK} X^K\,
                               \bigl(\operatorname{Im} F\bigr)_{JL} X^L}
                               {\bigl(\operatorname{Im} F\bigr)_{KL} X^K X^L}.
-   \end{align*}
+   \end{aligned}
 
 In the diagram, inherited inputs (light grey, from the upstream
 period layer) flow into the layer's three computed objects; the

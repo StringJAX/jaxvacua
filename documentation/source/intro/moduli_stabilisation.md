@@ -13,14 +13,39 @@ universe (the *cosmological moduli problem*).
 As described in {doc}`flux_compactifications`, three-form fluxes generate the no-scale
 scalar potential
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-01
+
 V_{\rm flux} = e^K K^{a\bar b} D_a W_{\rm flux}\, D_{\bar b}\overline{W}_{\rm flux} \geq 0
-$$
+```
+
 
 that stabilises $z^i$ and $\tau$ at the ISD locus.
 However, the Kähler moduli $T_\alpha$ (which control the volumes of four-cycles
 in $X_3$) remain flat directions at the classical level due to the no-scale structure.
 Their stabilisation requires quantum corrections — perturbative or non-perturbative.
+In a divisor basis $\{\omega_\alpha\}$ with Kähler form $J=t^\alpha\omega_\alpha$,
+the total Calabi-Yau volume and the divisor volumes are
+
+
+```{math}
+:label: eq:intro-moduli-stabilisation-kahler-volumes
+
+\mathcal{V}
+= \frac{1}{3!}\int_{X_3} J\wedge J\wedge J\;,\qquad
+\tau_\alpha
+= \operatorname{Vol}(D_\alpha)
+= \frac{1}{2}\int_{D_\alpha}J\wedge J
+= \frac{1}{2}\int_{X_3}\omega_\alpha\wedge J\wedge J\, .
+```
+
+
+Equivalently, with
+$\kappa_{\alpha\beta\gamma}=\int_{X_3}\omega_\alpha\wedge\omega_\beta\wedge\omega_\gamma$,
+one has
+$\mathcal{V}=\frac16\kappa_{\alpha\beta\gamma}t^\alpha t^\beta t^\gamma$
+and $\tau_\alpha=\partial\mathcal{V}/\partial t^\alpha$.
 
 
 ## KKLT scenario
@@ -31,9 +56,13 @@ complete moduli stabilisation in two steps, followed by an uplifting procedure.
 **Step 1: Flux stabilisation.**
 Choose fluxes such that the no-scale minimum sits at
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-02
+
 W_0 = \langle W_{\rm flux} \rangle \ll 1\;.
-$$
+```
+
 
 This fixes $z^i$ and $\tau$, leaving the Kähler moduli as flat directions.
 
@@ -41,24 +70,36 @@ This fixes $z^i$ and $\tau$, leaving the Kähler moduli as flat directions.
 Non-perturbative effects — from Euclidean D3-brane instantons wrapping four-cycles,
 or from gaugino condensation on D7-branes — generate a correction
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-03
+
 W_{\rm np} = \sum_\alpha A_\alpha\, e^{-a_\alpha T_\alpha}\;,
-$$
+```
+
 
 where $a_\alpha = 2\pi$ for a D3-instanton and $a_\alpha = 2\pi/N$ for $SU(N)$ gaugino
 condensation.
 The total superpotential is
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-04
+
 W = W_0 + W_{\rm np}\;.
-$$
+```
+
 
 For a single Kähler modulus $T = \tau_K + i\theta$ with Kähler potential
 $K = -3\log(T + \bar T)$, the scalar potential develops an **AdS minimum** at
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-05
+
 a\tau_K^* \approx -\frac{3}{2}\left(1 + \frac{W_0}{A e^{-a\tau_K^*}}\right)\;.
-$$
+```
+
 
 The small $|W_0|$ ensures $\tau_K^*$ is in the perturbative regime.
 
@@ -68,9 +109,13 @@ positive energy contribution.
 The canonical mechanism uses an **anti-D3 brane** placed at the tip of a
 Klebanov-Strassler warped throat, contributing
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-06
+
 V_{\rm up} \sim \frac{\epsilon^4}{\mathcal{V}^2}
-$$
+```
+
 
 where $\epsilon \ll 1$ is an exponential warping factor determined by the flux
 quantization in the throat.
@@ -87,34 +132,50 @@ For a Calabi-Yau with at least two Kähler moduli — a *large* modulus $\tau_b$
 controlling the overall volume $\mathcal{V} \sim \tau_b^{3/2}$ and a *small* modulus
 $\tau_s$ — the $(\alpha')^3$-corrected Kähler potential reads
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-07
+
 K = -2\log\!\left(\mathcal{V} + \frac{\hat\xi}{2}\right)\;,
-$$
+```
+
 
 where the correction coefficient is
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-08
+
 \hat\xi = -\frac{\chi(X_3)\,\zeta(3)}{2(2\pi)^3}
-$$
+```
+
 
 and is proportional to the Euler characteristic $\chi(X_3)$.
 
 Including the non-perturbative superpotential $W = W_0 + A_s\, e^{-a_s T_s}$, the
 scalar potential takes the LVS form
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-09
+
 V_{\rm LVS} \simeq
   \lambda_s \frac{\sqrt{\tau_s}\,|W_0|^2\,e^{-2a_s\tau_s}}{\mathcal{V}}
 - \mu_s \frac{|W_0|^2\,a_s\tau_s\,e^{-a_s\tau_s}}{\mathcal{V}^2}
 + \nu \frac{|W_0|^2\,\hat\xi}{\mathcal{V}^3}\;,
-$$
+```
+
 
 where $\lambda_s, \mu_s, \nu$ are calculable numerical coefficients.
 This potential has a **non-supersymmetric AdS minimum** at exponentially large volume
 
-$$
+
+```{math}
+:label: eq:intro-moduli-stabilisation-10
+
 \mathcal{V}_* \sim e^{a_s\tau_s^*}\;,
-$$
+```
+
 
 where $\tau_s^*$ is determined by $\hat\xi$ and $A_s$.
 The parametrically large volume suppresses higher-order corrections, making LVS a

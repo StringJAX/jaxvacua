@@ -18,6 +18,8 @@ In [2501.03984](https://arxiv.org/abs/2501.03984), we present deep observations 
 The core algorithm of this paper is implemented in the [`jaxvacua.flux_bounding`](../jaxvacua.flux_bounding) module. The relevant tutorials are:
 
 - **[NB08: Flux bounding](../notebooks/02_vacuum_finding/08_flux_bounding.ipynb)** — introduces bounding-box construction, systematic enumeration, stochastic bounded sampling, and the `bounded_fluxes` interface.
+- **[NB16: Sampling benchmarks and performance](../notebooks/05_advanced/16_sampling_benchmarks_and_performance.ipynb)** — compares sampler and solver choices with resource-heavy cells disabled by default.
+- **[NB17: Flux-bounding case studies](../notebooks/05_advanced/17_flux_bounding_case_studies.ipynb)** — loads the checked-in Dataset B file and runs lightweight validation checks, with full scans opt-in.
 - **[NB15: Landscape statistics](../notebooks/04_analysis_and_pipelines/15_landscape_statistics.ipynb)** — post-processing tools for ensemble-level observables and distributions.
 
 To cite our work, please use:
@@ -33,4 +35,3 @@ To cite our work, please use:
     year = "2025"
 }
 ```
-

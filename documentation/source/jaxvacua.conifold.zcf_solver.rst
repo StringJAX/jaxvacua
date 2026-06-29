@@ -13,6 +13,7 @@ Mathematical structure (notes/main.tex eq:Wtilde1Explicit,
 eq:zcf_corrected):
 
 .. math::
+   :label: eq:jaxvacua-conifold-zcf-solver-01
 
     \partial_{z_{\rm cf}} W_{\rm coni} =
         \texttt{log\_prefactor} \cdot \ln(-2\pi i\, z_{\rm cf})
@@ -21,12 +22,14 @@ eq:zcf_corrected):
 with
 
 .. math::
+   :label: eq:jaxvacua-conifold-zcf-solver-02
 
     \texttt{log\_prefactor} = (M^1 - \tau H^1) \cdot n_{\rm cf} / (2\pi i)\,,
 
 so that
 
 .. math::
+   :label: eq:jaxvacua-conifold-zcf-solver-03
 
     z_{\rm cf} = -\frac{1}{2\pi i}\,
         \exp\!\Bigl(-\bigl(\texttt{W\_log\_coeff}

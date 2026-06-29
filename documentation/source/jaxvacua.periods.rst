@@ -18,9 +18,9 @@ non-perturbative instanton sum (driven by the genus-zero
 Gopakumar–Vafa invariants :math:`n_\beta^0`):
 
 .. math::
-   :nowrap:
+   :label: eq:jaxvacua-periods-01
 
-   \begin{align*}
+   \begin{aligned}
        F_{\text{poly}}(z)
            &= -\tfrac{1}{6}\, \kappa_{ijk}\, z^i z^j z^k
               + \tfrac{1}{2}\, a_{ij}\, z^i z^j
@@ -31,14 +31,14 @@ Gopakumar–Vafa invariants :math:`n_\beta^0`):
               n_\beta^0\, \mathrm{Li}_3\!\bigl(q^{\beta}\bigr),
               \quad q^{\beta} = e^{\,2\pi i\, \beta \cdot z}, \\[2pt]
        F(z) &= F_{\text{poly}}(z) + F_{\text{inst}}(z).
-   \end{align*}
+   \end{aligned}
 
 The period vector and the Kähler potential then read
 
 .. math::
-   :nowrap:
+   :label: eq:jaxvacua-periods-02
 
-   \begin{align*}
+   \begin{aligned}
        \Pi(z)
            &= \bigl( X^0,\ X^i,\ F_i,\ F_0 \bigr),
               \quad X^0 = 1,\ X^i = z^i,\
@@ -46,7 +46,7 @@ The period vector and the Kähler potential then read
               F_0 = 2 F - z^i \partial_i F, \\[2pt]
        K(z, \bar z)
            &= -\log\!\bigl(\, i\, \Pi^\dagger \cdot \Sigma \cdot \Pi \,\bigr),
-   \end{align*}
+   \end{aligned}
 
 with :math:`\Sigma` the symplectic intersection form on
 :math:`H^3(X, \mathbb{Z})`. In the diagram, inherited inputs (light

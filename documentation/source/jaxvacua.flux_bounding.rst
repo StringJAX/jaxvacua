@@ -14,6 +14,7 @@ flux radius :math:`N_{\max}`, ``bounded_fluxes`` enumerates every
 integer flux
 
 .. math::
+   :label: eq:jaxvacua-flux-bounding-01
 
    G_3 = F_3 - \tau H_3, \qquad
    (F_3, H_3) \in \mathbb{Z}^{2(h^{1,2}+1)},
