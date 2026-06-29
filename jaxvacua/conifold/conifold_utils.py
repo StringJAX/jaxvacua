@@ -150,6 +150,7 @@ def compute_a_matrix(intnumstensor):
 
     See also: :class:`jaxvacua.lcs.lcs_tree`
     """
+    raise DeprecationWarning("compute_a_matrix is no longer used and will be removed in a future release. ")
 
     h11 = len(intnumstensor)
     return np.array([[intnumstensor[i][j][j]/2 if i<j else intnumstensor[i][i][j]/2 for j in range(h11)] for i in range(h11)])
