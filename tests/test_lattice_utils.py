@@ -49,7 +49,6 @@ from jaxvacua.conifold import (
     get_basis_change,
     get_bulk_embedding,
     get_bulk_projection,
-    compute_a_matrix,
 )
 from jaxvacua.conifold.conifold_utils import get_embedding
 
@@ -441,102 +440,13 @@ class TestGetBasisChange(TestCase):
             self.assertAllClose(reconstructed, v, atol=1e-12)
 
 
-# ==============================================================================
-#  TestGetAMatrix
-# ==============================================================================
-
-class TestGetAMatrix(TestCase):
-    r"""
-    **Description:**
-    Test suite for :func:`compute_a_matrix`, which computes the :math:`a`-matrix from
-    the triple intersection number tensor :math:`\kappa_{ijk}`.
-
-    .. admonition:: Background
-        :class: dropdown
-
-        The :math:`a`-matrix enters the quadratic term of the LCS prepotential:
-
-        .. math::
-            F_{\rm poly}(z) \supset \tfrac{1}{2}\,a_{ij}\,z^i z^j
-
-        Its entries are
-
-        .. math::
-            a_{ij} = \begin{cases}
-                \kappa_{iij}/2 & i \geq j \\
-                \kappa_{ijj}/2 & i < j
-            \end{cases}
-    """
-
-    def test_shape(self):
-        r"""
-        **Description:**
-        Verify that ``compute_a_matrix`` returns shape :math:`(n, n)` for an
-        :math:`(n, n, n)` intersection tensor.
-        """
-        for n in [2, 3, 4]:
-            kappa = np.zeros((n, n, n))
-            A = compute_a_matrix(kappa)
-            # a-matrix is square with same dimension as each axis of kappa
-            self.assertEqual(A.shape, (n, n))
-
-    def test_known_values(self):
-        r"""
-        **Description:**
-        Verify the explicit formula :math:`a_{ij} = \kappa_{iij}/2` for
-        :math:`i \geq j` and :math:`a_{ij} = \kappa_{ijj}/2` for :math:`i < j`
-        on a hand-constructed example.
-
-        Example: :math:`h^{1,2} = 2` with :math:`\kappa_{000} = 6`,
-        :math:`\kappa_{001} = 3`, :math:`\kappa_{011} = 1`, :math:`\kappa_{111} = 2`.
-        """
-        kappa = np.zeros((2, 2, 2))
-        kappa[0, 0, 0] = 6
-        kappa[0, 0, 1] = kappa[0, 1, 0] = kappa[1, 0, 0] = 3
-        kappa[0, 1, 1] = kappa[1, 0, 1] = kappa[1, 1, 0] = 1
-        kappa[1, 1, 1] = 2
-
-        A = compute_a_matrix(kappa)
-
-        # a[0,0] = kappa[0,0,0]/2 = 3 (i >= j, so kappa_{iij}/2)
-        self.assertAllClose(A[0, 0], 3.0)
-        # a[0,1] = kappa[0,1,1]/2 = 0.5 (i < j, so kappa_{ijj}/2)
-        self.assertAllClose(A[0, 1], 0.5)
-        # a[1,0] = kappa[1,1,0]/2 = 0.5 (i >= j, so kappa_{iij}/2)
-        self.assertAllClose(A[1, 0], 0.5)
-        # a[1,1] = kappa[1,1,1]/2 = 1 (i >= j, so kappa_{iij}/2)
-        self.assertAllClose(A[1, 1], 1.0)
-
-    def test_symmetric_for_symmetric_kappa(self):
-        r"""
-        **Description:**
-        For fully symmetric :math:`\kappa_{ijk}`, the :math:`a`-matrix is
-        symmetric: :math:`a_{ij} = a_{ji}`.
-
-        When :math:`\kappa` is fully symmetric (physical case), both branches
-        of the formula give the same result since
-        :math:`\kappa_{iij} = \kappa_{iji} = \kappa_{jii}`.
-        """
-        kappa = np.zeros((3, 3, 3))
-        # Fill symmetrically
-        for i in range(3):
-            for j in range(3):
-                for k in range(3):
-                    key = tuple(sorted([i, j, k]))
-                    kappa[i, j, k] = hash(key) % 10
-
-        A = compute_a_matrix(kappa)
-        # a-matrix must be symmetric for symmetric kappa
-        self.assertAllClose(A, A.T, atol=1e-14)
-
-    def test_zero_kappa(self):
-        r"""
-        **Description:**
-        Verify that zero intersection numbers give a zero :math:`a`-matrix.
-        """
-        A = compute_a_matrix(np.zeros((3, 3, 3)))
-        # All entries must be zero
-        self.assertAllClose(A, np.zeros((3, 3)))
+# NOTE: ``TestGetAMatrix`` was removed on 2026-06-17.  It exercised the
+# deprecated ``jaxvacua.conifold.conifold_utils.compute_a_matrix`` helper
+# (lower-triangular asymmetric :math:`a`-matrix from the OLD jaxvacua
+# convention).  The HKTY-canonical symmetric :math:`a`-matrix is now
+# constructed in-line in :class:`jaxvacua.lcs.lcs_tree._prepare_prepot`;
+# see :class:`tests.test_css.TestMonodromyAsymmetric` for the regression
+# net that exercises the new convention.
 
 
 if __name__ == "__main__":

@@ -271,9 +271,9 @@ class TestDataSampler(TestCase):
         compactification.
         """
         # Use the model's own D3-tadpole as the maximal allowed value
-        if self.model.D3_tadpole is None:
-            self.skipTest("D3_tadpole not set for this model")
-        Nmax = float(self.model.D3_tadpole)
+        if self.model.Q() is None:
+            self.skipTest("D3 tadpole `Q` not set for this model")
+        Nmax = float(self.model.Q())
         for s in self.samplers:
             out = s.get_fluxes(
                 self.N, mode="full", sampling_mode="tadpole_bound",
@@ -1473,6 +1473,66 @@ class TestBoundsParsing(TestCase):
                         f"col 0 out of [1, 3]: {pts[:, 0].min()}..{pts[:, 0].max()}")
         self.assertTrue((pts[:, 1] >= 2.).all() and (pts[:, 1] <= 5.).all(),
                         f"col 1 out of [2, 5]: {pts[:, 1].min()}..{pts[:, 1].max()}")
+
+
+# ==============================================================================
+# Ellipsoid sampler (``sample_in_ellipsoid``) — pure-JAX unit tests
+# ----------------------------------------------------------------------
+# Exercise the uniform-in-ellipsoid integer draw on toy positive-definite
+# matrices, with no period data: integer rounding, in-bound fraction, seeded
+# determinism, the ill-conditioned-``M`` eigenvalue floor, and jit equivalence.
+# The closed-form ``M`` vs Hessian agreement and the ``1/2 u^T M u == tadpole``
+# identity need a real ``FluxEFT`` and are exercised by mlfv's slow tests.
+# ==============================================================================
+
+
+def test_sample_in_ellipsoid_integer_and_in_bounds() -> None:
+    """Rounded points are integer-valued and (mostly) inside the ellipsoid; the pre-round draw is
+    in-bounds by construction so the post-round in-fraction is high."""
+    from jaxvacua.sampling import sample_in_ellipsoid
+
+    m = jnp.asarray(np.diag([1.0, 4.0, 9.0]))
+    q = 30.0
+    u = np.asarray(sample_in_ellipsoid(jax.random.PRNGKey(0), m, q, 4000))
+    assert np.allclose(u, np.round(u))  # integer-valued
+    nflux = 0.5 * np.einsum("ni,ij,nj->n", u, np.asarray(m), u)
+    assert (nflux >= 0).all()
+    assert np.mean(nflux <= q) > 0.5  # high in-bound fraction after rounding
+
+
+def test_sample_in_ellipsoid_is_seeded_deterministic() -> None:
+    from jaxvacua.sampling import sample_in_ellipsoid
+
+    m = jnp.asarray(np.array([[3.0, 1.0], [1.0, 2.0]]))
+    a = sample_in_ellipsoid(jax.random.PRNGKey(7), m, 12.0, 256)
+    b = sample_in_ellipsoid(jax.random.PRNGKey(7), m, 12.0, 256)
+    c = sample_in_ellipsoid(jax.random.PRNGKey(8), m, 12.0, 256)
+    assert np.array_equal(np.asarray(a), np.asarray(b))  # same key -> identical
+    assert not np.array_equal(np.asarray(a), np.asarray(c))  # different key -> different
+
+
+def test_sample_in_ellipsoid_clamps_ill_conditioned_M() -> None:
+    """A spurious non-positive eigenvalue (the float32 thin-cone-wall artefact) must be floored, not
+    turned into a NaN/inf flux (which the caller would silently drop, starving the attempt loop)."""
+    from jaxvacua.sampling import sample_in_ellipsoid
+
+    m = jnp.asarray(np.diag([-1e-9, 1.0, 50.0]))  # a non-positive eigenvalue (float32 artefact)
+    u = np.asarray(sample_in_ellipsoid(jax.random.PRNGKey(0), m, 20.0, 512))
+    assert np.isfinite(u).all()  # the eps*max(eval) floor prevents 1/sqrt(<=0) = NaN/inf
+    assert np.allclose(u, np.round(u))
+
+
+def test_sample_in_ellipsoid_jit_matches_eager() -> None:
+    """The sampler is jit-able (perf rule); jit output matches eager for the same key."""
+    from functools import partial
+
+    from jaxvacua.sampling import sample_in_ellipsoid
+
+    m = jnp.asarray(np.diag([2.0, 5.0]))
+    jitted = jax.jit(partial(sample_in_ellipsoid, n=512))
+    a = np.asarray(jitted(jax.random.PRNGKey(1), m, 8.0))
+    b = np.asarray(sample_in_ellipsoid(jax.random.PRNGKey(1), m, 8.0, 512))
+    assert np.array_equal(a, b)
 
 
 if __name__ == "__main__":

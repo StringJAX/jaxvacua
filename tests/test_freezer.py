@@ -42,7 +42,7 @@ from util import *
 jax.config.update("jax_enable_x64", True)
 
 sys.path.append("./../")
-from jaxvacua.freezer import Freezer, ConifoldFreezer
+from jaxvacua.freezer import Freezer, ConifoldFreezer, LightSpectrum
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -455,6 +455,222 @@ class TestConifoldFreezerIntegration(TestCase):
         """
         self.assertEqual(self.freezer.ncf,
                          int(self.model.lcs_tree.conifold.ncf))
+
+
+# ==========================================================================
+#  Reduced light-field mass spectrum
+# ==========================================================================
+def _manual_schur(H, h12):
+    """Reference Schur complement of the full real Hessian on the (aligned)
+    conifold block ``[0, 1]``: ``H_bb - H_bcf inv(H_cfcf) H_cfb``."""
+    cf = [0, 1]
+    bk = list(range(2, 2 * (h12 + 1)))
+    A = H[np.ix_(bk, bk)]
+    B = H[np.ix_(cf, bk)]
+    C = H[np.ix_(cf, cf)]
+    return A - B.T @ np.linalg.inv(C) @ B
+
+
+@_NEEDS_INT_MODEL
+class TestConifoldFreezerMassSpectrum(TestCase):
+    r"""
+    Tests for the reduced light-field mass API of
+    :class:`jaxvacua.freezer.ConifoldFreezer`
+    (``K_x_light`` / ``G_x_light`` / ``ddV_x_light(reduction=...)`` /
+    ``light_mass_spectrum``), on the ``"aule"`` coniLCS fixture
+    (``conifold_basis=True``, ``maximum_degree=2``).
+
+    The fixture point is a PFV seed, *not* an on-shell minimum, so the physical
+    spectrum (positivity, reduction agreement at a vacuum) is covered separately
+    on stored vacua.  Here we assert the exact algebraic identities (frozen
+    selection block, Schur complement), metric positivity, and the API contract
+    (input validation, the on-shell screen, eigensolver backends, and the
+    on-shell ``apply_correction=True`` default), all of which hold off-shell.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model = _INT_MODELS.bulk
+        cls.freezer = ConifoldFreezer(cls.model)
+        cls.flux = jnp.asarray(_INT_PFV.flux)
+        h12 = len(_INT_MVEC0)
+        cls.h12 = h12
+        cls.dim = 2 * (h12 - 1) + 2          # 2 * n_light + 2
+        x_full = jnp.asarray(_INT_PFV.x)
+        cls.x_bulk = jnp.concatenate([x_full[2:2 * h12], x_full[2 * h12:]])
+        cls.BIG = 1e9                         # dw_tol to bypass the on-shell screen
+        # Reconstructed full point (on-shell heavy solve) shared by parity tests.
+        cls.x_full_on = np.asarray(
+            cls.freezer._real_light_to_full(cls.x_bulk, cls.flux, apply_correction=True))
+        cls.ddV_full = np.asarray(
+            cls.model.ddV_x(jnp.asarray(cls.x_full_on), cls.flux, noscale=True))
+
+    # ---- exact algebraic identities (hold off-shell) ----------------------
+    def test_ddV_x_light_frozen_is_selection_block(self):
+        r"""``reduction="frozen"`` returns :math:`J^T(\nabla\nabla V)J`."""
+        H = np.asarray(self.freezer.ddV_x_light(
+            self.x_bulk, self.flux, reduction="frozen", apply_correction=True))
+        J = np.asarray(self.freezer._real_light_jacobian)
+        self.assertAllClose(H, J.T @ self.ddV_full @ J, atol=1e-10, rtol=1e-10)
+        chex.assert_shape(H, (self.dim, self.dim))
+
+    def test_ddV_x_light_schur_matches_manual_schur(self):
+        r"""``reduction="schur"`` equals the Schur complement of the full
+        Hessian on the conifold block, evaluated at the same reconstructed
+        point."""
+        H = np.asarray(self.freezer.ddV_x_light(
+            self.x_bulk, self.flux, reduction="schur", apply_correction=True))
+        ref = _manual_schur(self.ddV_full, self.h12)
+        rel = np.max(np.abs(H - ref)) / max(1e-30, np.max(np.abs(ref)))
+        self.assertLess(rel, 1e-8, msg=f"rel={rel:.2e}")
+
+    def test_ddV_x_light_autodiff_finite(self):
+        r"""``reduction="autodiff"`` (Hessian through the heavy solve) is finite
+        with the correct shape."""
+        H = np.asarray(self.freezer.ddV_x_light(
+            self.x_bulk, self.flux, reduction="autodiff", apply_correction=True))
+        chex.assert_shape(H, (self.dim, self.dim))
+        self.assertTrue(bool(np.all(np.isfinite(H))))
+
+    def test_G_x_light_real_symmetric_pd(self):
+        r"""The reduced Kähler metric is a real, symmetric, positive-definite
+        matrix of the right shape."""
+        G = np.asarray(self.freezer.G_x_light(
+            self.x_bulk, self.flux, apply_correction=True))
+        chex.assert_shape(G, (self.dim, self.dim))
+        self.assertAllClose(G.imag if np.iscomplexobj(G) else 0.0 * G,
+                            0.0 * G, atol=1e-12)
+        self.assertAllClose(G, G.T, atol=1e-10, rtol=1e-10)
+        self.assertTrue(bool(np.min(np.linalg.eigvalsh(G)) > 0.0),
+                        msg=f"min eig = {np.min(np.linalg.eigvalsh(G)):.3e}")
+
+    def test_G_x_light_differs_from_bulk_submatrix(self):
+        r"""The substituted reduced metric differs from the bare bulk submatrix
+        of the full Kähler metric (the chain-rule / cs-dilaton-mixing terms)."""
+        from jaxvacua.freezer import _kahler_metric_real_interleaved
+        z, cz, tau, ctau = self.model._convert_real_to_complex(
+            jnp.asarray(self.x_full_on))
+        KM = np.asarray(self.model.kahler_metric(z, cz, tau, ctau))
+        keep = list(range(1, self.h12)) + [self.h12]            # drop z_cf, keep tau
+        G_sub = np.asarray(_kahler_metric_real_interleaved(
+            jnp.asarray(KM[np.ix_(keep, keep)])))
+        G = np.asarray(self.freezer.G_x_light(
+            self.x_bulk, self.flux, apply_correction=True))
+        self.assertGreater(np.max(np.abs(G - G_sub)), 1e-9)
+
+    # ---- API contract -----------------------------------------------------
+    def test_light_mass_spectrum_returns_lightspectrum_real(self):
+        r"""With the screen bypassed the pipeline returns a populated
+        :class:`LightSpectrum` with real, finite masses and the diagnostics."""
+        s = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG)
+        self.assertIsInstance(s, LightSpectrum)
+        self.assertEqual(s.masses.size, self.dim)
+        self.assertTrue(bool(np.all(np.isfinite(s.masses))))
+        for key in ("cond_Keff", "m2_dynamic_range", "n_modes"):
+            self.assertIn(key, s.info)
+
+    def test_x_full_evaluates_hessian_on_shell(self):
+        r"""Passing ``x_full`` evaluates the ``schur``/``frozen`` Hessian at that
+        point (the stored, on-shell vacuum), overriding the analytic re-solve."""
+        xf = jnp.asarray(self.x_full_on)
+        H = np.asarray(self.freezer.ddV_x_light(
+            self.x_bulk, self.flux, reduction="schur", x_full=xf))
+        ddV = np.asarray(self.model.ddV_x(xf, self.flux, noscale=True))
+        ref = _manual_schur(ddV, self.h12)
+        self.assertLess(np.max(np.abs(H - ref)) / max(1e-30, np.max(np.abs(ref))), 1e-8)
+        # a different x_full yields a different Hessian -> it is genuinely used
+        xf2 = xf.at[2].add(0.05)
+        H2 = np.asarray(self.freezer.ddV_x_light(
+            self.x_bulk, self.flux, reduction="schur", x_full=xf2))
+        self.assertGreater(np.max(np.abs(H - H2)), 1e-6)
+
+    def test_screen_uses_full_residual(self):
+        r"""The on-shell screen stores the FULL F-term residual (heavy direction
+        included), not the light projection -- so a wrong heavy solve is flagged
+        rather than silently returning a tachyon."""
+        xf = jnp.asarray(self.x_full_on)
+        s = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", x_full=xf, dw_tol=self.BIG)
+        full = float(jnp.max(jnp.abs(self.model.DW_x(xf, self.flux))))
+        self.assertAlmostEqual(s.dw_residual, full, places=10)
+
+    def test_apply_correction_default_is_true(self):
+        r"""The mass-spectrum default reconstructs ``z_cf`` with
+        ``apply_correction=True`` (the on-shell value): the default result
+        matches the explicit ``True`` and differs from ``False``."""
+        kw = dict(reduction="schur", dw_tol=self.BIG)
+        s_def = self.freezer.light_mass_spectrum(self.x_bulk, self.flux, **kw)
+        s_on = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, apply_correction=True, **kw)
+        s_off = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, apply_correction=False, **kw)
+        self.assertAllClose(s_def.masses, s_on.masses, atol=1e-10, rtol=1e-8)
+        self.assertGreater(np.max(np.abs(s_def.masses - s_off.masses)), 1e-6)
+
+    def test_eig_backend_scipy_jax_agree(self):
+        r"""The default SciPy and the opt-in JAX (Cholesky) eigensolver agree on
+        a positive-definite reduced problem."""
+        a = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG,
+            eig_backend="scipy")
+        b = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG,
+            eig_backend="jax")
+        # the JAX backend needs a PD metric; G is PD here (tested above)
+        self.assertAllClose(a.masses, b.masses, atol=1e-8, rtol=1e-6)
+
+    def test_generalised_eigvals_raises_on_non_pd_metric(self):
+        r"""Both eigensolver backends raise ``LinAlgError`` for a non-PD metric
+        (the JAX Cholesky NaN is surfaced, not returned silently)."""
+        H = np.eye(2)
+        K = np.diag([1.0, -2.0])
+        for backend in ("scipy", "jax"):
+            with self.assertRaises(np.linalg.LinAlgError):
+                ConifoldFreezer._generalised_eigvals(H, K, backend)
+
+    def test_off_shell_point_is_flagged(self):
+        r"""The PFV seed is off-shell; the default full-residual screen rejects it
+        with an empty, flagged spectrum (rather than a silent spurious tachyon)."""
+        s = self.freezer.light_mass_spectrum(self.x_bulk, self.flux,
+                                             reduction="schur")
+        self.assertEqual(s.masses.size, 0)
+        self.assertEqual(s.info.get("reason"), "off-shell")
+        self.assertFalse(s.stable)
+        self.assertGreater(s.dw_residual, 1e-4)   # screened on the full residual
+
+    def test_invalid_reduction_and_backend_raise(self):
+        r"""Bad ``reduction`` / ``eig_backend`` strings fail fast with
+        ``ValueError`` (validated up front)."""
+        with self.assertRaises(ValueError):
+            self.freezer.light_mass_spectrum(self.x_bulk, self.flux,
+                                             reduction="bogus", dw_tol=self.BIG)
+        with self.assertRaises(ValueError):
+            self.freezer.light_mass_spectrum(self.x_bulk, self.flux,
+                                             eig_backend="bogus", dw_tol=self.BIG)
+        with self.assertRaises(ValueError):
+            self.freezer.ddV_x_light(self.x_bulk, self.flux, reduction="bogus")
+
+    def test_real_heavy_jacobian_complements_light(self):
+        r"""``[J_heavy | J_light]`` is a square, invertible change of basis, and
+        in the aligned basis ``J_heavy`` selects the conifold rows ``[0, 1]``."""
+        J_h = np.asarray(self.freezer._real_heavy_jacobian)
+        J_l = np.asarray(self.freezer._real_light_jacobian)
+        R = np.hstack([J_h, J_l])
+        self.assertEqual(R.shape[0], R.shape[1])
+        self.assertGreater(abs(np.linalg.det(R)), 1e-10)
+        # aligned basis: heavy Jacobian selects real rows 0, 1
+        self.assertAllClose(J_h, np.eye(2 * (self.h12 + 1))[:, [0, 1]], atol=0.0)
+
+    def test_bulk_mass_spectrum_aliases_light(self):
+        r"""``bulk_mass_spectrum`` is the conifold-vocabulary alias of
+        ``light_mass_spectrum`` and returns the identical spectrum."""
+        a = self.freezer.light_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG)
+        b = self.freezer.bulk_mass_spectrum(
+            self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG)
+        self.assertAllClose(a.masses, b.masses, atol=0.0)
 
 
 if __name__ == "__main__":

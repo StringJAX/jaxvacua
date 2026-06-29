@@ -118,7 +118,7 @@ class FluxEFT(css):
             **kwargs: Additional keyword arguments.
             
         Attributes:
-            D3_tadpole (int): Maximum allowed D3-tadpole.
+            Q (int): Maximum allowed D3-tadpole.
             n_fluxes (int): Number of fluxes.
             
         """
@@ -149,16 +149,30 @@ class FluxEFT(css):
             **kwargs
         )
         
-        if Q is None:
-            warnings.warn("Tadpole was set to the maximum possible value, which may not be the true D3-tadpole for the orientifold!")
-            self.D3_tadpole = self.lcs_tree.h11+self.lcs_tree.h12+2
-        else:
-            self.D3_tadpole = Q
+        self._Q = Q
+        
 
         self.n_fluxes = self._dimension_H3_tot
+        self.flux_dim = 2 * self.n_fluxes
         self.axion_fd = kwargs.get("axion_fd", (-0.5, 0.5))
         
+    def Q(self) -> int | None:
+        r"""
+        **Description:**
+        Returns the D3-tadpole for the flux sector.
         
+        Returns:
+            int: D3-tadpole for the flux sector.
+        """
+        if self._Q is None:
+            
+            if type(self.lcs_tree.h11) == int and type(self.lcs_tree.h12) == int:
+                warnings.warn("Tadpole was set to the maximum possible value, which may not be the true D3-tadpole for the orientifold!")
+                self._Q = self.lcs_tree.h11+self.lcs_tree.h12+2
+            else:
+                self._Q = None
+                
+        return self._Q
 
     def __repr__(self) -> str:
         r"""
@@ -438,6 +452,9 @@ class FluxEFT(css):
 
         See also: :func:`map_to_fd_tau`, :func:`monodromy_matrix`
         """
+        
+        if moduli is None or tau is None or fluxes is None:
+            raise ValueError("map_to_fd: moduli, tau, and fluxes must not be None.")
 
         lo, hi = axion_fd if axion_fd is not None else self.axion_fd
 
@@ -3673,10 +3690,16 @@ class FluxEFT(css):
         
     H = hessian
 
-    @partial(jit, static_argnums = (6,7,8,))
+    @partial(jit, static_argnums = (6,7,))
     def mass_matrix(
-        self, moduli: Array, moduli_c: Array, tau: complex, tau_c: complex, fluxes: Array,
-        mode: str = None, noscale: bool = True, use_real_derivatives: bool = False
+        self, 
+        moduli: Array, 
+        moduli_c: Array, 
+        tau: complex, 
+        tau_c: complex, 
+        fluxes: Array,
+        mode: str = None, 
+        noscale: bool = True
         ) -> Array:
         r"""
         
@@ -3780,31 +3803,44 @@ class FluxEFT(css):
         
         """
         
+        # Check if the mode is valid
         modes=[None, "SUSY", "real"]
         if mode not in modes:
             raise ValueError(f"Cannot determine `mode` to compute Hessian!\
                     `mode` should be one of {modes}, but got {mode}.")
         
+        # Compute Kähler metric
+        KM = self.kahler_metric(moduli, moduli_c, tau, tau_c)
+        
+        # Set dimension H3
+        N = self.dimension_H3
+        
         # Alternative method:
-        # THIS IS OFF BY FACTOR OF 2. WHY? -> Normalisation of complex vs. real scalar:
+        # Normalisation of complex vs. real scalar:
         # Complex scalar: phi = (a+i*b)/sqrt(2)
         # This implies: m^2 phi*phi^dagger = 1/2 m^2 * (a^2+b^2).
         if mode=="real":
-            KM = self.kahler_metric(moduli, moduli_c, tau, tau_c)
-            diagonalizer = jnp.linalg.cholesky(jnp.linalg.inv(KM))
-            SP_hessian = self.hessian(moduli, moduli_c, tau, tau_c,fluxes,noscale=noscale,mode="real")
-
-            return 1/2*jnp.block([[diagonalizer.T@SP_hessian[:self.dimension_H3,:self.dimension_H3]@diagonalizer,diagonalizer.T@SP_hessian[:self.dimension_H3,self.dimension_H3:]@diagonalizer],
-                             [diagonalizer.T@SP_hessian[self.dimension_H3:,:self.dimension_H3]@diagonalizer,diagonalizer.T@SP_hessian[self.dimension_H3:,self.dimension_H3:]@diagonalizer]])
-
             
-        
-        KM = self.kahler_metric(moduli, moduli_c, tau, tau_c)
-        
+            # Compute the diagonalizer of the Kähler metric
+            diagonalizer = jnp.linalg.cholesky(jnp.linalg.inv(KM))
+            
+            # Compute the Hessian of the scalar potential in the real basis
+            SP_hessian = self.hessian(moduli, moduli_c, tau, tau_c,fluxes,noscale=noscale,mode="real")
+            
+            # dV_x is interleaved (Re z1, Im z1, Re z2, Im z2, ...);
+            # reorder to split (Re z1, Re z2, ..., | Im z1, Im z2, ...) which the
+            # block slicing below assumes.
+            perm = jnp.concatenate([2 * jnp.arange(N), 2 * jnp.arange(N) + 1])   # evens, then odds
+            SP_hessian = SP_hessian[perm][:, perm]
+
+            return 1/2*jnp.block([[diagonalizer.T@SP_hessian[:N,:N]@diagonalizer,diagonalizer.T@SP_hessian[:N,N:]@diagonalizer],
+                             [diagonalizer.T@SP_hessian[N:,:N]@diagonalizer,diagonalizer.T@SP_hessian[N:,N:]@diagonalizer]])
+            
+        # Compute the eigenvalues and eigenvectors of the Kähler metric
         eigvals, eigvecs = jnp.linalg.eigh(KM)
         
         # For canonical normalisation, we have to also absorb the eigenvalue in the basis change
-        eigenvec_mat = jnp.matmul(eigvecs,jnp.sqrt(eigvals)*jnp.identity(self.dimension_H3))
+        eigenvec_mat = jnp.matmul(eigvecs,jnp.sqrt(eigvals)*jnp.identity(N))
 
         # The new normalised eigenvectors are the columns of `eigenvec_mat`: eigenvec_mat[:,i]
 
@@ -3812,8 +3848,12 @@ class FluxEFT(css):
         eigenvec_mat_inv = jnp.linalg.inv(eigenvec_mat)
 
         # Stack the transformation matrix together with its conjugate -> we work with a field vector Phi = (z^i, \overline{z}^i)
-        eigenvec_mat_stacked1 = jnp.hstack( ( eigenvec_mat_inv.T, jnp.zeros((self.dimension_H3,self.dimension_H3)) ) )
-        eigenvec_mat_stacked2=jnp.hstack( ( jnp.zeros((self.dimension_H3,self.dimension_H3)) , jnp.conj(eigenvec_mat_inv.T) ) )
+        eigenvec_mat_stacked1 = jnp.hstack( ( eigenvec_mat_inv.T, jnp.zeros((N,N)) ) )
+        
+        # Stack the transformation matrix together with its conjugate -> we work with a field vector Phi = (z^i, \overline{z}^i)
+        eigenvec_mat_stacked2=jnp.hstack( ( jnp.zeros((N,N)) , jnp.conj(eigenvec_mat_inv.T) ) )
+        
+        # Stack the two matrices together to form the full transformation matrix
         eigenvec_mat_stacked=jnp.vstack( ( eigenvec_mat_stacked1, eigenvec_mat_stacked2 ) )
 
 

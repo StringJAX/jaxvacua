@@ -1473,10 +1473,10 @@ class TestFluxEFT(TestCase):
             msg=f"Solution tadpole must be non-negative, got {float(tadpole_sol)}"
         )
         self.assertTrue(
-            float(tadpole_sol) <= float(self.model.D3_tadpole) + 1e-6,
+            float(tadpole_sol) <= float(self.model.Q()) + 1e-6,
             msg=(
                 f"Solution tadpole {float(tadpole_sol)} exceeds "
-                f"model bound {float(self.model.D3_tadpole)}"
+                f"model bound {float(self.model.Q())}"
             )
         )
 
@@ -1854,6 +1854,89 @@ class TestFluxEFT(TestCase):
                 f"min = {float(jnp.min(eigvals_sol.real)):.4e}"
             )
         )
+
+    @pytest.mark.slow
+    def test_mass_matrix_all_modes_agree_at_susy(self):
+        r"""
+        **Description:**
+        At the known SUSY minimum the canonically normalised mass matrix must
+        return the SAME physical spectrum for every mode accepted by
+        :func:`mass_matrix` — ``None`` (general Hessian), ``"SUSY"`` (SUGRA
+        SUSY-locus formula) and ``"real"`` (real-basis Hessian).  For each mode
+        the matrix must have the correct shape, a real spectrum (it is built in
+        the doubled :math:`(z,\bar z)` basis and diagonalised with the general
+        eigensolver, cf. :func:`test_mass_matrix`) and no tachyons
+        (:math:`m^2 \geq 0`).
+
+        .. note::
+            The shared fixture is a *real* Kähler-metric LCS minimum, so the
+            three modes agree to machine precision here.  Agreement on a
+            *complex* Kähler-metric vacuum is a separate, known open issue (the
+            ``None``/``"SUSY"`` canonical congruence uses a transpose where a
+            conjugate transpose is required, which only matters when
+            :math:`\mathrm{Im}\,K_{I\bar J}\neq 0`) — see
+            ``private/mass_spectrum_findings_2026-06-28.md``.  Do not extend this
+            test to a complex-:math:`K` vacuum until that is fixed.
+        """
+        dim = 2 * (self.model.h12 + 1)
+        args = (self.zsol, self.czsol, self.tausol, self.ctausol, self.f_solution)
+
+        spectra = {}
+        for mode in (None, "SUSY", "real"):
+            # ``mode`` is a static string argument and ``mass_matrix`` is already
+            # JIT-compiled internally, so we call it directly rather than through
+            # the ``chex`` variant wrapper (an outer JIT would try to trace the
+            # string and fail).
+            M = self.model.mass_matrix(*args, mode)
+            chex.assert_shape(M, (dim, dim))
+
+            eigvals = jnp.linalg.eigvals(M)
+            scale = jnp.maximum(1.0, jnp.max(jnp.abs(eigvals.real)))
+            # the canonical spectrum is real
+            self.assertTrue(
+                bool(jnp.max(jnp.abs(eigvals.imag)) <= 1e-6 * scale),
+                msg=(f"mode={mode}: spectrum is not real, "
+                     f"max|Im| = {float(jnp.max(jnp.abs(eigvals.imag))):.3e}")
+            )
+            spectra[mode] = jnp.sort(eigvals.real)
+            # no tachyons at a SUSY minimum
+            self.assertTrue(
+                bool(jnp.all(spectra[mode] >= -1e-6 * scale)),
+                msg=(f"mode={mode}: negative eigenvalue at SUSY minimum, "
+                     f"min = {float(jnp.min(spectra[mode])):.3e}")
+            )
+
+        # all three modes return the same canonical spectrum at the minimum
+        self.assertAllClose(spectra["SUSY"], spectra[None], rtol=1e-06, atol=1e-06)
+        self.assertAllClose(spectra["real"], spectra[None], rtol=1e-06, atol=1e-06)
+
+    @pytest.mark.slow
+    def test_mass_matrix_real_vs_none_generic(self):
+        r"""
+        **Description:**
+        Away from the SUSY locus, ``mode="real"`` and ``mode=None`` must still
+        return the same scalar-potential mass spectrum.  This is the sharp
+        regression guard for the real-basis layout handling in
+        :func:`mass_matrix`: the real Hessian ``ddV_x`` uses an *interleaved*
+        :math:`(\mathrm{Re}\,z_1,\mathrm{Im}\,z_1,\ldots)` layout that must be
+        de-interleaved before the block normalisation.  Off the SUSY locus there
+        is no accidental degeneracy to mask a layout error, so a mismatch here
+        would catch a regression that the at-minimum test could miss.
+
+        ``mode="SUSY"`` is intentionally excluded: it assumes :math:`D_I W = 0`
+        and is not valid at a generic point.
+        """
+        dim = 2 * (self.model.h12 + 1)
+        args = (self.z, self.cz, self.tau, self.ctau, self.f)
+
+        M_none = self.model.mass_matrix(*args, None)
+        M_real = self.model.mass_matrix(*args, "real")
+        chex.assert_shape(M_none, (dim, dim))
+        chex.assert_shape(M_real, (dim, dim))
+
+        spec_none = jnp.sort(jnp.linalg.eigvals(M_none).real)
+        spec_real = jnp.sort(jnp.linalg.eigvals(M_real).real)
+        self.assertAllClose(spec_real, spec_none, rtol=1e-06, atol=1e-06)
 
     # ==========================================================================
     #  17.  ISD condition  ⋆ G_3 = i G_3

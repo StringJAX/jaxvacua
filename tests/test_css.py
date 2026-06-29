@@ -1834,6 +1834,231 @@ class TestMonodromy(TestCase):
 
         with self.assertRaises(ValueError):
             self.model.conifold_monodromy_matrix(conifold_curve=np.array([1, 0, 0]))
-            
+
+
+# ==============================================================================
+#  TestMonodromyAsymmetric
+# ==============================================================================
+
+class TestMonodromyAsymmetric(TestCase):
+    r"""
+    **Description:**
+    Regression net for the monodromy machinery on a Calabi-Yau whose stored
+    topological data exercises the off-diagonal of the symmetrisation routine.
+
+    The bundled ``model_ID=1`` (CP[1,1,1,6,9]) of :class:`TestMonodromy` has
+    a fully-symmetric a-matrix and is therefore blind to the
+    2026-06-17 a-matrix asymmetry bug (jaxvacua issue uncovered while
+    building the ``map_to_fd`` regression: the old LCS loader used
+    ``a[I,J] = κ[I,J,J]/2`` for all ``I,J``, an asymmetric form whose
+    symmetrised off-diagonal can be half-integer and produced
+    half-integer entries in ``T``; rounding the result to int gave a
+    non-symplectic matrix that broke ``T·Π(z) = Π(z+e_b)`` by O(1)).
+
+    The fixture below hard-codes the topological data of the TDF
+    ``h12=2, ks_id=29, triang_id=0`` geometry so the test runs without
+    a stringforge vault, locked against dataset drift.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+
+        # TDF h12=2, ks_id=29, triang_id=0:
+        #   κ_{ijk} (full 3-tensor, symmetric in i,j,k),
+        #   c_2_a (= 24 · b_a in the HKTY convention),
+        #   chi = -2*(h11 - h12) = +4 since h11 = 4, h12 = 2.
+        #
+        # κ as a (2, 2, 2) array:
+        #     κ[0,0,0] = 4,   κ[1,1,1] = -2,
+        #     κ[0,0,1] = κ[0,1,0] = κ[1,0,0] = 2,
+        #     κ[0,1,1] = κ[1,0,1] = κ[1,1,0] = 0.
+        intnums = jnp.array(
+            [[[4, 2], [2, 0]],
+             [[2, 0], [0, -2]]],
+            dtype=jnp.float_,
+        )
+        # c_2 chosen so that 24 b_a = c_{2,a} reproduces the stored
+        # b_vector = (13/6, 7/6) of the TDF parquet row.
+        c2 = jnp.array([52.0, 28.0])
+
+        cls.lcs_tree = jaxvacua.lcs_tree(
+            h11=4, h12=2,
+            intnums=intnums,
+            c2=c2,
+            model_type="KS",
+            model_ID="TDF_h12=2_ks=29_triang=0",  # non-int avoids the
+                                                  # bundled-CP[1,1,1,6,9]
+                                                  # a-matrix override.
+            limit="LCS",
+        )
+
+        cls.model = jaxvacua.FluxEFT(
+            lcs_tree_input=cls.lcs_tree, h12=2, maximum_degree=0,
+            limit="LCS",
+        )
+        cls.h = cls.model.h12
+        cls.dim = 2 * cls.h + 2
+        # Sample inside the Kähler cone — avoids the polylog overflow that
+        # bites in the asymmetric-a geometries at large ``Im z``.
+        rng = np.random.default_rng(99)
+        cls.z = jnp.array(
+            rng.uniform(-0.3, 0.3, cls.h) + 1j * rng.uniform(0.7, 1.5, cls.h)
+        )
+
+    # ------------------------------------------------------------------
+    # a-matrix convention is HKTY-canonical (symmetric) and matches the
+    # stored values for this geometry.
+    # ------------------------------------------------------------------
+
+    def test_a_matrix_is_hkty_symmetric(self):
+        r"""
+        **Description:**
+        ``lcs_tree.a_matrix`` is loaded via the HKTY-canonical formula
+        ``a[I,J] = κ[max(I,J), max(I,J), min(I,J)]/2`` and is therefore
+        symmetric.
+        """
+        a = np.asarray(self.lcs_tree.a_matrix)
+        np.testing.assert_array_almost_equal(a, a.T,
+            err_msg="a_matrix must be symmetric (HKTY canonical convention).")
+
+    def test_a_matrix_values(self):
+        r"""
+        **Description:**
+        On TDF ks=29 the HKTY-symmetric ``a_matrix`` is
+        ``[[2, 0], [0, -1]]`` — i.e. ``a[I,J] = κ[max,max,min]/2`` with
+        ``κ[1,1,0] = 0``.
+        """
+        np.testing.assert_array_almost_equal(
+            np.asarray(self.lcs_tree.a_matrix),
+            np.array([[2.0, 0.0], [0.0, -1.0]]),
+        )
+
+    # ------------------------------------------------------------------
+    # monodromy_matrix_single
+    # ------------------------------------------------------------------
+
+    def test_monodromy_single_is_integer(self):
+        r"""
+        **Description:**
+        ``T_b`` is integer-valued on the asymmetric-a geometry — the regression
+        check for the 2026-06-17 a-matrix bug.
+        """
+        for b in range(self.h):
+            T = self.model.monodromy_matrix_single(b)
+            self.assertTrue(np.issubdtype(T.dtype, np.integer),
+                            msg=f"T_{b} dtype {T.dtype} not integer")
+            self.assertTrue(np.all(np.asarray(T) == np.asarray(T).astype(int)))
+
+    def test_monodromy_single_is_symplectic(self):
+        r"""
+        **Description:**
+        ``T_b^T Σ T_b = Σ`` exactly for the integer T returned in the
+        HKTY-canonical convention.
+        """
+        Sigma = np.asarray(self.model.periods.sigma)
+        for b in range(self.h):
+            T = np.asarray(self.model.monodromy_matrix_single(b))
+            np.testing.assert_array_equal(T.T @ Sigma @ T, Sigma,
+                err_msg=f"T_{b} is not symplectic.")
+
+    def test_monodromy_single_LCS_equals_numerical(self):
+        r"""
+        **Description:**
+        The analytical LCS formula and the numerical lstsq solver must
+        produce the same integer matrix on this geometry.
+        """
+        for b in range(self.h):
+            T_lcs = self.model._monodromy_matrix_LCS(b)
+            T_num = self.model._monodromy_matrix_numerical(b)
+            np.testing.assert_array_equal(np.asarray(T_lcs), np.asarray(T_num),
+                err_msg=f"LCS and numerical monodromy disagree for b={b}.")
+
+    def test_monodromy_single_preserves_periods(self):
+        r"""
+        **Description:**
+        ``T_b · Π_poly(z) = Π_poly(z + e_b)`` to machine precision on
+        the polynomial period vector.
+        """
+        for b in range(self.h):
+            r = self.model.verify_monodromy(b, z=self.z, tol=1e-8, mode="poly")
+            self.assertTrue(r["passed"],
+                msg=f"T_{b} fails poly-Π monodromy check: "
+                    f"max_error = {r['max_error']:.2e}")
+
+    # ------------------------------------------------------------------
+    # monodromy_matrix (general shift)
+    # ------------------------------------------------------------------
+
+    def test_monodromy_general_identity(self):
+        r"""
+        **Description:**
+        A zero shift n = (0, ..., 0) gives the identity matrix.
+        """
+        T = self.model.monodromy_matrix(np.zeros(self.h, dtype=int))
+        np.testing.assert_array_equal(np.asarray(T),
+            np.eye(self.dim, dtype=int))
+
+    def test_monodromy_general_preserves_periods(self):
+        r"""
+        **Description:**
+        ``T(n) · Π_poly(z) = Π_poly(z + n)`` for several shift vectors.
+        """
+        for n_vec in [[1, 1], [2, -1], [3, 2], [-1, 3]]:
+            n_arr = np.array(n_vec, dtype=int)
+            T = np.asarray(self.model.monodromy_matrix(n_arr)).astype(complex)
+            Pi = np.asarray(self.model._Pi_poly(self.z))
+            z_shifted = self.z + jnp.array(n_arr, dtype=self.z.dtype)
+            Pi_shifted = np.asarray(self.model._Pi_poly(z_shifted))
+            error = np.max(np.abs(T @ Pi - Pi_shifted))
+            self.assertLess(error, 1e-8,
+                msg=f"General monodromy T(n={n_vec}) fails on poly-Π: "
+                    f"error = {error:.2e}")
+
+    def test_monodromy_composition(self):
+        r"""
+        **Description:**
+        ``T(n1 + n2) = T(n1) @ T(n2)`` — monodromies compose additively.
+        """
+        n1 = np.array([2, 1], dtype=int)
+        n2 = np.array([-1, 3], dtype=int)
+        T1 = np.asarray(self.model.monodromy_matrix(n1))
+        T2 = np.asarray(self.model.monodromy_matrix(n2))
+        T_sum = np.asarray(self.model.monodromy_matrix(n1 + n2))
+        np.testing.assert_array_equal(T1 @ T2, T_sum)
+
+    def test_monodromy_inverse(self):
+        r"""
+        **Description:**
+        ``T(n) @ T(-n) = I`` — the inverse monodromy is ``T(-n)``.
+        """
+        for n_vec in [[1, 0], [0, 1], [2, -1]]:
+            n_arr = np.array(n_vec, dtype=int)
+            T = np.asarray(self.model.monodromy_matrix(n_arr))
+            T_inv = np.asarray(self.model.monodromy_matrix(-n_arr))
+            np.testing.assert_array_equal(T @ T_inv,
+                np.eye(self.dim, dtype=int),
+                err_msg=f"T(n={n_vec}) @ T(-n) != I")
+
+    # ------------------------------------------------------------------
+    # apply_monodromy preserves integer fluxes on this geometry
+    # ------------------------------------------------------------------
+
+    def test_apply_monodromy_keeps_integer_fluxes(self):
+        r"""
+        **Description:**
+        ``apply_monodromy`` returns integer fluxes when given integer
+        fluxes, on the HKTY-canonical convention.
+        """
+        rng = np.random.default_rng(7)
+        f = jnp.asarray(rng.integers(-3, 4, 2 * self.dim), dtype=jnp.int64)
+        for n_vec in [[1, 0], [0, 1], [2, -1], [-3, 2]]:
+            _, f_new = self.model.apply_monodromy(self.z, f, n_vec)
+            self.assertTrue(
+                np.issubdtype(np.asarray(f_new).dtype, np.integer),
+                msg=f"apply_monodromy returned non-integer flux dtype "
+                    f"{np.asarray(f_new).dtype} for n={n_vec}",
+            )
+
     import atexit
     atexit.register(lambda: print(">>> test_css.py module exit", flush=True))

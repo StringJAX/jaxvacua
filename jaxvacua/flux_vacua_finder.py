@@ -139,7 +139,7 @@ class FluxVacuaFinder(FluxEFT):
 
         # 2. Non-SUSY scan (~100 critical points from a Gaussian-M prior):
         vacua = finder.sample_critical_points(
-            Nmax=200, n_target=100, n_batch=2000, max_batches=5,
+            Q=200, n_target=100, n_batch=2000, max_batches=5,
             solver="hybrid", isd_mode="ISD-", verbose=False,
         )
 
@@ -334,7 +334,7 @@ class FluxVacuaFinder(FluxEFT):
             model  = jvc.FluxEFT(h12=2, model_ID=1, maximum_degree=5)
             # ... use model for some FluxEFT-only work ...
             finder = jvc.FluxVacuaFinder.from_model(model)
-            vacua  = finder.sample_critical_points(Nmax=200, n_target=10)
+            vacua  = finder.sample_critical_points(Q=200, n_target=10)
         """
         finder = cls.__new__(cls)
         finder.__dict__.update(model.__dict__)
@@ -1140,7 +1140,7 @@ class FluxVacuaFinder(FluxEFT):
                                rns_key = None,
                                max_iters: int = 10,
                                moduli_sampling_mode: str = "cone",
-                               max_tadpole: int | None = None,
+                               Q: int | None = None,
                                objective_fct: Callable | None = None,
                                optimiser: Callable | None = None,
                                optimisers: list | None = None,
@@ -1165,7 +1165,7 @@ class FluxVacuaFinder(FluxEFT):
             rns_key (PRNGKey, optional): PRNG random key. Defaults to ``None``.
             max_iters (int, optional): Maximum number of iterations. Defaults to ``100``.
             moduli_sampling_mode (str, optional): Sampling mode for the moduli values. Defaults to ``"cone"``.
-            max_tadpole (int, optional): Maximum tadpole to use for the sampling. Defaults to ``None``.
+            Q (int, optional): Maximum tadpole to use for the sampling. Defaults to ``None``.
             objective_fct (Callable, optional): Objective function to miminise.
             optimiser (Callable, optional): Optimiser to be used for the minimisation.
             optimisers (list, optional): List of optimisers to be used for the minimisation.
@@ -1202,15 +1202,17 @@ class FluxVacuaFinder(FluxEFT):
         if mode not in modes:
             raise ValueError(f"Mode must be one of {modes}, but `mode = {mode}` was given!")
 
-        if max_tadpole is None:
-            max_tadpole = self.D3_tadpole
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = self.Q()
 
         if sampler is None:
             sampler = self.sampler
         
         if optimisers is None:
             if optimiser is None:
-                kwargs = {"Q":max_tadpole,"return_flag":True,"constraints":constraints,"remove_NANs":True,"step_size":step_size,"in_axes":(0,0,0)}
+                kwargs = {"Q":Q,"return_flag":True,"constraints":constraints,"remove_NANs":True,"step_size":step_size,"in_axes":(0,0,0)}
                 
                 if mode == "ISD":
 
@@ -1301,7 +1303,7 @@ class FluxVacuaFinder(FluxEFT):
                     if not found:
                         msg = (f"sample_SUSY_flux_vacua: no candidate passed the filter in "
                                f"{max_resample_attempts} resampling attempts (mode={mode}). "
-                               f"Loosen max_tadpole, change mode, or increase vmap_dim.")
+                               f"Loosen Q, change mode, or increase vmap_dim.")
                         if errors == "raise":
                             raise RuntimeError(msg)
                         warnings.warn(msg)
@@ -1353,7 +1355,7 @@ class FluxVacuaFinder(FluxEFT):
                                       rns_key=None,
                                       max_iters = 10,
                                       moduli_sampling_mode = "cone",
-                                      max_tadpole = None,
+                                      Q = None,
                                       objective_fct = None,
                                       optimiser_init: Callable | None = None,
                                       optimiser_steps: Callable | None = None,
@@ -1380,7 +1382,7 @@ class FluxVacuaFinder(FluxEFT):
             rns_key (PRNGKey, optional): PRNG random key. Defaults to ``None``.
             max_iters (int, optional): Maximum number of iterations. Defaults to ``100``.
             moduli_sampling_mode (str, optional): Sampling mode for the moduli values. Defaults to ``"cone"``.
-            max_tadpole (int, optional): Maximum tadpole to use for the sampling. Defaults to ``None``.
+            Q (int, optional): Maximum tadpole to use for the sampling. Defaults to ``None``.
             objective_fct (Callable, optional): Objective function to miminise.
             optimiser (Callable, optional): Optimiser to be used for the minimisation.
             optimisers (list, optional): List of optimisers to be used for the minimisation.
@@ -1418,8 +1420,10 @@ class FluxVacuaFinder(FluxEFT):
         if mode not in modes:
             raise ValueError(f"Mode must be one of {modes}, but `mode = {mode}` was given!")
 
-        if max_tadpole is None:
-            max_tadpole = self.D3_tadpole
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = self.Q()
 
         if sampler is None and initial_guesses is None:
             sampler = data_sampler(self)
@@ -1432,12 +1436,12 @@ class FluxVacuaFinder(FluxEFT):
             rns_key = PRNGSequence(seed)
         
         if optimiser_init is None:
-            kwargs = {"mode":mode,"Q":max_tadpole,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
+            kwargs = {"mode":mode,"Q":Q,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
             find_solution_init = vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,None),return_flag=False,**kwargs)
             optimiser_init = vmapping_func_cached(find_solution_init,in_axes=(None,None,0))
         
         if optimiser_steps is None:
-            kwargs = {"mode":mode,"Q":max_tadpole,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
+            kwargs = {"mode":mode,"Q":Q,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
             find_solution_steps = vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,0),return_flag=True,**kwargs)
             optimiser_steps = vmapping_func_cached(find_solution_steps,in_axes=(0,0,0))
 
@@ -1715,7 +1719,7 @@ class FluxVacuaFinder(FluxEFT):
     #  ISD-flux Gaussian-prior calibration
     # ==========================================================================
 
-    def _precompute_M_eigensystem(self, n_sample: int = 50, Nmax: int = None, sampler=None):
+    def _precompute_M_eigensystem(self, n_sample: int = 50, Q: int = None, sampler=None):
         r"""
         **Description:**
         Pre-compute the ISD-matrix eigensystem used by the Gaussian-M flux
@@ -1750,8 +1754,8 @@ class FluxVacuaFinder(FluxEFT):
         Args:
             n_sample (int, optional): number of moduli points to scan.
                 Default: ``50``.
-            Nmax (int): target tadpole bound :math:`N_{\max}`.  Used
-                for the σ² scale.  Default: ``self.D3_tadpole`` (the
+            Q (int): target tadpole bound :math:`N_{\max}`.  Used
+                for the σ² scale.  Default: ``self.Q()`` (the
                 geometry's natural maximum.
             sampler (data_sampler, optional): sampler instance.  If
                 ``None`` (default), uses ``self.sampler``.
@@ -1760,8 +1764,10 @@ class FluxVacuaFinder(FluxEFT):
             ``None``.  Result lands on the finder instance as the five
             attributes listed above.
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = int(self.Q())
         if sampler is None:
             sampler = self.sampler
 
@@ -1787,7 +1793,7 @@ class FluxVacuaFinder(FluxEFT):
         eigvals_M = np.abs(eigvals_M)
 
         s_min = float(getattr(sampler, 's_lower', np.sqrt(3) / 2))
-        sigma_sq = float(Nmax) / (self.n_fluxes * s_min)
+        sigma_sq = float(Q) / (self.n_fluxes * s_min)
         self._M_scales = np.sqrt(sigma_sq * eigvals_M)
         self._M_eigvecs = eigvecs_M
 
@@ -1797,7 +1803,7 @@ class FluxVacuaFinder(FluxEFT):
         self._M_cond = float(best_cond)
 
 
-    def _estimate_sigmas(self, Nmax: int = None) -> None:
+    def _estimate_sigmas(self, Q: int = None) -> None:
         r"""
         **Description:**
         Estimate the default Gaussian-prior σ per ISD mode analytically
@@ -1806,8 +1812,8 @@ class FluxVacuaFinder(FluxEFT):
         Closed forms:
 
         * **H mode**  (input = h directly):
-          ``σ_H² = Nmax / (s_min · tr(M⁻¹))``.
-          Derived from ``E[s·hᵀM⁻¹h] = s·σ²·tr(M⁻¹) ≈ Nmax`` for
+          ``σ_H² = Q / (s_min · tr(M⁻¹))``.
+          Derived from ``E[s·hᵀM⁻¹h] = s·σ²·tr(M⁻¹) ≈ Q`` for
           ``h ~ N(0, σ²I)``.
         * **F mode**  (input = f, completion ``h ~ M⁻¹f``): heuristic
           ``σ_F = σ_H`` — the M⁻¹ acts as a natural regulariser.
@@ -1819,15 +1825,15 @@ class FluxVacuaFinder(FluxEFT):
         (C7) can refine them empirically via binary-search.
 
         Args:
-            Nmax (int, optional): target tadpole bound :math:`N_{\max}`.
-                Default: ``self.D3_tadpole`` (the geometry's natural maximum).
+            Q (int, optional): target tadpole bound :math:`N_{\max}`.
+                Default: ``self.Q()`` (the geometry's natural maximum).
 
         Returns:
             ``None``.  Result lands on ``self._calibrated_sigmas``.
 
         **Raises:**
 
-            ``ValueError`` if ``Nmax`` is not supplied.
+            ``ValueError`` if ``Q`` is not supplied.
 
         **Pre-requisite:**
 
@@ -1835,14 +1841,19 @@ class FluxVacuaFinder(FluxEFT):
             (populates ``self._s_min`` and ``self._tr_Minv_median``).
             Calling this without prior calibration raises ``AttributeError``.
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
-        Nmax_f = float(Nmax)
+        if Q is None:
+            
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            
+            Q = int(self.Q())
+        
+        Q_f = float(Q)
         s_min = self._s_min
         tr_Minv = self._tr_Minv_median
 
         # H mode (h ~ N(0,σ²I), tadpole ≈ s·σ²·tr(M⁻¹))
-        sigma_H = np.sqrt(Nmax_f / (s_min * tr_Minv))
+        sigma_H = np.sqrt(Q_f / (s_min * tr_Minv))
 
         # F mode: heuristic
         sigma_F = sigma_H
@@ -1872,7 +1883,7 @@ class FluxVacuaFinder(FluxEFT):
         tau_pts,
         isd_mode: str = "ISD-",
         rng: "np.random.Generator" = None,
-        Nmax: int = None,
+        Q: int = None,
         flux_prior: str = "gaussian",
         flux_prior_sigma: float = None,
         sampler = None,
@@ -1897,7 +1908,7 @@ class FluxVacuaFinder(FluxEFT):
         3. ISD-complete each input via
            ``sampler.ISD_sampling(z, conj(z), tau, conj(tau), input, mode=isd_mode)``.
         4. Filter: drop on ISD-completion failure, non-finite flux, all-zero
-           input, ``|tadpole| > Nmax`` or ``|tadpole| ≤ 0``.
+           input, ``|tadpole| > Q`` or ``|tadpole| ≤ 0``.
         5. Build the real-coord starting point
            ``x0 = _convert_complex_to_real(...)`` for each survivor.
 
@@ -1912,8 +1923,8 @@ class FluxVacuaFinder(FluxEFT):
             rng (np.random.Generator, optional): RNG for the prior
                 draws.  If ``None``, uses ``np.random.default_rng(0)`` for
                 determinism.
-            Nmax (int, optional): tadpole bound.  Default:
-                ``self.D3_tadpole`` (the geometry's natural maximum).
+            Q (int, optional): tadpole bound.  Default:
+                ``self.Q()`` (the geometry's natural maximum).
             flux_prior (str, optional): ``"gaussian"`` (default),
                 ``"M_weighted"``, or ``"uniform"``.
             flux_prior_sigma (float, optional): per-call σ override.
@@ -1929,8 +1940,11 @@ class FluxVacuaFinder(FluxEFT):
             no candidate survives, returns shape-``(0, …)`` arrays of the
             corresponding dtype rather than ``None``.
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            
+            Q = int(self.Q())
         if sampler is None:
             sampler = self.sampler
         if rng is None:
@@ -1972,7 +1986,7 @@ class FluxVacuaFinder(FluxEFT):
             if (flux_prior == "M_weighted" and isd_mode == "H"
                     and M_eigvecs is not None and M_scales is not None):
                 # h ~ N(0, scale² · σ²_M · M) via eigensystem.  _M_scales
-                # already encodes sqrt(Nmax/(d·s_min) · λ_M).
+                # already encodes sqrt(Q/(d·s_min) · λ_M).
                 scale_factor = flux_prior_sigma or 0.3
                 z = rng.standard_normal((N, inp_len))
                 inputs = np.round(
@@ -2009,7 +2023,7 @@ class FluxVacuaFinder(FluxEFT):
 
             fl_int = np.round(np.array(jnp.array(fl).real, copy=True)).astype(float)
             tad = abs(float(jnp.real(self.tadpole(jnp.array(fl_int)))))
-            if tad <= 0 or tad > Nmax:
+            if tad <= 0 or tad > Q:
                 continue
 
             x0 = np.asarray(self._convert_complex_to_real(
@@ -2411,7 +2425,7 @@ class FluxVacuaFinder(FluxEFT):
 
     def run_calibration(
         self,
-        Nmax: int = None,
+        Q: int = None,
         n_sample: int = 50,
         n_test: int = 200,
         target_acceptance: float = 0.8,
@@ -2433,11 +2447,11 @@ class FluxVacuaFinder(FluxEFT):
 
         Roughly 1-5 s per ISD mode on h12=2 (longer for larger geometries).
         Recommended before any :func:`sample_critical_points` run with
-        ``flux_prior="gaussian"`` (the default) for non-trivial Nmax.
+        ``flux_prior="gaussian"`` (the default) for non-trivial Q.
 
         Args:
-            Nmax (int, optional): tadpole bound for both stages.
-                Default: ``self.D3_tadpole``.
+            Q (int, optional): tadpole bound for both stages.
+                Default: ``self.Q()``.
             n_sample (int, optional): moduli points scanned in step 1.
                 Default: ``50``.
             n_test (int, optional): candidates per σ trial in step 3.
@@ -2459,22 +2473,24 @@ class FluxVacuaFinder(FluxEFT):
         .. code-block:: python
 
             finder = jvc.FluxVacuaFinder(h12=2, model_ID=1)
-            finder.run_calibration(Nmax=200)
+            finder.run_calibration(Q=200)
             vacua = finder.sample_critical_points(
-                Nmax=200, n_target=100, solver="hybrid",
+                Q=200, n_target=100, solver="hybrid",
             )
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = int(self.Q())
         if verbose:
-            print(f"[run_calibration] Nmax={Nmax}, n_sample={n_sample}, "
+            print(f"[run_calibration] Q={Q}, n_sample={n_sample}, "
                   f"n_test={n_test}, target_acceptance={target_acceptance}")
-        self._precompute_M_eigensystem(n_sample=n_sample, Nmax=Nmax, sampler=sampler)
-        self._estimate_sigmas(Nmax=Nmax)
+        self._precompute_M_eigensystem(n_sample=n_sample, Q=Q, sampler=sampler)
+        self._estimate_sigmas(Q=Q)
         if verbose:
             print(f"  analytical σ defaults: {self._calibrated_sigmas}")
         result = self.calibrate_priors(
-            Nmax=Nmax, modes=modes, n_test=n_test,
+            Q=Q, modes=modes, n_test=n_test,
             target_acceptance=target_acceptance, sampler=sampler,
             verbose=verbose,
         )
@@ -2482,7 +2498,7 @@ class FluxVacuaFinder(FluxEFT):
 
     def calibrate_priors(
         self,
-        Nmax: int = None,
+        Q: int = None,
         modes=None,
         n_test: int = 200,
         target_acceptance: float = 0.8,
@@ -2497,7 +2513,7 @@ class FluxVacuaFinder(FluxEFT):
         search iterations to find the σ where the measured ISD-completion
         acceptance rate ≈ ``target_acceptance``.  "Acceptance" = fraction of
         random ``N(0, σ²I)`` inputs that, when ISD-completed via the
-        sampler and tadpole-filtered against ``Nmax``, give a valid flux.
+        sampler and tadpole-filtered against ``Q``, give a valid flux.
 
         Result overrides the analytical defaults from :func:`_estimate_sigmas`
         (C2).  This is the empirical refinement step: ~1–5 s per mode,
@@ -2512,7 +2528,7 @@ class FluxVacuaFinder(FluxEFT):
         :func:`sample_critical_points` directly after calibration.
 
         Args:
-            Nmax (int): tadpole bound (required; method-level here, per the C-cluster convention).
+            Q (int): tadpole bound (required; method-level here, per the C-cluster convention).
             modes (list[str], optional): modes to calibrate.  Default:
                 ``["F", "H", "ISD+", "ISD-"]``.
             n_test (int, optional): number of candidates per σ trial.
@@ -2532,8 +2548,10 @@ class FluxVacuaFinder(FluxEFT):
             * Writes ``self._calibration_isd_modes = tuple(modes)`` to
               record which modes are empirically calibrated.
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = int(self.Q())
         if sampler is None:
             sampler = self.sampler
         if modes is None:
@@ -2564,7 +2582,7 @@ class FluxVacuaFinder(FluxEFT):
                     continue
                 fl_int = np.round(np.array(jnp.array(fl).real)).astype(float)
                 tad = abs(float(jnp.real(self.tadpole(jnp.array(fl_int)))))
-                if 0 < tad <= Nmax:
+                if 0 < tad <= Q:
                     valid += 1
             return valid / n_test
 
@@ -2623,7 +2641,7 @@ class FluxVacuaFinder(FluxEFT):
 
     def save_calibration(
         self,
-        Nmax: int,
+        Q: int,
         path: str = None,
         flux_prior: str = "gaussian",
     ) -> str:
@@ -2632,12 +2650,12 @@ class FluxVacuaFinder(FluxEFT):
         Save calibrated prior parameters to a JSON file for reuse.
 
         Args:
-            Nmax (int): tadpole bound the calibration is for.
+            Q (int): tadpole bound the calibration is for.
                 Required; used in the default
                 filename and recorded in the JSON.
             path (str, optional): explicit save path.  If ``None``
                 (default), uses
-                ``jaxvacua/models/{model_type}/h12_{h12}/critical_points_prior_Nmax{Nmax}.json``,
+                ``jaxvacua/models/{model_type}/h12_{h12}/critical_points_prior_Q{Q}.json``,
                 falling back to the current directory.
             flux_prior (str, optional): ``"gaussian"``,
                 ``"M_weighted"``, or ``"uniform"`` — recorded in the JSON.
@@ -2653,7 +2671,7 @@ class FluxVacuaFinder(FluxEFT):
         """
         import os, json
         
-        fname = f"critical_points_prior_Nmax{Nmax}_{flux_prior}.json"
+        fname = f"critical_points_prior_Q{Q}_{flux_prior}.json"
         if path is None:
             cal_dir = self._get_calibration_dir()
             if os.path.isdir(cal_dir):
@@ -2663,7 +2681,7 @@ class FluxVacuaFinder(FluxEFT):
 
         sigmas = getattr(self, "_calibrated_sigmas", {}) or {}
         data = {
-            "Nmax":           int(Nmax),
+            "Q":           int(Q),
             "n_fluxes":       int(self.n_fluxes),
             "flux_prior":     flux_prior,
             "sigmas":         {k: float(v) for k, v in sigmas.items()},
@@ -2776,7 +2794,7 @@ class FluxVacuaFinder(FluxEFT):
 
     def sample_critical_points(
         self,
-        Nmax: int = None,
+        Q: int = None,
         n_target: int = 100,
         n_batch: int = 10_000,
         max_batches: int = 20,
@@ -2830,7 +2848,7 @@ class FluxVacuaFinder(FluxEFT):
             with analytical Jacobian.  Sequential Python loop.  Robust;
             useful when the JAX-side solvers struggle.
 
-        **Quick decision table** (typical for ``h12=2``, Nmax=200, n_batch≈1000):
+        **Quick decision table** (typical for ``h12=2``, Q=200, n_batch≈1000):
 
         +-----------+-----------+-------------+------------------------------+
         | solver    | speed     | robustness  | when to use                  |
@@ -2854,8 +2872,8 @@ class FluxVacuaFinder(FluxEFT):
         now method-level.
 
         Args:
-            Nmax (int, optional): tadpole bound. Default:
-                ``self.D3_tadpole`` (the geometry's natural maximum).
+            Q (int, optional): tadpole bound. Default:
+                ``self.Q()`` (the geometry's natural maximum).
             n_target (int, optional): stop once this many critical
                 points are found. Default: ``100``.
             n_batch (int, optional): candidates per batch. Default:
@@ -2901,8 +2919,10 @@ class FluxVacuaFinder(FluxEFT):
             ``classify=True``) ``V``, ``|DW|``, ``eigenvalues``,
             ``is_susy``, ``is_minimum``, ``Nflux``.
         """
-        if Nmax is None:
-            Nmax = int(self.D3_tadpole)
+        if Q is None:
+            if self.Q() is None:
+                raise ValueError("Q must be supplied or a global value for the D3-tadpole must be set in the FluxEFT constructor!")
+            Q = int(self.Q())
         if sampler is None:
             sampler = self.sampler
         if map_to_fd is None:
@@ -2919,7 +2939,7 @@ class FluxVacuaFinder(FluxEFT):
         if verbose:
             ns_label = "no-scale" if noscale else "full SUGRA"
             print(f"[sample_critical_points] Searching for critical points of V ({ns_label})")
-            print(f"  Nmax={Nmax}, mode={isd_mode}, solver={solver}"
+            print(f"  Q={Q}, mode={isd_mode}, solver={solver}"
                   + (f", moduli_max={moduli_max}" if moduli_max is not None else ""))
 
         results = []
@@ -2963,7 +2983,7 @@ class FluxVacuaFinder(FluxEFT):
             # C3: Gaussian-M-prior flux candidates
             x0_arr, flux_arr, _ = self._generate_flux_candidates(
                 n_batch, mod_pts, tau_pts, isd_mode=isd_mode, rng=rng,
-                Nmax=Nmax, flux_prior=flux_prior,
+                Q=Q, flux_prior=flux_prior,
                 flux_prior_sigma=flux_prior_sigma, sampler=sampler,
             )
             n_tried += n_batch

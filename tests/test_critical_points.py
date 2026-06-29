@@ -91,7 +91,6 @@ class TestCriticalPointFinder(TestCase):
                             # _rand_* helpers fall through to global np.random.*).
         )
 
-        cls.Nmax = 200
         cls.n_fl = cls.finder.n_fluxes
         cls.dim_H3 = cls.finder.dimension_H3
 
@@ -134,7 +133,7 @@ class TestCriticalPointFinder(TestCase):
         ``noscale=False`` is accepted without raising.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=1, n_batch=5, max_batches=1,
+            n_target=1, n_batch=5, max_batches=1,
             isd_mode="ISD-", solver="scipy", noscale=False,
             sampler=self.sampler, verbose=False,
         )
@@ -157,7 +156,7 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, idx = self.finder._generate_flux_candidates(
             50, mod_pts, tau_pts, isd_mode="F",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
         if len(x0) > 0:
@@ -179,12 +178,12 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, idx = self.finder._generate_flux_candidates(
             50, mod_pts, tau_pts, isd_mode="ISD-",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
-        # ISD- should produce many valid candidates at Nmax=200
+        # ISD- should produce many valid candidates
         self.assertGreater(len(x0), 0,
-                           msg="ISD- should produce valid candidates at Nmax=200")
+                           msg="ISD- should produce valid candidates")
 
     def test_generate_flux_candidates_invalid_mode(self):
         r"""
@@ -199,7 +198,7 @@ class TestCriticalPointFinder(TestCase):
         with self.assertRaises(ValueError):
             self.finder._generate_flux_candidates(
                 10, mod_pts, tau_pts, isd_mode="INVALID",
-                Nmax=self.Nmax, sampler=self.sampler,
+                sampler=self.sampler,
             )
 
     # ------------------------------------------------------------------
@@ -212,7 +211,7 @@ class TestCriticalPointFinder(TestCase):
         r"""
         **Description:**
         Verify that the FVF Newton solver runs end-to-end on an ISD-
-        candidate at Nmax=200 and returns a real residual + same-shape x.
+        candidate and returns a real residual + same-shape x.
         """
         N = 10
         mod_pts, tau_pts = self.sampler.initial_guesses(
@@ -221,7 +220,7 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
             10, mod_pts, tau_pts, isd_mode="ISD-",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
         if len(x0) > 0:
@@ -256,7 +255,7 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
             5, mod_pts, tau_pts, isd_mode="F",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
         if len(x0) > 0:
@@ -315,7 +314,7 @@ class TestCriticalPointFinder(TestCase):
         should find at least one critical point from a small batch.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=2,
+            n_target=5, n_batch=50, max_batches=2,
             isd_mode="ISD-", solver="newton",
             sampler=self.sampler, verbose=False,
         )
@@ -340,7 +339,7 @@ class TestCriticalPointFinder(TestCase):
         Integration test: ``sample_critical_points`` with scipy solver.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=2,
+            n_target=5, n_batch=50, max_batches=2,
             isd_mode="ISD-", solver="scipy",
             sampler=self.sampler, verbose=False,
         )
@@ -355,7 +354,7 @@ class TestCriticalPointFinder(TestCase):
         (|DW| > threshold) when using ISD- mode with noscale=True.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=10, n_batch=100, max_batches=3,
+            n_target=10, n_batch=100, max_batches=3,
             isd_mode="ISD-", solver="scipy", noscale=True,
             sampler=self.sampler, verbose=False,
         )
@@ -363,7 +362,7 @@ class TestCriticalPointFinder(TestCase):
         if len(results) > 0:
             # At least some should be non-SUSY (from benchmarks: ~78%)
             n_nonsusy = sum(1 for r in results if not r['is_susy'])
-            # With ISD- at Nmax=200, we expect most to be non-SUSY
+            # With ISD-, we expect most to be non-SUSY
             # Allow for statistical variation — just check > 0
             self.assertGreater(
                 n_nonsusy, 0,
@@ -376,7 +375,7 @@ class TestCriticalPointFinder(TestCase):
         Results should NOT have ``eigenvalues`` or ``is_minimum`` keys.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=3, n_batch=30, max_batches=2,
+            n_target=3, n_batch=30, max_batches=2,
             isd_mode="ISD-", solver="scipy",
             classify=False, sampler=self.sampler, verbose=False,
         )
@@ -397,7 +396,7 @@ class TestCriticalPointFinder(TestCase):
         """
         with self.assertRaises(ValueError):
             self.finder.sample_critical_points(
-                Nmax=self.Nmax, n_target=1, n_batch=10, max_batches=1,
+                n_target=1, n_batch=10, max_batches=1,
                 solver="invalid_solver",
                 sampler=self.sampler, verbose=False,
             )
@@ -420,7 +419,7 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
             10, mod_pts, tau_pts, isd_mode="ISD-",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
         if len(x0) > 0:
@@ -447,7 +446,7 @@ class TestCriticalPointFinder(TestCase):
 
         x0, fluxes, _ = self.finder._generate_flux_candidates(
             10, mod_pts, tau_pts, isd_mode="ISD-",
-            Nmax=self.Nmax, sampler=self.sampler,
+            sampler=self.sampler,
         )
 
         if len(x0) >= 3:
@@ -500,7 +499,7 @@ class TestCriticalPointFinder(TestCase):
         solver (``solver="adam_v"``) runs without error.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=5, n_batch=50, max_batches=1,
+            n_target=5, n_batch=50, max_batches=1,
             isd_mode="ISD-", solver="adam_v",
             optax_steps=500, sampler=self.sampler, verbose=False,
         )
@@ -515,7 +514,7 @@ class TestCriticalPointFinder(TestCase):
         and can find critical points.
         """
         results = self.finder.sample_critical_points(
-            Nmax=self.Nmax, n_target=5, n_batch=100, max_batches=2,
+            n_target=5, n_batch=100, max_batches=2,
             isd_mode="ISD-", solver="hybrid",
             optax_steps=2000, sampler=self.sampler, verbose=False,
         )

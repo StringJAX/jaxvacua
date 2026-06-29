@@ -519,14 +519,14 @@ class bounded_fluxes:
         Args:
             model: A model object (e.g. :class:`jaxvacua.flux_eft.FluxEFT`) providing
                 ``gauge_kinetic_matrix``, ``ISD_matrix``, ``tadpole``, ``n_fluxes``,
-                ``dimension_H3``, and ``D3_tadpole``.
+                ``dimension_H3``, and ``Q``.
             sampler (data_sampler, optional): A
                 :class:`jaxvacua.sampling.data_sampler` instance used for
                 moduli sampling in :func:`enumerate_fluxes`.  If ``None``,
                 moduli must be supplied explicitly to
                 :func:`compute_bounding_box`.
             Nmax (int, optional): Maximum allowed D3-tadpole charge.
-                Defaults to ``model.D3_tadpole``.
+                Defaults to ``model.Q()``.
             dil_min (float, optional): Minimum value of
                 :math:`s = \operatorname{Im}(\tau)`.  Defaults to
                 :math:`\sqrt{3}/2`, the boundary of the
@@ -573,7 +573,7 @@ class bounded_fluxes:
         self.dimension_H3 = model.dimension_H3   # = h12+1
 
         # D3-tadpole bound
-        self.Nmax = int(model.D3_tadpole) if Nmax is None else int(Nmax)
+        self.Nmax = int(model.Q()) if Nmax is None else int(Nmax)
 
         # Dilaton lower bound (SL(2,Z) fundamental domain).
         # Tighten to the sampler's actual lower bound when available:

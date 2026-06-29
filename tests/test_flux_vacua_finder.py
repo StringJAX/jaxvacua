@@ -837,19 +837,19 @@ class TestFluxVacuaFinder(TestCase):
         calls = []
         sampler = object()
 
-        def fake_precompute(n_sample=50, Nmax=None, sampler=None):
-            calls.append(("precompute", n_sample, Nmax, sampler))
+        def fake_precompute(n_sample=50, Q=None, sampler=None):
+            calls.append(("precompute", n_sample, Q, sampler))
             finder._s_min = 1.0
             finder._tr_Minv_median = 2.0
             finder._M_cond = 3.0
 
-        def fake_estimate(Nmax=None):
-            calls.append(("estimate", Nmax))
+        def fake_estimate(Q=None):
+            calls.append(("estimate", Q))
             finder._calibrated_sigmas = {"H": 1.0}
 
-        def fake_calibrate(Nmax=None, modes=None, n_test=200,
+        def fake_calibrate(Q=None, modes=None, n_test=200,
                            target_acceptance=0.8, sampler=None, verbose=True):
-            calls.append(("calibrate", Nmax, tuple(modes), n_test,
+            calls.append(("calibrate", Q, tuple(modes), n_test,
                           target_acceptance, sampler, verbose))
             finder._calibrated_sigmas["F"] = 2.0
             return dict(finder._calibrated_sigmas)
@@ -859,7 +859,7 @@ class TestFluxVacuaFinder(TestCase):
         finder.calibrate_priors = fake_calibrate
 
         result = finder.run_calibration(
-            Nmax=17,
+            Q=17,
             n_sample=3,
             n_test=4,
             target_acceptance=0.7,
@@ -884,7 +884,7 @@ class TestFluxVacuaFinder(TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "calibration.json")
-            saved = finder.save_calibration(Nmax=99, path=path)
+            saved = finder.save_calibration(Q=99, path=path)
 
             loaded_finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
             sigmas = loaded_finder.load_calibration(saved)
