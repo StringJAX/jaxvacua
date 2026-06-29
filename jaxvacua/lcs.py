@@ -571,30 +571,26 @@ class lcs_tree(object):
                 
             self.a_matrix = jnp.array(self.a_matrix)
         else:
-            if self.limit!="LCS":
-                # Recompute a_matrix to match with conventions in paper
-                self.a_matrix = jnp.array(compute_a_matrix(self.intnums))
-            else:
-                a_matrix = np.zeros((self.h12, self.h12))
-                
-                for I1 in range(self.h12):
-                    for I2 in range(self.h12):
-                        
-                        if type(self.model_ID)==int:
-                            a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
-                        else:
-                            if I1>=I2:
-                                a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
-                            elif I1<I2:
-                                a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
+            
+            a_matrix = np.zeros((self.h12, self.h12))
+            
+            for I1 in range(self.h12):
+                for I2 in range(self.h12):
+                    """
+                    if type(self.model_ID)==int:
+                        a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
+                    else:
+                    """
+                    if I1>=I2:
+                        a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
+                    elif I1<I2:
+                        a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
                             
-                self.a_matrix = jnp.array(a_matrix)
+            self.a_matrix = jnp.array(a_matrix)
                 
-                
-                
-        # Take same convention as in https://inspirehep.net/files/d2f57319d398cfe81212b19c7f9d109f for CP11169
-        if self.h12==2 and self.model_ID==1:
-            self.a_matrix = jnp.array([[4.5,1.5],[1.5,0.]])
+            # Take same convention as in https://inspirehep.net/files/d2f57319d398cfe81212b19c7f9d109f for CP11169
+            if self.h12==2 and self.model_ID==1:
+                self.a_matrix = jnp.array([[4.5,1.5],[1.5,0.]])
             
         
         
