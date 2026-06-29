@@ -35,6 +35,8 @@ private/
 *DS_Store
 *.claude
 *.jaxvacua_cache
+*.jax_cache
+*_cache
 
 MANIFEST
 

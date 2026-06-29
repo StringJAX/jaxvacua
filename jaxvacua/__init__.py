@@ -29,6 +29,8 @@ Main public API
 - Geometry and periods: ``lcs_tree``, ``periods``, ``css``.
 - Flux physics and searches: ``FluxEFT``, ``FluxVacuaFinder``,
   ``bounded_fluxes`` and ``data_sampler``.
+- Tadpole-feasible flux sampling: ``tadpole_quadratic`` and
+  ``sample_in_ellipsoid`` (the on-device ellipsoid ISD-flux sampler).
 - Reduced EFT and special-model helpers: ``Freezer``, ``ConifoldFreezer`` and
   ``HypergeometricModels``.
 - Conifold, CYTools, utility and flux helper functions re-exported for common
@@ -104,16 +106,13 @@ set_precision(_default_prec)
 
 from .util import *
 from .cytools_interface import *
-# Conifold subsystem: 2026-05-01 Phase 2 split moved the contents of the old
-# ``conifold_utils.py`` into the ``conifold/`` subpackage.  Importing it here
-# (BEFORE ``periods``/``css``/``flux_eft``) makes the symbols visible to those
-# modules' bottom-of-file ``setattr`` blocks via ``from jaxvacua import conifold``.
 from .conifold import *
 from .lcs import *
 from .periods import *
 from .css import *
 from .flux_eft import *
 from .flux_vacua_finder import *
+from .flux_bounding import *
 from .sampling import *
 from .hypergeometric_models import *
 from .freezer import *
@@ -126,4 +125,4 @@ if precision == "float32":
 # ──────────────────────────────────────────────────────────────────────────
 
 
-__version__ = '0.1.1'
+__version__ = '0.1.2'
