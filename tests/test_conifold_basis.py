@@ -47,6 +47,7 @@ Heavy cytools build at import (gated/skipped if cytools is unavailable).
 """
 from __future__ import annotations
 
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -135,6 +136,15 @@ if _Polytope is not None:
 _NEEDS = pytest.mark.skipif(
     _MA is None or _MG is None,
     reason=f"cytools/model unavailable ({_CYTOOLS_ERR or _BUILD_ERR})",
+)
+
+_RUN_HEAVY_HESSIAN = os.environ.get("JAXVACUA_RUN_HEAVY_HESSIAN_TESTS") == "1"
+_SKIP_GHA_HEAVY_HESSIAN = pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true" and not _RUN_HEAVY_HESSIAN,
+    reason=(
+        "skipping full coniLCS real-Hessian mass-spectrum compile on GitHub "
+        "Actions; set JAXVACUA_RUN_HEAVY_HESSIAN_TESTS=1 to run it"
+    ),
 )
 
 
@@ -467,6 +477,8 @@ class TestConifoldBasisInvariance(TestCase):
         self.assertLess(abs(VA - VG) / max(abs(VA), 1e-30), 1e-8,
                         f"scalar potential differs across bases: {VA:.6e} vs {VG:.6e}")
 
+    @pytest.mark.slow
+    @_SKIP_GHA_HEAVY_HESSIAN
     def test_full_mass_spectrum_invariant(self):
         """The physical mass spectrum (generalised eigenvalues of the full Hessian against
         the Kähler metric) is conifold_basis-INDEPENDENT.
