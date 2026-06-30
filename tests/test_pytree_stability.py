@@ -46,7 +46,7 @@ jax.config.update("jax_enable_x64", True)
 
 sys.path.append("./../")
 import jaxvacua
-from jaxvacua.util import _PYTREE_IGNORE, flatten_func
+from jaxvacua.util import _PYTREE_IGNORE, _STATIC_KEYS, flatten_func
 
 warnings.filterwarnings("ignore")
 
@@ -74,6 +74,10 @@ class TestPytreeStability(TestCase):
     def _treedef(self, obj):
         return jax.tree_util.tree_structure(obj)
 
+    def _aux_keys(self, aux):
+        child_keys, static_items = aux
+        return set(child_keys) | {key for key, _ in static_items}
+
     def test_treedef_hashable(self):
         """The treedef must be hashable (jit/vmap cache key requirement)."""
         td = self._treedef(self.finder)
@@ -87,9 +91,74 @@ class TestPytreeStability(TestCase):
         self.finder._calibrated_sigmas = {"H": 1.0}
         self.finder._M_eigvecs = np.eye(2)
         children, aux = flatten_func(self.finder)
-        aux_keys = {a[0] if isinstance(a, tuple) else a for a in aux}
+        aux_keys = self._aux_keys(aux)
         for k in _PYTREE_IGNORE:
             self.assertNotIn(k, aux_keys, f"{k} leaked into aux_data")
+
+    def test_q_is_static_not_ignored(self):
+        """A user-specified tadpole is preserved as static model state."""
+        f = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0, Q=123,
+        )
+        children, aux = flatten_func(f)
+        aux_keys = self._aux_keys(aux)
+        self.assertIn("_Q", aux_keys)
+        self.assertIn("_Q", _STATIC_KEYS)
+
+    def test_q_survives_pytree_round_trip(self):
+        """A user-specified tadpole survives flatten/unflatten."""
+        f = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0, Q=123,
+        )
+        children, treedef = jax.tree_util.tree_flatten(f)
+        rebuilt = jax.tree_util.tree_unflatten(treedef, children)
+        self.assertEqual(rebuilt._Q, 123)
+        self.assertEqual(rebuilt.Q(), 123)
+
+    def test_default_q_does_not_mutate_treedef(self):
+        """The automatic tadpole fallback must not overwrite `_Q`."""
+        f = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+        )
+        td_before = self._treedef(f)
+        q_value = f.Q()
+        td_after = self._treedef(f)
+        self.assertEqual(q_value, f.lcs_tree.h11 + f.lcs_tree.h12 + 2)
+        self.assertIsNone(f._Q)
+        self.assertEqual(td_before, td_after)
+
+    def test_axion_fd_list_input_is_hashable_static_state(self):
+        """List-style axion FD input is normalised before pytree flattening."""
+        f = jaxvacua.FluxEFT(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+            axion_fd=[-0.25, 0.25],
+        )
+        self.assertEqual(f.axion_fd, (-0.25, 0.25))
+        td = self._treedef(f)
+        self.assertIsInstance(hash(td), int)
+
+    def test_round_trip_restores_ignored_defaults(self):
+        """Ignored eager-state attributes exist after a pytree round trip."""
+        f = jaxvacua.FluxVacuaFinder(
+            h12=2, model_ID=1, model_type="KS", maximum_degree=0,
+            flux_bounds=[-5, 5], moduli_bounds=(2, 5),
+        )
+        children, treedef = jax.tree_util.tree_flatten(f)
+        rebuilt = jax.tree_util.tree_unflatten(treedef, children)
+        self.assertIsNone(rebuilt._sampler)
+        self.assertEqual(rebuilt._sampler_kwargs, {})
+        self.assertEqual(rebuilt._calibrated_sigmas, {})
+        self.assertIsNone(rebuilt._M_eigvecs)
+        self.assertEqual(rebuilt._sampler_flux_bounds, (-5, 5))
+        self.assertEqual(rebuilt._sampler_moduli_bounds, (2, 5))
+        sampler = rebuilt.sampler
+        self.assertIsNotNone(sampler)
+        self.assertEqual(rebuilt._sampler_kwargs["flux_bounds"], (-5, 5))
+        self.assertEqual(rebuilt._sampler_kwargs["moduli_bounds"], (2, 5))
+        self.assertEqual(sampler.flux_lower, -5)
+        self.assertEqual(sampler.flux_upper, 5)
+        self.assertAllClose(sampler.moduli_lower, jnp.array([2., 2.]))
+        self.assertAllClose(sampler.moduli_upper, jnp.array([5., 5.]))
 
     def test_treedef_stable_across_sampler_access(self):
         """Accessing the lazy `sampler` must not change the treedef."""

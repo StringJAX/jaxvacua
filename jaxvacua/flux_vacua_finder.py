@@ -77,6 +77,28 @@ except ImportError:
     _HAS_OPTAX = False
 
 
+def _freeze_sampler_config(value: Any) -> Any:
+    r"""Return a hashable representation of sampler configuration values."""
+    if isinstance(value, (np.ndarray, jax.Array)):
+        return _freeze_sampler_config(np.asarray(value).tolist())
+    if isinstance(value, list):
+        return tuple(_freeze_sampler_config(v) for v in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze_sampler_config(v) for v in value)
+    return value
+
+
+def _sampler_kwargs_from_config(obj: Any) -> dict:
+    r"""Rebuild ``data_sampler`` keyword arguments from static config fields."""
+    return dict(
+        flux_bounds=getattr(obj, "_sampler_flux_bounds", (-10, 10)),
+        axion_bounds=getattr(obj, "_sampler_axion_bounds", (-0.5, 0.5)),
+        dilaton_bounds=getattr(obj, "_sampler_dilaton_bounds", (2., 10.)),
+        moduli_bounds=getattr(obj, "_sampler_moduli_bounds", (1., 5.)),
+        seed=getattr(obj, "_sampler_seed", 42),
+    )
+
+
 class FluxVacuaFinder(FluxEFT):
     r"""
     **Description:**
@@ -260,6 +282,11 @@ class FluxVacuaFinder(FluxEFT):
         )
 
         self._map_to_fd = map_to_fd
+        self._sampler_flux_bounds = _freeze_sampler_config(flux_bounds)
+        self._sampler_axion_bounds = _freeze_sampler_config(axion_bounds)
+        self._sampler_dilaton_bounds = _freeze_sampler_config(dilaton_bounds)
+        self._sampler_moduli_bounds = _freeze_sampler_config(moduli_bounds)
+        self._sampler_seed = seed
         self._sampler = None
         self._sampler_kwargs = dict(
             flux_bounds=flux_bounds,
@@ -340,6 +367,11 @@ class FluxVacuaFinder(FluxEFT):
         finder.__dict__.update(model.__dict__)
         # Finder-only state (not inherited from the model)
         finder._map_to_fd = map_to_fd
+        finder._sampler_flux_bounds = _freeze_sampler_config(flux_bounds)
+        finder._sampler_axion_bounds = _freeze_sampler_config(axion_bounds)
+        finder._sampler_dilaton_bounds = _freeze_sampler_config(dilaton_bounds)
+        finder._sampler_moduli_bounds = _freeze_sampler_config(moduli_bounds)
+        finder._sampler_seed = seed
         finder._sampler = sampler
         finder._sampler_kwargs = dict(
             flux_bounds=flux_bounds,
@@ -363,7 +395,11 @@ class FluxVacuaFinder(FluxEFT):
         a ``sampler`` keyword argument.
         """
         if self._sampler is None:
-            self._sampler = data_sampler(self, **self._sampler_kwargs)
+            sampler_kwargs = getattr(self, "_sampler_kwargs", None)
+            if not sampler_kwargs:
+                sampler_kwargs = _sampler_kwargs_from_config(self)
+                self._sampler_kwargs = dict(sampler_kwargs)
+            self._sampler = data_sampler(self, **sampler_kwargs)
         return self._sampler
 
     def __repr__(self) -> str:
@@ -1747,9 +1783,9 @@ class FluxVacuaFinder(FluxEFT):
         - ``_tr_Minv_median``:       median over samples of ``tr(M⁻¹)``
         - ``_M_cond``:               condition number of the chosen ``M``
 
-        The first two are JAX-pytree-static via ``_STATIC_KEYS``; the
-        scalars are added there as well, so subsequent jit'd calls on
-        ``self`` work after calibration.
+        These calibration attributes are excluded from the JAX pytree and
+        restored with safe defaults after a pytree round trip.  They are eager
+        sampling state, not part of the traced model data.
 
         Args:
             n_sample (int, optional): number of moduli points to scan.

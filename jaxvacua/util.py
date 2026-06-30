@@ -52,7 +52,7 @@ import gzip
 import pickle
 import threading
 import itertools
-from functools import partial, lru_cache
+from functools import partial
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 # Standard library `_thread` is exposed under the legacy name `thread` on
@@ -65,6 +65,20 @@ except ImportError:
 # --- Third-party --------------------------------------------------------------
 import numpy as np
 from flint import fmpz_mat                  # exact integer LLL for ``orthogonal_lattice``
+from stringjax_tools.jit import (
+    is_static as _sjt_is_static,
+    jit_with_dynamic_static_args as _sjt_jit_with_dynamic_static_args,
+    jit_with_static_args as _sjt_jit_with_static_args,
+)
+from stringjax_tools.pytrees import (
+    flatten_func as _sjt_flatten_func,
+    unflatten_func_class as _sjt_unflatten_func_class,
+)
+from stringjax_tools.vmap import (
+    _build_vmap_jit as _sjt_build_vmap_jit,
+    vmapping_func as _sjt_vmapping_func,
+    vmapping_func_cached as _sjt_vmapping_func_cached,
+)
 
 # --- JAX ----------------------------------------------------------------------
 import jax
@@ -273,14 +287,9 @@ def vmapping_func(
     Returns:
         Callable: JIT-compiled vmapped function.
     """
-    def _tmp(*args):
-        """Closure forwarding kwargs to func for vmap."""
-        return func(*args, **kwargs)
-
-    return jax.jit(jax.vmap(_tmp, in_axes=in_axes))
+    return _sjt_vmapping_func(func, in_axes=in_axes, **kwargs)
 
 
-@lru_cache(maxsize=256)
 def _build_vmap_jit(
     func: Callable,
     in_axes: Optional[Union[int, Tuple]],
@@ -292,10 +301,9 @@ def _build_vmap_jit(
     ``jax.jit(jax.vmap(...))`` kernel.  Called by
     :func:`vmapping_func_cached`; not intended for direct use.
 
-    The cache key is ``(func, in_axes, frozen_kwargs)``.  Python bound
-    methods are hashable (keyed on ``(method.__func__, method.__self__)``),
-    so the same method on the same instance always resolves to the same
-    cache entry.
+    The cache key is managed by :mod:`stringjax_tools`, which snapshots
+    keyword values for cache-key construction while retaining the original
+    values inside the closure.
 
     Args:
         func (Callable):           Hashable callable to be vmapped.
@@ -303,18 +311,11 @@ def _build_vmap_jit(
             ``jax.vmap``.
         frozen_kwargs (tuple):     Sorted tuple of ``(key, value)`` pairs
             representing keyword arguments to be bound inside the closure.
-            All values must be hashable.
 
     Returns:
         Callable: JIT-compiled vmapped function.
     """
-    kwargs = dict(frozen_kwargs)
-
-    def _tmp(*args):
-        """Closure forwarding frozen kwargs to func for vmap."""
-        return func(*args, **kwargs)
-
-    return jax.jit(jax.vmap(_tmp, in_axes=in_axes))
+    return _sjt_build_vmap_jit(func, in_axes, frozen_kwargs)
 
 
 def vmapping_func_cached(
@@ -326,7 +327,9 @@ def vmapping_func_cached(
     **Description:**
     Cached variant of :func:`vmapping_func`.  Returns a JIT-compiled vmapped
     function, **reusing the previously compiled XLA kernel** whenever
-    ``(func, in_axes, kwargs)`` match a prior call.
+    ``(func, in_axes, kwargs)`` match a prior call.  Keyword values may be
+    unhashable; :mod:`stringjax_tools` builds a robust cache-key
+    representation internally.
 
     Args:
         func (Callable):     Function to be vmapped.  Must be hashable;
@@ -334,7 +337,7 @@ def vmapping_func_cached(
         in_axes (int | tuple | None, optional): Forwarded to ``jax.vmap``.
             Must be hashable (tuples of ints or ``None``).  Default ``None``.
         **kwargs:            Keyword arguments to be bound inside the
-            closure.  All values must be hashable.
+            closure.
 
     Returns:
         Callable: JIT-compiled vmapped function, reused from cache when
@@ -344,8 +347,7 @@ def vmapping_func_cached(
         The backing LRU cache is module-level (capacity 256) and persists
         for the lifetime of the Python process.
     """
-    frozen = tuple(sorted(kwargs.items()))
-    return _build_vmap_jit(func, in_axes, frozen)
+    return _sjt_vmapping_func_cached(func, in_axes=in_axes, **kwargs)
 
 
 def jit_with_static_args(
@@ -371,19 +373,16 @@ def jit_with_static_args(
             def f(x, y, n): return x + y + n
             jit_f = jit_with_static_args(f, static_argnums=(2,))
     """
-    @partial(jax.jit, static_argnums=static_argnums)
-    def wrapped_func(*args, **kwargs):
-        """JIT-compiled wrapper with static argument handling."""
-        return func(*args, **kwargs)
-
-    return wrapped_func
+    return _sjt_jit_with_static_args(func, static_argnums=static_argnums)
 
 
 def is_static(arg: Any) -> bool:
     r"""
     **Description:**
     Heuristic test for whether ``arg`` should be treated as a JAX static
-    argument: ``True`` iff ``arg`` is **not** a ``jnp.ndarray``.
+    argument.  Delegates to :mod:`stringjax_tools`, which treats JAX and NumPy
+    arrays as dynamic/traced and ordinary Python configuration values as
+    static.
 
     Args:
         arg (Any): The argument to test.
@@ -391,7 +390,7 @@ def is_static(arg: Any) -> bool:
     Returns:
         bool: ``True`` if static, ``False`` if it should be traced.
     """
-    return not isinstance(arg, jnp.ndarray)
+    return _sjt_is_static(arg)
 
 
 def jit_with_dynamic_static_args(func: Callable) -> Callable:
@@ -408,13 +407,7 @@ def jit_with_dynamic_static_args(func: Callable) -> Callable:
     Returns:
         Callable: Wrapper that rebuilds the JIT plan per call.
     """
-    def wrapped_func(*args, **kwargs):
-        """JIT-compiled wrapper with dynamically detected static arguments."""
-        static_argnums = tuple(i for i, arg in enumerate(args) if is_static(arg))
-        jit_func = jax.jit(func, static_argnums=static_argnums)
-        return jit_func(*args, **kwargs)
-
-    return wrapped_func
+    return _sjt_jit_with_dynamic_static_args(func)
 
 
 # ==============================================================================
@@ -848,7 +841,8 @@ def save_model_data(
 #
 # Generic flatten / unflatten functions used by ``register_pytree_node`` for
 # the project's pytree-registered classes (``periods``, ``css``, ``FluxEFT``,
-# ``Conifold``).  See https://docs.jax.dev/en/latest/_autosummary/jax.tree_util.register_pytree_node.html
+# ``FluxVacuaFinder`` and ``lcs_tree``).  See
+# https://docs.jax.dev/en/latest/_autosummary/jax.tree_util.register_pytree_node.html
 # ==============================================================================
 
 # Class attributes that must travel as auxiliary (static / hashable) data
@@ -857,8 +851,13 @@ def save_model_data(
 # pytree boundary.
 _STATIC_KEYS: Tuple[str, ...] = (
     "h11", "h12", "model_ID", "dimension_H3", "_dimension_H3_tot",
-    "model_type", "n_fluxes", "gauge_choice", "prange", "maximum_degree",
-    "D3_tadpole", "nmax", "_active_conifold_idx",
+    "model_type", "limit", "name", "n_fluxes", "flux_dim", "gauge_choice",
+    "prange", "maximum_degree", "D3_tadpole", "nmax", "_active_conifold_idx",
+    "ncf", "conifold_basis", "use_gvs", "include_mirror_wsi",
+    "_period_input_used", "_prepotential_input_used", "_map_to_fd", "_Q",
+    "_sampler_flux_bounds", "_sampler_axion_bounds", "_sampler_dilaton_bounds",
+    "_sampler_moduli_bounds", "_sampler_seed",
+    "axion_fd", "Wnp",
     "prepotential_input", "period_input",
 )
 
@@ -874,13 +873,27 @@ _STATIC_KEYS: Tuple[str, ...] = (
 #   * the calibration dict / numpy arrays never enter aux_data, removing the
 #     hazard of an unhashable / ambiguously-comparable treedef.
 # On a pytree round-trip (inside a jit trace) the transient reconstructed
-# object simply lacks these attributes; that is safe because the traced
-# kernels never touch them, and the user's original instance is unchanged.
+# object receives conservative defaults for ignored attributes.  Traced kernels
+# still never read them, but eager methods such as ``sampler`` and ``Q`` remain
+# usable after a round trip.
 _PYTREE_IGNORE: frozenset = frozenset((
     "_sampler", "_sampler_kwargs",
     "_calibrated_sigmas", "_M_eigvecs", "_M_scales", "_calibration_isd_modes",
-    "_s_min", "_tr_Minv_median", "_M_cond","_Q",
+    "_s_min", "_tr_Minv_median", "_M_cond", "_Q_auto_warning_issued",
 ))
+
+_PYTREE_IGNORE_DEFAULTS = {
+    "_sampler": None,
+    "_sampler_kwargs": dict,
+    "_calibrated_sigmas": dict,
+    "_M_eigvecs": None,
+    "_M_scales": None,
+    "_calibration_isd_modes": None,
+    "_s_min": None,
+    "_tr_Minv_median": None,
+    "_M_cond": None,
+    "_Q_auto_warning_issued": False,
+}
 
 
 def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
@@ -891,8 +904,9 @@ def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
     Splits ``obj.__dict__`` into:
       * ``children`` — values that are JAX arrays / pytrees and should be
         traced;
-      * ``aux_data`` — names of those children, plus a flat list of
-        ``(key, value)`` pairs for static (non-traced) attributes.
+      * ``aux_data`` — ``(child_keys, static_items)``, where ``child_keys``
+        names the traced children and ``static_items`` stores static
+        ``(key, value)`` pairs.
 
     The classification is: a key in :data:`_PYTREE_IGNORE` is dropped entirely
     (cache / scratch state, not part of the pytree); otherwise a value is
@@ -906,20 +920,13 @@ def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
     Returns:
         tuple: ``(children, aux_data)`` — the standard pytree flatten output.
     """
-    children: List[Any] = []
-    aux_data: List[Any] = []
-    static: List[Tuple[str, Any]] = []
-    for key, value in obj.__dict__.items():
-        if key in _PYTREE_IGNORE:
-            continue
-        if isinstance(value, (str, bool)) or key in _STATIC_KEYS:
-            static.append((key, value))
-        else:
-            children.append(value)
-            aux_data.append(key)
-
-    aux_data.extend(static)
-    return tuple(children), tuple(aux_data)
+    return _sjt_flatten_func(
+        obj,
+        static_keys=_STATIC_KEYS,
+        ignore_keys=_PYTREE_IGNORE,
+        static_types=(str, bool),
+        validate_static=True,
+    )
 
 
 def unflatten_func_class(
@@ -935,20 +942,19 @@ def unflatten_func_class(
     object via ``object.__new__`` + ``setattr`` of each saved attribute.
 
     Args:
-        aux_data (tuple):   Auxiliary data from :func:`flatten_func`.
-        children (tuple):   Children (traced values) from :func:`flatten_func`.
-        myclass (type):     Class to reconstruct.
+        aux_data (tuple): Auxiliary data from :func:`flatten_func`.
+        children (tuple): Children (traced values) from :func:`flatten_func`.
+        myclass (type): Class to reconstruct.
 
     Returns:
         myclass: A fresh instance with all flattened attributes restored.
     """
-    obj = object.__new__(myclass)
-    for i, attr in enumerate(aux_data):
-        if isinstance(attr, tuple):
-            object.__setattr__(obj, attr[0], attr[1])
-        else:
-            object.__setattr__(obj, attr, children[i])
-    return obj
+    return _sjt_unflatten_func_class(
+        aux_data,
+        children,
+        myclass,
+        ignore_defaults=_PYTREE_IGNORE_DEFAULTS,
+    )
 
 
 # ==============================================================================

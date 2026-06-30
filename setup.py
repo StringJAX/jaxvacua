@@ -51,6 +51,7 @@ setup(
         'gurobipy',
         'cytools',
         'jaxpolylog>=0.3.0',
+        'stringjax-tools>=0.1.0',
     ],
     extras_require={
         'notebooks': ['jupyterlab', 'ipywidgets', 'anywidget'],

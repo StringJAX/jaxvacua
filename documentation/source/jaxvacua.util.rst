@@ -97,7 +97,7 @@ Pytree flatten / unflatten
 
 Generic flatten / unflatten functions used by ``register_pytree_node`` for
 the project's pytree-registered classes (``periods``, ``css``, ``FluxEFT``,
-``Conifold``).
+``FluxVacuaFinder`` and ``lcs_tree``).
 
 .. autosummary::
     :toctree: _autosummary

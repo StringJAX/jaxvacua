@@ -94,7 +94,7 @@ Initial guesses
 
 
 Ellipsoid sampling (tadpole-feasible)
------------------------------------
+-------------------------------------
 
 At fixed complex-structure moduli and axio-dilaton the ISD condition makes the
 full flux a linear function of the chosen input half ``u``, so the signed D3

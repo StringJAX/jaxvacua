@@ -118,8 +118,12 @@ class FluxEFT(css):
             **kwargs: Additional keyword arguments.
             
         Attributes:
-            Q (int): Maximum allowed D3-tadpole.
             n_fluxes (int): Number of fluxes.
+
+        Notes:
+            The D3-tadpole bound is stored internally as ``_Q``.  Use
+            :meth:`Q` to read the explicitly supplied bound or the automatic
+            geometry-dependent fallback.
             
         """
 
@@ -150,11 +154,12 @@ class FluxEFT(css):
         )
         
         self._Q = Q
+        self._Q_auto_warning_issued = False
         
 
         self.n_fluxes = self._dimension_H3_tot
         self.flux_dim = 2 * self.n_fluxes
-        self.axion_fd = kwargs.get("axion_fd", (-0.5, 0.5))
+        self.axion_fd = tuple(np.asarray(kwargs.get("axion_fd", (-0.5, 0.5))).tolist())
         
     def Q(self) -> int | None:
         r"""
@@ -164,15 +169,19 @@ class FluxEFT(css):
         Returns:
             int: D3-tadpole for the flux sector.
         """
-        if self._Q is None:
-            
-            if type(self.lcs_tree.h11) == int and type(self.lcs_tree.h12) == int:
-                warnings.warn("Tadpole was set to the maximum possible value, which may not be the true D3-tadpole for the orientifold!")
-                self._Q = self.lcs_tree.h11+self.lcs_tree.h12+2
-            else:
-                self._Q = None
-                
-        return self._Q
+        if self._Q is not None:
+            return self._Q
+
+        if type(self.lcs_tree.h11) == int and type(self.lcs_tree.h12) == int:
+            if not getattr(self, "_Q_auto_warning_issued", False):
+                warnings.warn(
+                    "Tadpole was set to the maximum possible value, which may "
+                    "not be the true D3-tadpole for the orientifold!"
+                )
+                self._Q_auto_warning_issued = True
+            return self.lcs_tree.h11+self.lcs_tree.h12+2
+
+        return None
 
     def __repr__(self) -> str:
         r"""
@@ -4241,4 +4250,3 @@ for _name in _cf._FLUXEFT_METHODS:
 unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
 
 register_pytree_node(FluxEFT, flatten_func, unflatten_func)
-
