@@ -57,6 +57,9 @@ import jax.numpy as jnp
 import pytest
 
 import jaxvacua as jvc
+from scipy.linalg import eigh as _geigh
+from jaxvacua.freezer import (ConifoldFreezer, _G_from_real_hessian,
+                              _kahler_metric_real_interleaved)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from util import TestCase  # noqa: E402
@@ -165,6 +168,12 @@ class TestConifoldBasisInvariance(TestCase):
         super().setUpClass()
         cls.MA, cls.MG = _MA, _MG
         cls.Lt = jnp.asarray(_L.T, dtype=complex)
+        # integer symplectic monodromy M (Pi_aligned = M Pi_general) used to transport
+        # fluxes across bases: flux_aligned = Mfull @ flux_general (Mfull = blockdiag(M, M)).
+        _M = _recover_monodromy(cls.MA, cls.MG, cls.Lt)
+        cls.Mfull = np.block([[_M, np.zeros_like(_M)], [np.zeros_like(_M), _M]])
+        cls.MfullInv = np.rint(np.linalg.inv(cls.Mfull))
+        cls.bp = np.asarray(cls.MG.lcs_tree.conifold.bulk_projection)
 
     def _points(self, n=8):
         for z in _ALIGNED_POINTS[:n]:
@@ -404,6 +413,107 @@ class TestConifoldBasisInvariance(TestCase):
         dF = abs(complex(self.MA.F_coniLCS_series(z_al))
                  - complex(self.MG.F_coniLCS_series(z_gen)))
         self.assertGreater(dF, 1.0)   # the documented monodromy difference
+
+    # ------------------------------------------------------------------ #
+    #  Basis-invariance of the physical mass spectrum
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _interleave(zc, t):
+        """Pack complex moduli + tau into the real interleaved layout used by ``ddV_x``."""
+        out = []
+        for z in zc:
+            out += [float(np.real(z)), float(np.imag(z))]
+        out += [float(np.real(t)), float(np.imag(t))]
+        return np.array(out)
+
+    def _matched_pfv(self, M, K, tau=5.0j):
+        """The SAME physical conifold PFV in both bases: aligned ``(M, K)`` and its
+        general-basis image, with the flux transported by the symplectic monodromy
+        (``flux_gen = Mfull^{-1} flux_al``) and the moduli by ``z_gen = L^T z_al``."""
+        Mf = jnp.asarray(np.asarray(M, dtype=float)); Kf = jnp.asarray(np.asarray(K, dtype=float))
+        flux_al = np.asarray(self.MA.pfv_to_flux(Mf, Kf))
+        z_al = np.asarray(self.MA.pfv_to_moduli(Mf, Kf, tau))
+        flux_gen = self.MfullInv @ flux_al
+        z_gen = np.asarray(self.Lt) @ z_al
+        return z_al, flux_al, z_gen, flux_gen
+
+    def _full_spectrum(self, model, z, tau, flux):
+        """Generalised eigenvalues of ``(ddV_x, full real Kähler metric)``.  The metric is
+        positive-definite (no z_cf reduction), so the eigensolve is well-conditioned."""
+        x = np.asarray(model._convert_complex_to_real(
+            jnp.asarray(z), jnp.conj(jnp.asarray(z)), tau, jnp.conj(tau)))
+        H = np.asarray(model.ddV_x(jnp.asarray(x), jnp.asarray(flux), noscale=True))
+
+        def Kreal(xx):
+            m, mc, t, tc = model._convert_real_to_complex(xx)
+            return jnp.real(model.kahler_potential(m, mc, t, tc))
+
+        HK = np.asarray(jax.hessian(Kreal)(jnp.asarray(x)))
+        G = np.asarray(_kahler_metric_real_interleaved(_G_from_real_hessian(jnp.asarray(HK))))
+        return _geigh(0.5 * (H + H.T), 0.5 * (G + G.T), eigvals_only=True)
+
+    def test_scalar_potential_invariant(self):
+        """The no-scale scalar potential V matches across bases at a matched conifold PFV.
+
+        Together with the existing e^-K (test_kahler_potential_invariant) and W
+        (test_W_invariant_under_monodromy_flux_transport) checks, this pins the full scalar
+        sector as basis-invariant -- the foundation for invariance of the masses."""
+        z_al, flux_al, z_gen, flux_gen = self._matched_pfv(np.array([8, -12, 6]), np.array([-5, 1, -2]))
+        tau = 5.0j
+        xA = self.MA._convert_complex_to_real(jnp.asarray(z_al), jnp.conj(jnp.asarray(z_al)), tau, jnp.conj(tau))
+        xG = self.MG._convert_complex_to_real(jnp.asarray(z_gen), jnp.conj(jnp.asarray(z_gen)), tau, jnp.conj(tau))
+        VA = float(self.MA.V_x(jnp.asarray(xA), jnp.asarray(flux_al), noscale=True))
+        VG = float(self.MG.V_x(jnp.asarray(xG), jnp.asarray(flux_gen), noscale=True))
+        self.assertLess(abs(VA - VG) / max(abs(VA), 1e-30), 1e-8,
+                        f"scalar potential differs across bases: {VA:.6e} vs {VG:.6e}")
+
+    def test_full_mass_spectrum_invariant(self):
+        """The physical mass spectrum (generalised eigenvalues of the full Hessian against
+        the Kähler metric) is conifold_basis-INDEPENDENT.
+
+        Evaluated at a MODERATE-throat PFV (|z_cf| ~ 1e-4), where the conifold mass and the
+        light masses are not separated by ~1/eps and the spectrum is well-conditioned.  At a
+        DEEP throat the conifold mass ~ 1/|z_cf|^2 sits a factor ~1/eps above the light modes,
+        which then fall to the float64 floor -- the precision wall the freezer is built to
+        avoid, not a basis dependence (the scalars e^-K, W, V still match there)."""
+        z_al, flux_al, z_gen, flux_gen = self._matched_pfv(np.array([8, -12, 6]), np.array([-5, 1, -2]))
+        evA = np.sort(self._full_spectrum(self.MA, z_al, 5.0j, flux_al))
+        evG = np.sort(self._full_spectrum(self.MG, z_gen, 5.0j, flux_gen))
+        rel = float(np.max(np.abs(evA - evG)) / max(float(np.max(np.abs(evA))), 1e-30))
+        self.assertLess(rel, 1e-9, f"full mass spectrum differs across bases: rel={rel:.2e}\n"
+                                   f"MA={evA}\nMG={evG}")
+
+    def test_freezer_reduced_metric_covariant(self):
+        """The freezer reduced Kähler metric ``G_x_light`` is basis-COVARIANT:
+        ``K_aligned = J^T K_general J``, with J the light-coordinate Jacobian taken THROUGH
+        the freezer reconstruction (central differences), so it carries the on-shell
+        ``dz_cf/dphi`` back-reaction.
+
+        This is the freezer's half of the mass-invariance statement.  The reduced Hessian is
+        covariant only on-shell (the Schur complement equals the reduced Hessian only at
+        ``dV/dz_cf = 0``), so the integrated-out masses are basis-invariant at a vacuum."""
+        z_al, flux_al, z_gen, flux_gen = self._matched_pfv(np.array([4, -8, 8]), np.array([-8, 3, -6]))
+        fzA = ConifoldFreezer(self.MA, conifold_index=0)   # aligned conifold modulus = z_al[0]
+        fzG = ConifoldFreezer(self.MG)
+        L = np.asarray(_L); tau = 5.0j
+
+        def Fmap(x_al):
+            """Aligned light coords -> general light coords, through the z_cf reconstruction."""
+            xfull = np.asarray(fzA._real_light_to_full(
+                jnp.asarray(x_al), jnp.asarray(flux_al), apply_correction=True))
+            zf, _, t, _ = self.MA._convert_real_to_complex(jnp.asarray(xfull))
+            return self._interleave((L.T @ np.asarray(zf)) @ self.bp, complex(t))
+
+        x_al = self._interleave(z_al[1:], tau)
+        n = len(x_al); J = np.zeros((n, n)); eps = 1e-6
+        for j in range(n):
+            xp = x_al.copy(); xm = x_al.copy(); xp[j] += eps; xm[j] -= eps
+            J[:, j] = (Fmap(xp) - Fmap(xm)) / (2 * eps)
+        x_g = Fmap(x_al)
+        KA = np.asarray(fzA.G_x_light(jnp.asarray(x_al), jnp.asarray(flux_al), apply_correction=True))
+        KG = np.asarray(fzG.G_x_light(jnp.asarray(x_g), jnp.asarray(flux_gen), apply_correction=True))
+        rel = float(np.max(np.abs(KA - J.T @ KG @ J)) / max(float(np.max(np.abs(KA))), 1e-30))
+        self.assertLess(rel, 1e-5, f"reduced Kähler metric not basis-covariant: rel={rel:.2e}")
 
 
 if __name__ == "__main__":

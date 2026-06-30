@@ -685,19 +685,30 @@ class Freezer(ABC):
             :math:`\phi = (a + \mathrm{i} b)/\sqrt2`, so
             :math:`m^2 = \tfrac12\,\lambda`.
 
-            **On-shell evaluation.** The reduced Hessian (``schur``/``frozen``)
-            is exact only where the heavy direction is on-shell.  Pass ``x_full``
-            (the stored full vacuum point) to evaluate the Hessian there;
-            otherwise the heavy field is reconstructed from the analytic
-            :meth:`compute_zcf` solve, which is on-shell only deep in the throat.
-            The point is screened on the **full** F-term residual
-            ``max|DW_x(x_full)| <= dw_tol`` (the heavy component included), so a
-            point whose heavy direction is off-shell -- an imperfect analytic
-            seed at a moderate throat, or a wrong ``apply_correction``/``mode`` --
-            is rejected with ``reason="off-shell"`` rather than silently returning
-            a spurious tachyon.  The reduced metric always uses the analytic
-            substituted potential (it differentiates through the solve).  For
-            coniLCS the ``apply_correction=True`` z_cf-solve default (set by
+            **On-shell evaluation and screening (two modes).** The reduced
+            Hessian (``schur``/``frozen``) equals the Hessian of the reduced
+            potential only where the heavy direction is on-shell, so the screen
+            and the recommended usage depend on which heavy solution you trust:
+
+            - **Analytic reduced EFT** (``x_full=None``, the default): the heavy
+              field is reconstructed from the analytic :meth:`compute_zcf` solve,
+              which IS its on-shell value in the EFT.  The vacuum condition is then
+              the *light* F-terms, so the point is screened on
+              ``max|DW_x_light| <= dw_tol``.  The full residual ``max|DW_x|``
+              (heavy component included) is the controlled EFT truncation: it is
+              reported as ``dw_residual`` but does NOT reject the point, so a
+              legitimate moderate-throat vacuum is no longer spuriously flagged.
+            - **Certified numerical vacuum** (``x_full`` given): evaluate the
+              Hessian at a stored full vacuum and screen the **full** residual
+              ``max|DW_x(x_full)| <= dw_tol`` -- the heavy direction must itself be
+              on-shell, which also catches a wrong heavy solve / wrong
+              ``apply_correction``.
+
+            In both modes ``dw_residual`` is the full residual, and an off-shell
+            point returns an empty spectrum with ``reason="off-shell"``.  The
+            reduced metric always uses the analytic substituted potential (it
+            differentiates through the solve).  For coniLCS the
+            ``apply_correction=True`` z_cf-solve default (set by
             :class:`ConifoldFreezer`) gives a usable analytic seed; it belongs to
             the *z_cf solve* and is unrelated to ``reduction="autodiff"``.
 
@@ -716,9 +727,10 @@ class Freezer(ABC):
                 Orthogonal to the z_cf-solve ``mode`` forwarded via ``**kwargs``.
             noscale (bool, optional): If ``True``, uses the no-scale scalar
                 potential. Defaults to ``True``.
-            dw_tol (float, optional): On-shell tolerance on the full residual
-                ``max|DW_x(x_full)|`` (heavy component included). Defaults to
-                ``1e-4``.
+            dw_tol (float, optional): On-shell tolerance on the F-term residual --
+                the light ``max|DW_x_light|`` when ``x_full=None`` (analytic EFT),
+                or the full ``max|DW_x(x_full)|`` when ``x_full`` is given.
+                Defaults to ``1e-4``.
             rel_tol (float, optional): Relative tolerance for the stability flag
                 and the flat-direction floor of the dynamic-range diagnostic.
                 Defaults to ``1e-8``.
@@ -735,7 +747,12 @@ class Freezer(ABC):
             x_full (Array, optional): Full real point (the stored vacuum, heavy
                 field on-shell) at which to evaluate the reduced Hessian and the
                 on-shell screen.  If ``None`` the heavy field is reconstructed
-                from the analytic solve via ``**kwargs``.
+                from the analytic solve via ``**kwargs``.  Note
+                ``reduction="autodiff"`` IGNORES ``x_full`` for the Hessian (it
+                always differentiates through the analytic heavy solve); only the
+                on-shell screen and the reduced metric use ``x_full`` in that
+                case.  Pass ``reduction="schur"`` to evaluate the masses at a
+                stored ``x_full``.
 
         Returns:
             LightSpectrum: The reduced spectrum and stability diagnostics.
@@ -753,12 +770,21 @@ class Freezer(ABC):
         xf = (jnp.asarray(x_full) if x_full is not None
               else self._real_light_to_full(x_light, f_j, **kwargs))
 
-        # Screen the FULL F-term residual (heavy component included): the
-        # light-projected DW_x_light is blind to a wrong heavy solve and would
-        # let an off-shell heavy direction return a spurious tachyon.
-        dw = float(jnp.max(jnp.abs(self.model.DW_x(xf, f_j))))
-        if not np.isfinite(dw) or dw > dw_tol:
-            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw,
+        # The full F-term residual (heavy component included) is ALWAYS the
+        # reported on-shell diagnostic ``dw_residual``; the screen is mode-aware.
+        #  * x_full given    -> certify a stored numerical vacuum: the heavy
+        #    direction must be on-shell, so screen the full residual (this also
+        #    catches a wrong heavy solve / wrong ``apply_correction``).
+        #  * x_full is None  -> analytic reduced EFT: the heavy direction is
+        #    on-shell BY the z_cf formula, so the EFT vacuum condition is the
+        #    LIGHT F-terms; screen those.  The full residual is then the
+        #    (controlled) EFT truncation -- reported, not a rejection -- so a
+        #    legitimate moderate-throat vacuum is not spuriously flagged.
+        dw_full = float(jnp.max(jnp.abs(self.model.DW_x(xf, f_j))))
+        screen = (dw_full if x_full is not None
+                  else float(jnp.max(jnp.abs(self.DW_x_light(x_light, f_j, **kwargs)))))
+        if not np.isfinite(screen) or screen > dw_tol:
+            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw_full,
                                  reduction, {"reason": "off-shell"})
 
         H_eff = np.asarray(self.ddV_x_light(
@@ -767,17 +793,17 @@ class Freezer(ABC):
         H_eff = 0.5 * (H_eff + H_eff.T)
         K_eff = 0.5 * (K_eff + K_eff.T)
         if not (np.all(np.isfinite(H_eff)) and np.all(np.isfinite(K_eff))):
-            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw,
+            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw_full,
                                  reduction, {"reason": "nan-hessian"})
 
         try:
             lam = self._generalised_eigvals(H_eff, K_eff, eig_backend)
         except np.linalg.LinAlgError as exc:   # non-PD / singular reduced metric
             return LightSpectrum(
-                np.array([]), np.array([]), np.nan, False, dw, reduction,
+                np.array([]), np.array([]), np.nan, False, dw_full, reduction,
                 {"reason": f"eig-failed: {type(exc).__name__}"})
         if not np.all(np.isfinite(lam)):       # e.g. jax Cholesky on a non-PD K
-            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw,
+            return LightSpectrum(np.array([]), np.array([]), np.nan, False, dw_full,
                                  reduction, {"reason": "nan-eig"})
 
         m2 = 0.5 * lam
@@ -800,7 +826,7 @@ class Freezer(ABC):
                 RuntimeWarning, stacklevel=2,
             )
         return LightSpectrum(
-            np.sort(masses), lam, m2_min, stable, dw, reduction,
+            np.sort(masses), lam, m2_min, stable, dw_full, reduction,
             {"cond_Keff": float(np.linalg.cond(K_eff)),
              "m2_dynamic_range": dyn_range, "n_modes": int(len(lam))},
         )

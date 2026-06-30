@@ -306,20 +306,18 @@ class TestConifoldFreezer(TestCase):
 
 
 # ==============================================================================
-#  TestConifoldFreezerIntegration — exercises solve_heavy / _real_light_to_full
-#  end-to-end against the new conifold_utils API.  Uses the same "aule"
-#  PromotionModels fixture as tests/test_conifold_bulk_eft.py so we get a
-#  loadable coniLCS model regardless of the standalone FluxEFT(h12=2,
-#  model_ID=1) fixture above.
+#  TestConifoldFreezerIntegration / TestConifoldFreezerMassSpectrum exercise the
+#  conifold reduced-EFT surface against a coniLCS model built NATIVELY from the
+#  built-in "aule" geometry (``jvc.periods(model_ID="aule")``) — no private data,
+#  so the fixture runs in a clean public checkout.
 # ==============================================================================
 
 import pytest as _pytest
+from types import SimpleNamespace
 
 _INT_NAME  = "aule"
 _INT_MVEC0 = np.array([20, 4, 8, -18, -20])
 _INT_KVEC0 = np.array([-5, -1, 0, 1, -1])
-_INT_PVEC0 = np.array([0.0, 0.020833333333333332, 0.041666666666666664,
-                       0.020833333333333332, 0.0])
 _INT_TAU0  = 1j / 0.04317129968232153
 _INT_ATOL  = 1e-10
 
@@ -329,25 +327,27 @@ _INT_LOAD_ERROR = None
 
 
 def _try_load_int_models():
-    """Build the (bulk, series, conilcs) PromotionModels triple from the
-    'aule' lcs_tree, plus a PFV seed point. Returns (models, pfv) on success,
-    or raises with a descriptive error."""
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-    promo_dir = os.path.join(repo_root, "private", "promotion")
-    if promo_dir not in sys.path:
-        sys.path.insert(0, promo_dir)
-    import vacuum_promotion as vp  # noqa: E402
+    """Build a coniLCS bulk model + a PFV seed natively from the built-in 'aule'
+    geometry (no ``private/promotion`` dependency).  Returns ``(models, pfv)``
+    where ``models.bulk`` is a :class:`FluxVacuaFinder` and ``pfv.flux`` /
+    ``pfv.x`` are the seed flux and full real coordinate vector."""
     import jaxvacua as jvc  # noqa: E402
 
-    lcs_tree = jvc.periods(h12=len(_INT_MVEC0), model_ID=_INT_NAME, limit="coniLCS").lcs_tree
-    models = vp.PromotionModels.from_lcs_tree(
-        lcs_tree, conifold_basis=True, ncf=2, prange=20, maximum_degree=2,
+    # Build the lcs_tree without ``maximum_degree``, then the FluxVacuaFinder
+    # WITH it, so the conifold setup runs at FVF-construction time (this order
+    # reproduces the PD reduced metric of the former PromotionModels fixture).
+    tree = jvc.periods(h12=len(_INT_MVEC0), model_ID=_INT_NAME, limit="coniLCS").lcs_tree
+    tree.update(limit="coniLCS")
+    model = jvc.FluxVacuaFinder(
+        lcs_tree_input=tree, limit="coniLCS", h12=len(_INT_MVEC0), ncf=2,
+        use_gvs=True, prange=20, maximum_degree=2, conifold_basis=True,
     )
-    pfv = vp.PFV.from_quantum_numbers(
-        models, M_vec=_INT_MVEC0, K_vec=_INT_KVEC0, p_vec=_INT_PVEC0, tau=_INT_TAU0,
-        metadata={"model_name": _INT_NAME},
-    )
-    return models, pfv
+    Mf = jnp.asarray(_INT_MVEC0.astype(float)); Kf = jnp.asarray(_INT_KVEC0.astype(float))
+    flux = jnp.asarray(model.pfv_to_flux(Mf, Kf))
+    z0 = model.pfv_to_moduli(Mf, Kf, _INT_TAU0)
+    ctau = jnp.conj(jnp.asarray(_INT_TAU0))
+    x = jnp.asarray(model._convert_complex_to_real(z0, jnp.conj(z0), _INT_TAU0, ctau))
+    return SimpleNamespace(bulk=model), SimpleNamespace(flux=flux, x=x)
 
 
 try:
@@ -631,14 +631,15 @@ class TestConifoldFreezerMassSpectrum(TestCase):
                 ConifoldFreezer._generalised_eigvals(H, K, backend)
 
     def test_off_shell_point_is_flagged(self):
-        r"""The PFV seed is off-shell; the default full-residual screen rejects it
-        with an empty, flagged spectrum (rather than a silent spurious tachyon)."""
+        r"""The PFV seed is off-shell in the light F-terms; with ``x_full=None``
+        the light-residual screen rejects it (empty, flagged spectrum) instead of
+        returning a spurious tachyon.  ``dw_residual`` reports the full residual."""
         s = self.freezer.light_mass_spectrum(self.x_bulk, self.flux,
                                              reduction="schur")
         self.assertEqual(s.masses.size, 0)
         self.assertEqual(s.info.get("reason"), "off-shell")
         self.assertFalse(s.stable)
-        self.assertGreater(s.dw_residual, 1e-4)   # screened on the full residual
+        self.assertGreater(s.dw_residual, 1e-4)   # full residual is the diagnostic
 
     def test_invalid_reduction_and_backend_raise(self):
         r"""Bad ``reduction`` / ``eig_backend`` strings fail fast with
