@@ -46,7 +46,7 @@ import numpy as np
 
 # Important JAX libraries
 import jax
-from jax import jit, vmap, config
+from jax import jit, config
 import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike

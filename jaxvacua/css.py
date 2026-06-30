@@ -419,10 +419,11 @@ class css:
     ####################################### GAUGE FIXING FUCTIONS FROM PERIOD CALCULATION #############################################
     ###################################################################################################################################
         
+    @auto_vmap(moduli=1)
     @partial(jit, static_argnums = (2,))
     def moduli_to_periods(
                         self, 
-                        moduli: Array, 
+                        moduli: Array,
                         conj: bool = False
                         ) -> Array:
         r"""
@@ -446,6 +447,7 @@ class css:
             return val*self.gauge_choice
 
 
+    @auto_vmap(XPer=1)
     @partial(jit, static_argnums = ())
     def periods_to_moduli(
                         self, 
@@ -468,6 +470,7 @@ class css:
 
         
     
+    @auto_vmap(moduli=1, moduli_c=1)
     @partial(jit, static_argnums = (3,))
     def gauge_kinetic_matrix(
                             self, 
@@ -505,6 +508,7 @@ class css:
     
     N = gauge_kinetic_matrix
     
+    @auto_vmap(moduli=1, moduli_c=1)
     @partial(jit, static_argnums = ())
     def ISD_matrix(
                 self, 
@@ -866,6 +870,7 @@ class css:
         
         return jax.grad(self.prepot,holomorphic=True)(moduli,conj=conj)
     
+    @auto_vmap(moduli=1)
     @partial(jit, static_argnums = (2,))
     def period_vector(
                     self, 
@@ -993,6 +998,7 @@ class css:
     V_tilde = mirror_volume  
 
     # Kahler potential in terms of the axio dilation and the period vectors
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0)
     @partial(jit, static_argnums = ())
     def kahler_potential(
                         self, 
@@ -1752,6 +1758,7 @@ class css:
         # Stack the two blocks and return result
         return jnp.vstack((a, b))
         
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0)
     @partial(jit, static_argnums = (5,))
     def kahler_metric(self, 
                     moduli: Array, 
@@ -1809,6 +1816,7 @@ class css:
             return self._kahler_metric_block_diagonal( moduli, moduli_c, tau, tau_c)
 
 
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0)
     @partial(jit, static_argnums = (5,))
     def inverse_kahler_metric(self, 
                             moduli: Array, 

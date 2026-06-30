@@ -593,6 +593,7 @@ class FluxVacuaFinder(FluxEFT):
 
         return jax.lax.while_loop(cond,body,(0,x,10.))
 
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,6,7,8,9,10,))
     def newton_method_flux_vacua(
         self, moduli: Array, tau: complex, fluxes: Array, mode: str = None, step_size_Newton: float = 1e-1,
@@ -641,6 +642,7 @@ class FluxVacuaFinder(FluxEFT):
             
         return moduli,tau,res
 
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,6,))
     def linearised_shifts_ISD(
         self,
@@ -754,6 +756,7 @@ class FluxVacuaFinder(FluxEFT):
             
             return moduli_new,tau_new,flux_new
 
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,6,))
     def linearised_shifts_H(
         self,
@@ -872,6 +875,7 @@ class FluxVacuaFinder(FluxEFT):
             tau_new = tau+step_size*(shift[-2]+1j*shift[-1])
             return moduli_new,tau_new,flux_new
         
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,6,))
     def linearised_shifts_F(
         self,
@@ -991,6 +995,7 @@ class FluxVacuaFinder(FluxEFT):
             return moduli_new,tau_new,flux_new
         
 
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,6,7,8,))
     def linearised_shifts(
         self,
@@ -1126,7 +1131,7 @@ class FluxVacuaFinder(FluxEFT):
             
         if objective_fct is None:
             if mode is None:
-                objective_fct = jax.vmap(self.DW)
+                objective_fct = self.DW
             elif mode =="fluxes":
                 objective_fct = jax.vmap(jax.vmap(self.DW))
 
@@ -1269,7 +1274,7 @@ class FluxVacuaFinder(FluxEFT):
                 optimisers = [optimiser]
         
         if objective_fct is None:
-            objective_fct = jax.vmap(self.DW)
+            objective_fct = self.DW
         
         
         if rns_key is None:
@@ -1810,13 +1815,9 @@ class FluxVacuaFinder(FluxEFT):
         mod = np.array(sampler.get_complex_moduli(n_sample))
         mod_jax = jnp.array(mod, dtype=complex)
 
-        # Vectorised: compute the ISD matrix at all sampled moduli in a single
-        # XLA call.  ~800x faster than the per-row Python loop on h12=2 at
-        # n_sample=50 (700 ms → 0.9 ms).  Compilation is one-shot per
-        # (model, n_sample) shape combination.
-        M_all   = np.asarray(
-            jax.vmap(self.ISD_matrix, in_axes=(0, 0))(mod_jax, jnp.conj(mod_jax))
-        )                                      # shape (n_sample, d, d)
+        # ISD_matrix is auto-vectorised over paired leading-axis moduli batches.
+        # This keeps the single-point API and batched calibration path identical.
+        M_all = np.asarray(self.ISD_matrix(mod_jax, jnp.conj(mod_jax)))
         eigs_all   = np.abs(np.linalg.eigvalsh(M_all))   # shape (n_sample, d)
         conds      = eigs_all.max(axis=1) / np.maximum(eigs_all.min(axis=1), 1e-30)
         all_tr_Minv = list(np.sum(1.0 / np.maximum(eigs_all, 1e-30), axis=1))

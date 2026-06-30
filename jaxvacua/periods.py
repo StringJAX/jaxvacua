@@ -48,7 +48,7 @@ from functools import partial
 
 # Important JAX libraries
 import jax
-from jax import jit, vmap, config
+from jax import jit, config
 import jax.numpy as jnp
 from jax import Array
 from jax.scipy.special import zeta
@@ -930,6 +930,7 @@ class periods:
         #Second derivative of prepotential:
         return jax.jacrev(self.prepot_grad_per,holomorphic=True)(XPer,conj=conj)
 
+    @auto_vmap(XPer=1)
     @partial(jit, static_argnums = (2,))
     def period_vector_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
@@ -982,6 +983,7 @@ class periods:
         else:
             raise ValueError("Period vector undefined! If no input was provided, use one of the pre-implemented methods!")
 
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = ())
     def A_per(self, XPer: Array, cXPer: Array) -> complex:
         r"""
@@ -1008,6 +1010,7 @@ class periods:
 
         return -1.j*jnp.matmul(self.period_vector_per(cXPer,conj=True), jnp.matmul(self.sigma, self.period_vector_per(XPer)))
     
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = ())
     def kahler_potential_per(self, XPer: Array, cXPer: Array) -> complex:
         r"""
@@ -1283,6 +1286,7 @@ class periods:
     ############################## GAUGE KINETIC MATRIX ######################################
     ##########################################################################################
     
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = (3,))
     def gauge_kinetic_matrix_prepotential(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
@@ -1333,6 +1337,7 @@ class periods:
             return FIJ-2.*1j*jnp.dot(jnp.array([TFI]).T,jnp.array([TFI]))/jnp.dot(cXPer,TFI)
 
 
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = (3,))
     def gauge_kinetic_matrix_periods(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
@@ -1380,6 +1385,7 @@ class periods:
     
     
     
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = (3,))
     def gauge_kinetic_matrix(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
@@ -1488,6 +1494,7 @@ class periods:
     ###################################### ISD MATRIX ########################################
     ##########################################################################################
 
+    @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = ())
     def ISD_matrix(self, XPer: Array, cXPer: Array) -> Array:
         r"""

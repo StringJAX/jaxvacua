@@ -404,6 +404,28 @@ class TestFluxVacuaFinder(TestCase):
         # flag is a boolean scalar
         self.assertEqual(flag.shape, ())
 
+    def test_auto_vmap_linearised_shifts_match_scalar_calls(self):
+        r"""Auto-vectorised linearised shifts agree with scalar row calls."""
+        moduli = jnp.stack([self.z, self.z + jnp.array([0.05 + 0.1j, -0.03 + 0.2j])])
+        tau = jnp.array([self.tau, self.tau + 0.25j])
+        fluxes = jnp.stack([self.fl, self.fl])
+
+        batch = self.model.linearised_shifts(
+            moduli, tau, fluxes, mode="ISD", return_flag=False
+        )
+        scalar = tuple(
+            jnp.stack([
+                self.model.linearised_shifts(
+                    moduli[i], tau[i], fluxes[i], mode="ISD", return_flag=False
+                )[j]
+                for i in range(2)
+            ])
+            for j in range(3)
+        )
+
+        for got, expected in zip(batch, scalar):
+            self.assertAllClose(got, expected, rtol=1e-9, atol=1e-9)
+
     # ==========================================================================
     #  4. newton_method_flux_vacua
     # ==========================================================================
@@ -748,6 +770,35 @@ class TestFluxVacuaFinder(TestCase):
         self.assertAllClose(flux_out, fluxes)
         self.assertAllTrue(checks)
         self.assertAllClose(res, jnp.zeros(2), atol=1e-14)
+
+    def test_fterm_solver_default_objective_uses_auto_vmap(self):
+        r"""The default solver objective should call batched ``self.DW`` directly."""
+        moduli = jnp.broadcast_to(self.z, (2, self.h12))
+        tau = jnp.broadcast_to(jnp.asarray(self.tau), (2,))
+        fluxes = jnp.broadcast_to(self.fl, (2, 2 * self.model.n_fluxes))
+
+        def optimiser(m, t, fl):
+            return m, t, fl, jnp.ones(m.shape[0], dtype=bool)
+
+        step, mod_out, tau_out, flux_out, checks, res = self.model.fterm_solver(
+            moduli,
+            tau,
+            fluxes,
+            optimiser=optimiser,
+            tol=0.0,
+            max_iters=1,
+        )
+
+        expected = self.model.compute_residual(
+            self.model.DW(moduli, jnp.conj(moduli), tau, jnp.conj(tau), fluxes),
+            axis=1,
+        )
+        self.assertEqual(int(step), 1)
+        self.assertAllClose(mod_out, moduli)
+        self.assertAllClose(tau_out, tau)
+        self.assertAllClose(flux_out, fluxes)
+        self.assertAllTrue(checks)
+        self.assertAllClose(res, expected, rtol=1e-9, atol=1e-9)
 
     def test_sample_SUSY_flux_vacua_wrapper_with_custom_solver(self):
         r"""The high-level SUSY sampler should compose sampler, solver and dedup."""

@@ -53,7 +53,7 @@ import pickle
 import threading
 import itertools
 from functools import partial
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Iterable, List, Mapping, Optional, Tuple, Union
 
 # Standard library `_thread` is exposed under the legacy name `thread` on
 # Python < 3 — keep both branches in case of a stripped environment.
@@ -74,6 +74,11 @@ from stringjax_tools.pytrees import (
     flatten_func as _sjt_flatten_func,
     unflatten_func_class as _sjt_unflatten_func_class,
 )
+from stringjax_tools.auto_vectorise import (
+    ArgSpec,
+    auto_vmap as _sjt_auto_vmap,
+    clear_auto_vmap_caches,
+)
 from stringjax_tools.vmap import (
     _build_vmap_jit as _sjt_build_vmap_jit,
     vmapping_func as _sjt_vmapping_func,
@@ -91,7 +96,135 @@ DTYPE = jax.dtypes.canonicalize_dtype(float)
 
 
 # ==============================================================================
-# 1. PRNG / random sampling
+# 1. Auto-vectorisation defaults
+# ==============================================================================
+
+_AUTO_VMAP_INITIAL_RANKS: dict[str, int] = {
+    "moduli": 1,
+    "moduli_c": 1,
+    "tau": 0,
+    "tau_c": 0,
+    "fluxes": 1,
+    "flux": 1,
+    "x": 1,
+    "XPer": 1,
+    "cXPer": 1,
+}
+
+_AUTO_VMAP_INITIAL_SHAPES: dict[str, Any] = {
+    "moduli": "h12",
+    "moduli_c": "h12",
+    "tau": None,
+    "tau_c": None,
+    "fluxes": "flux_dim",
+    "flux": "flux_dim",
+    "x": "n_fluxes",
+    "XPer": "dimension_H3",
+    "cXPer": "dimension_H3",
+}
+
+_AUTO_VMAP_DEFAULT_RANKS: dict[str, int] = dict(_AUTO_VMAP_INITIAL_RANKS)
+_AUTO_VMAP_DEFAULT_SHAPES: dict[str, Any] = dict(_AUTO_VMAP_INITIAL_SHAPES)
+
+
+def set_auto_vmap_defaults(**sample_ranks: int) -> dict[str, int]:
+    r"""
+    Update JAXVacua-local default sample ranks for :func:`auto_vmap`.
+
+    These defaults are independent of :mod:`stringjax_tools` global defaults;
+    importing JAXVacua therefore does not mutate behaviour in other packages.
+    Changes affect subsequently decorated functions, while built-in JAXVacua
+    methods use the defaults active when their classes were imported.
+    """
+    _AUTO_VMAP_DEFAULT_RANKS.update(sample_ranks)
+    return get_auto_vmap_defaults()
+
+
+def get_auto_vmap_defaults() -> dict[str, int]:
+    r"""Return a copy of the active JAXVacua-local auto-vmap ranks."""
+    return dict(_AUTO_VMAP_DEFAULT_RANKS)
+
+
+def reset_auto_vmap_defaults() -> None:
+    r"""Reset JAXVacua-local auto-vmap ranks to the package defaults."""
+    _AUTO_VMAP_DEFAULT_RANKS.clear()
+    _AUTO_VMAP_DEFAULT_RANKS.update(_AUTO_VMAP_INITIAL_RANKS)
+
+
+def set_auto_vmap_default_shapes(**sample_shapes: Any) -> dict[str, Any]:
+    r"""
+    Update JAXVacua-local exact sample-shape defaults for :func:`auto_vmap`.
+
+    Shape entries may be concrete shapes, attribute names such as ``"h12"``,
+    or callables accepted by :mod:`stringjax_tools.auto_vectorise`.
+    Changes affect subsequently decorated functions, while built-in JAXVacua
+    methods use the defaults active when their classes were imported.
+    """
+    _AUTO_VMAP_DEFAULT_SHAPES.update(sample_shapes)
+    return get_auto_vmap_default_shapes()
+
+
+def get_auto_vmap_default_shapes() -> dict[str, Any]:
+    r"""Return a copy of the active JAXVacua-local auto-vmap shapes."""
+    return dict(_AUTO_VMAP_DEFAULT_SHAPES)
+
+
+def reset_auto_vmap_default_shapes() -> None:
+    r"""Reset JAXVacua-local auto-vmap shapes to the package defaults."""
+    _AUTO_VMAP_DEFAULT_SHAPES.clear()
+    _AUTO_VMAP_DEFAULT_SHAPES.update(_AUTO_VMAP_INITIAL_SHAPES)
+
+
+def auto_vmap(
+    sample_ranks: Mapping[str, int] | None = None,
+    *,
+    sample_shapes: Mapping[str, Any] | None = None,
+    validate_shapes: bool = True,
+    jit: bool = True,
+    **named_sample_ranks: int,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    r"""
+    JAXVacua-local wrapper around :func:`stringjax_tools.auto_vmap`.
+
+    The decorator applies JAXVacua's canonical sample ranks and exact trailing
+    shapes only to argument names present in the decorated function.  Local
+    declarations override the defaults, for example ``@auto_vmap(fluxes=1)``.
+    """
+
+    local_ranks = dict(sample_ranks or {})
+    local_ranks.update(named_sample_ranks)
+    local_shapes = dict(sample_shapes or {})
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        import inspect
+
+        parameters = inspect.signature(func).parameters
+        ranks = {
+            name: rank
+            for name, rank in _AUTO_VMAP_DEFAULT_RANKS.items()
+            if name in parameters
+        }
+        ranks.update(local_ranks)
+
+        shapes = {
+            name: shape
+            for name, shape in _AUTO_VMAP_DEFAULT_SHAPES.items()
+            if name in parameters and name in ranks
+        }
+        shapes.update(local_shapes)
+
+        return _sjt_auto_vmap(
+            ranks,
+            sample_shapes=shapes,
+            validate_shapes=validate_shapes,
+            jit=jit,
+        )(func)
+
+    return decorator
+
+
+# ==============================================================================
+# 2. PRNG / random sampling
 # ==============================================================================
 
 class PRNGSequence:

@@ -19,7 +19,6 @@ tadpole methods.
 import numpy as np
 import seaborn as sn
 import matplotlib.pyplot as plt
-from jax import vmap
 
 cmap = sn.color_palette("viridis", as_cmap=True)
 
@@ -58,16 +57,12 @@ def make_overview_plots(model, moduli, tau, fluxes,
         If True, use the gauge-dependent ``superpotential``; otherwise use
         the gauge-invariant ``superpotential_gauge_invariant``.
     """
-    W1v = vmap(model.superpotential)
-    W0v = vmap(model.superpotential_gauge_invariant)
-    tadpole_v = vmap(model.tadpole)
-
     if use_normal_w0:
-        W0 = W1v(moduli, tau, fluxes)
+        W0 = model.superpotential(moduli, tau, fluxes)
     else:
-        W0 = W0v(moduli, tau, fluxes)
+        W0 = model.superpotential_gauge_invariant(moduli, tau, fluxes)
 
-    Nflux = tadpole_v(fluxes)
+    Nflux = model.tadpole(fluxes)
 
     fig, ax = plt.subplots(2, 2, dpi=200, figsize=(6, 4))
 

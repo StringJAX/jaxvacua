@@ -1480,6 +1480,68 @@ class TestFluxEFT(TestCase):
             )
         )
 
+    def test_auto_vmap_common_flux_eft_methods_match_scalar_calls(self):
+        r"""
+        **Description:**
+        Verifies that auto-vectorised public methods agree with explicit
+        scalar evaluation on each batch row.
+        """
+        moduli = jnp.stack([self.z, self.zsol])
+        moduli_c = jnp.conj(moduli)
+        tau = jnp.array([self.tau, self.tausol])
+        tau_c = jnp.conj(tau)
+        fluxes = jnp.stack([self.f, self.f_solution.astype(float)])
+
+        DW_batch = self.model.DW(moduli, moduli_c, tau, tau_c, fluxes)
+        DW_scalar = jnp.stack([
+            self.model.DW(moduli[i], moduli_c[i], tau[i], tau_c[i], fluxes[i])
+            for i in range(2)
+        ])
+        self.assertAllClose(DW_batch, DW_scalar, rtol=1e-9, atol=1e-9)
+
+        W0_batch = self.model.superpotential_gauge_invariant(moduli, tau, fluxes)
+        W0_scalar = jnp.stack([
+            self.model.superpotential_gauge_invariant(moduli[i], tau[i], fluxes[i])
+            for i in range(2)
+        ])
+        self.assertAllClose(W0_batch, W0_scalar, rtol=1e-9, atol=1e-9)
+
+        tadpole_batch = self.model.tadpole(fluxes)
+        tadpole_scalar = jnp.stack([self.model.tadpole(fluxes[i]) for i in range(2)])
+        self.assertAllClose(tadpole_batch, tadpole_scalar, rtol=1e-12, atol=1e-12)
+
+        V_batch = self.model.scalar_potential(moduli, moduli_c, tau, tau_c, fluxes)
+        V_scalar = jnp.stack([
+            self.model.scalar_potential(moduli[i], moduli_c[i], tau[i], tau_c[i], fluxes[i])
+            for i in range(2)
+        ])
+        self.assertAllClose(V_batch, V_scalar, rtol=1e-9, atol=1e-9)
+
+        x = jnp.stack([self.x, self.solution])
+        chex.assert_shape(self.model.V_x(x, fluxes), (2,))
+        chex.assert_shape(self.model.dV_x(x, fluxes), (2, self.model.n_fluxes))
+
+    def test_auto_vmap_flux_eft_shape_errors(self):
+        r"""
+        **Description:**
+        Verifies that auto-vectorised methods reject incompatible batches and
+        distinguish real field vectors from full flux vectors.
+        """
+        moduli = jnp.stack([self.z, self.zsol])
+        moduli_c = jnp.conj(moduli)
+        tau = jnp.array([self.tau, self.tausol])
+        tau_c = jnp.conj(tau)
+        fluxes = jnp.stack([self.f, self.f_solution.astype(float)])
+
+        with pytest.raises(ValueError, match="Incompatible batch sizes"):
+            self.model.DW(moduli, moduli_c[:1], tau, tau_c, fluxes)
+
+        with pytest.raises(ValueError, match="Argument 'fluxes'"):
+            self.model.tadpole(self.f[: self.model.n_fluxes])
+
+        with pytest.raises(ValueError, match="Argument 'x'"):
+            self.model.V_x(self.f, self.f)
+
     def test_seeded_sample_superpotential_flux_linearity(self):
         r"""
         **Description:**

@@ -1055,6 +1055,29 @@ class TestPeriodSector(TestCase):
         self.assertAllClose(DPi_c, jnp.conj(DPi),
                             msg="DPi_c must equal conj(DPi)")
 
+    def test_auto_vmap_period_methods_match_scalar_calls(self):
+        r"""Auto-vectorised homogeneous-period methods match scalar calls."""
+        X_batch = jnp.stack([
+            self.z,
+            self.z + jnp.array([0.0, 0.05 + 0.1j, -0.04 + 0.2j]),
+        ])
+        cX_batch = jnp.conj(X_batch)
+
+        Pi_batch = self.model.period_vector_per(X_batch)
+        Pi_scalar = jnp.stack([self.model.period_vector_per(X_batch[i]) for i in range(2)])
+        self.assertAllClose(Pi_batch, Pi_scalar, rtol=1e-10, atol=1e-10)
+
+        K_batch = self.model.kahler_potential_per(X_batch, cX_batch)
+        K_scalar = jnp.stack([
+            self.model.kahler_potential_per(X_batch[i], cX_batch[i])
+            for i in range(2)
+        ])
+        self.assertAllClose(K_batch, K_scalar, rtol=1e-10, atol=1e-10)
+
+        M_batch = self.model.ISD_matrix(X_batch, cX_batch)
+        M_scalar = jnp.stack([self.model.ISD_matrix(X_batch[i], cX_batch[i]) for i in range(2)])
+        self.assertAllClose(M_batch, M_scalar, rtol=1e-10, atol=1e-10)
+
 
 # ==============================================================================
 # TestCustomPeriodInputs

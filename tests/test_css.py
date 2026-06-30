@@ -1108,6 +1108,32 @@ class TestCSSector(TestCase):
         self.assertAllClose(z_recovered, self.z, rtol=1e-14, atol=1e-14,
                             msg="periods_to_moduli(moduli_to_periods(z)) must recover z")
 
+    def test_auto_vmap_css_methods_match_scalar_calls(self):
+        r"""Auto-vectorised CSS methods agree with explicit scalar evaluation."""
+        z_batch = jnp.stack([self.z, self.z + jnp.array([0.05 + 0.1j, -0.03 + 0.2j])])
+        cz_batch = jnp.conj(z_batch)
+        tau_batch = jnp.array([self.tau, self.tau + 0.2j])
+        ctau_batch = jnp.conj(tau_batch)
+
+        X_batch = self.model.moduli_to_periods(z_batch)
+        X_scalar = jnp.stack([self.model.moduli_to_periods(z_batch[i]) for i in range(2)])
+        self.assertAllClose(X_batch, X_scalar, rtol=1e-12, atol=1e-12)
+
+        Pi_batch = self.model.period_vector(z_batch)
+        Pi_scalar = jnp.stack([self.model.period_vector(z_batch[i]) for i in range(2)])
+        self.assertAllClose(Pi_batch, Pi_scalar, rtol=1e-10, atol=1e-10)
+
+        K_batch = self.model.kahler_potential(z_batch, cz_batch, tau_batch, ctau_batch)
+        K_scalar = jnp.stack([
+            self.model.kahler_potential(z_batch[i], cz_batch[i], tau_batch[i], ctau_batch[i])
+            for i in range(2)
+        ])
+        self.assertAllClose(K_batch, K_scalar, rtol=1e-10, atol=1e-10)
+
+        M_batch = self.model.ISD_matrix(z_batch, cz_batch)
+        M_scalar = jnp.stack([self.model.ISD_matrix(z_batch[i], cz_batch[i]) for i in range(2)])
+        self.assertAllClose(M_batch, M_scalar, rtol=1e-10, atol=1e-10)
+
 
     # ==========================================================================
     #  10. Gauge Kinetic Matrix Properties

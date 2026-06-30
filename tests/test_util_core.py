@@ -32,16 +32,20 @@ generic contracts from the flux and conifold sectors.
 
 import numpy as np
 import pytest
+from dataclasses import dataclass
 
 import jax
 import jax.numpy as jnp
 
 from jaxvacua.util import (
     PRNGSequence,
+    auto_vmap,
     check_nan,
     compute_evs_hermitian,
     flatten,
     flatten_top,
+    get_auto_vmap_default_shapes,
+    get_auto_vmap_defaults,
     is_outlier,
     jit_with_static_args,
     load_zipped_pickle,
@@ -51,7 +55,11 @@ from jaxvacua.util import (
     random_uniform,
     random_uniform_jit,
     rank_matrix,
+    reset_auto_vmap_default_shapes,
+    reset_auto_vmap_defaults,
     save_zipped_pickle,
+    set_auto_vmap_default_shapes,
+    set_auto_vmap_defaults,
     subsets,
     vmapping_func_cached,
 )
@@ -122,6 +130,60 @@ def test_jit_with_static_args_handles_static_python_values():
 
     wrapped = jit_with_static_args(affine, static_argnums=(1, 2))
     np.testing.assert_allclose(np.asarray(wrapped(jnp.array([1.0, 2.0]), 2.0, 5.0)), [7, 9])
+
+
+def test_auto_vmap_uses_jaxvacua_local_shape_defaults():
+    r"""JAXVacua auto-vmap defaults distinguish field and flux-vector shapes."""
+
+    @dataclass(frozen=True)
+    class ToyModel:
+        h12: int = 2
+        n_fluxes: int = 6
+        flux_dim: int = 12
+
+        @auto_vmap()
+        def diagnostic(self, moduli, x, fluxes):
+            return jnp.sum(moduli) + jnp.sum(x) + jnp.sum(fluxes)
+
+    ranks = get_auto_vmap_defaults()
+    shapes = get_auto_vmap_default_shapes()
+    assert ranks["x"] == 1
+    assert shapes["x"] == "n_fluxes"
+    assert shapes["fluxes"] == "flux_dim"
+
+    model = ToyModel()
+    moduli = jnp.ones((3, model.h12))
+    x = jnp.ones((3, model.n_fluxes))
+    fluxes = jnp.ones((3, model.flux_dim))
+    np.testing.assert_allclose(
+        np.asarray(model.diagnostic(moduli, x, fluxes)),
+        np.full(3, model.h12 + model.n_fluxes + model.flux_dim),
+    )
+
+    with pytest.raises(ValueError, match="Argument 'x'"):
+        model.diagnostic(jnp.ones(model.h12), jnp.ones(model.flux_dim), jnp.ones(model.flux_dim))
+
+
+def test_auto_vmap_defaults_reset_to_jaxvacua_contract():
+    r"""Reset helpers restore the package-level rank and shape contracts."""
+    try:
+        set_auto_vmap_defaults(x=0, fluxes=0, extra=2)
+        set_auto_vmap_default_shapes(x="flux_dim", fluxes="n_fluxes")
+
+        reset_auto_vmap_defaults()
+        reset_auto_vmap_default_shapes()
+
+        ranks = get_auto_vmap_defaults()
+        shapes = get_auto_vmap_default_shapes()
+        assert ranks["x"] == 1
+        assert ranks["fluxes"] == 1
+        assert "extra" not in ranks
+        assert shapes["x"] == "n_fluxes"
+        assert shapes["fluxes"] == "flux_dim"
+        assert shapes["moduli"] == "h12"
+    finally:
+        reset_auto_vmap_defaults()
+        reset_auto_vmap_default_shapes()
 
 
 def test_flatten_helpers_cover_nested_and_top_level_forms():

@@ -27,9 +27,27 @@ PRNG / random sampling
 JIT / vmap helpers
 ------------------
 
+Auto-vectorisation helpers provide JAXVacua-local shape defaults on top of
+``stringjax_tools.auto_vectorise``.  They do not mutate the standalone
+``stringjax_tools`` global defaults at import time.
+
+.. autosummary::
+    :toctree: _autosummary
+    :template: custom-class-template.rst
+
+    ArgSpec
+
 .. autosummary::
     :toctree: _autosummary
 
+    auto_vmap
+    set_auto_vmap_defaults
+    get_auto_vmap_defaults
+    reset_auto_vmap_defaults
+    set_auto_vmap_default_shapes
+    get_auto_vmap_default_shapes
+    reset_auto_vmap_default_shapes
+    clear_auto_vmap_caches
     vmapping_func
     vmapping_func_cached
     jit_with_static_args

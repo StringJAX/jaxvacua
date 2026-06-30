@@ -49,7 +49,7 @@ from functools import partial
 
 # Important JAX libraries
 import jax
-from jax import jit, vmap, config
+from jax import jit, config
 import jax.numpy as jnp
 from jax import Array
 from jax.tree_util import register_pytree_node
@@ -705,6 +705,7 @@ class FluxEFT(css):
         return jnp.append(x,jnp.array([real_tau,imag_tau])).astype(jnp.float_)
 
 
+    @auto_vmap(fluxes=1)
     @partial(jit, static_argnums = ())
     def tadpole(
         self, fluxes: Array
@@ -744,6 +745,7 @@ class FluxEFT(css):
     ###################################################################################################################
 
     
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,))
     def superpotential(
         self, moduli: Array, tau: complex, fluxes: Array, conj: bool = False, normalise: bool = False
@@ -794,6 +796,7 @@ class FluxEFT(css):
     
     W = superpotential
     
+    @auto_vmap(moduli=1, tau=0, fluxes=1)
     @partial(jit, static_argnums = (4,5,))
     def superpotential_gauge_invariant(
         self, moduli: Array, tau: complex, fluxes: Array, conj: bool = False, normalise: bool = True
@@ -1199,6 +1202,7 @@ class FluxEFT(css):
             return self.dW_tau(moduli_c,tau_c,fluxes,conj=True)+self.dK_ctau(moduli,moduli_c,tau,tau_c)*self.superpotential(moduli_c,tau_c,fluxes,conj=True)
     
     
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0, fluxes=1)
     @partial(jit, static_argnums = (6,))
     def DW(
         self, moduli: Array, moduli_c: Array, tau: complex, tau_c: complex, 
@@ -1297,6 +1301,7 @@ class FluxEFT(css):
             return FT, jnp.matmul(cFT,Inv_KM)
 
 
+    @auto_vmap(x=1, fluxes=1)
     @partial(jit, static_argnums = ())
     def DW_x(
         self, x: Array, fluxes: Array
@@ -2660,6 +2665,7 @@ class FluxEFT(css):
     ###################################################################################################################
     
 
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0, fluxes=1)
     @partial(jit, static_argnums = (6,7,))
     def scalar_potential(
         self, moduli: Array, moduli_c: Array, tau: complex, tau_c: complex, 
@@ -2909,6 +2915,7 @@ class FluxEFT(css):
     ###################################################################################################################
 
     
+    @auto_vmap(x=1, fluxes=1)
     @partial(jit, static_argnums = (3))
     def V_x(
         self, x: Array, fluxes: Array, noscale: bool = True
@@ -2938,6 +2945,7 @@ class FluxEFT(css):
         
         return self.V(moduli,moduli_c,tau,tau_c,fluxes,noscale=noscale).real
         
+    @auto_vmap(x=1, fluxes=1)
     @partial(jit, static_argnums = (3))
     def dV_x(
         self, x: Array, fluxes: Array, noscale: bool = True
@@ -2980,6 +2988,7 @@ class FluxEFT(css):
         return g
         
     
+    @auto_vmap(x=1, fluxes=1)
     @partial(jit, static_argnums = (3))
     def ddV_x(
         self, x: Array, fluxes: Array, noscale: bool = True
@@ -3618,6 +3627,7 @@ class FluxEFT(css):
         return jnp.vstack((top, bot))
             
     
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0, fluxes=1)
     @partial(jit, static_argnums = (6,7,))
     def hessian(
         self, moduli: Array, moduli_c: Array, tau: complex, tau_c: complex, 
@@ -3699,6 +3709,7 @@ class FluxEFT(css):
         
     H = hessian
 
+    @auto_vmap(moduli=1, moduli_c=1, tau=0, tau_c=0, fluxes=1)
     @partial(jit, static_argnums = (6,7,))
     def mass_matrix(
         self, 
