@@ -47,6 +47,19 @@ import jaxvacua
 # Suppress warnings
 warnings.filterwarnings("ignore")
 
+_ON_GITHUB_ACTIONS = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
+_RUN_HEAVY_FVF_TESTS = (
+    os.environ.get("JAXVACUA_RUN_HEAVY_FLUX_VACUA_FINDER_TESTS", "") == "1"
+)
+_skip_heavy_fvf_on_github = pytest.mark.skipif(
+    _ON_GITHUB_ACTIONS and not _RUN_HEAVY_FVF_TESTS,
+    reason=(
+        "Heavy FluxVacuaFinder Newton/linearised-shift regression is skipped "
+        "on GitHub Actions by default. Set "
+        "JAXVACUA_RUN_HEAVY_FLUX_VACUA_FINDER_TESTS=1 to run it."
+    ),
+)
+
 
 class _StaticVacuaSampler:
     """Small deterministic sampler for wrapper-level finder tests."""
@@ -122,14 +135,19 @@ class TestFluxVacuaFinder(TestCase):
 
         h12 = 2
 
-        # Instantiate the model via the public jaxvacua interface
-        # maximum_degree=5 includes instanton corrections needed for
-        # Newton convergence at the known SUSY solution
+        # Lightweight model for most finder tests.  The Newton convergence
+        # regression below uses a separate instanton-corrected model because
+        # maximum_degree=5 materially slows unrelated linearised-shift checks.
         cls.model = jaxvacua.FluxVacuaFinder(
-            h12=h12, model_ID=1, model_type="KS", maximum_degree=5
+            h12=h12, model_ID=1, model_type="KS", maximum_degree=0
         )
         # Override the a_matrix as required by the test geometry
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
+
+        cls.model_newton = jaxvacua.FluxVacuaFinder(
+            h12=h12, model_ID=1, model_type="KS", maximum_degree=5
+        )
+        cls.model_newton.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
 
         cls.h12 = h12
         cls.n_fluxes = cls.model.n_fluxes       # h12 + 1 = 3
@@ -193,6 +211,7 @@ class TestFluxVacuaFinder(TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     @pytest.mark.slow
+    @_skip_heavy_fvf_on_github
     def test_linearised_shifts_H_finiteness(self):
         r"""**Description:**
         The linearised shift must produce finite moduli.  If the linear
@@ -348,6 +367,7 @@ class TestFluxVacuaFinder(TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     @pytest.mark.slow
+    @_skip_heavy_fvf_on_github
     def test_linearised_shifts_dispatch_Hflux(self):
         r"""**Description:**
         The dispatch function with ``mode="Hflux"`` must produce the same
@@ -432,6 +452,7 @@ class TestFluxVacuaFinder(TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     @pytest.mark.slow
+    @_skip_heavy_fvf_on_github
     def test_newton_method_shapes(self):
         r"""**Description:**
         Verifies the output shapes of :func:`newton_method_flux_vacua`.
@@ -442,7 +463,7 @@ class TestFluxVacuaFinder(TestCase):
         """
 
         fn = self.variant(
-            lambda z, tau, fl: self.model.newton_method_flux_vacua(
+            lambda z, tau, fl: self.model_newton.newton_method_flux_vacua(
                 z, tau, fl, step_size_Newton=1.0, max_iters=5
             )
         )
@@ -459,6 +480,7 @@ class TestFluxVacuaFinder(TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     @pytest.mark.slow
+    @_skip_heavy_fvf_on_github
     def test_newton_method_convergence(self):
         r"""**Description:**
         Tests that Newton's method converges to a known SUSY vacuum.
@@ -474,7 +496,7 @@ class TestFluxVacuaFinder(TestCase):
         # Use solver_mode="real" which is stable with instanton corrections
         # (the complex solver can produce NaN with maximum_degree > 0)
         fn = self.variant(
-            lambda z, tau, fl: self.model.newton_method_flux_vacua(
+            lambda z, tau, fl: self.model_newton.newton_method_flux_vacua(
                 z, tau, fl,
                 step_size_Newton=1.0,
                 tol=1e-10,
@@ -506,6 +528,7 @@ class TestFluxVacuaFinder(TestCase):
 
     @chex.variants(with_jit=True, without_jit=True)
     @pytest.mark.slow
+    @_skip_heavy_fvf_on_github
     def test_newton_method_solver_modes(self):
         r"""**Description:**
         The Newton solver supports ``"real"`` mode which converts to a real
@@ -524,7 +547,7 @@ class TestFluxVacuaFinder(TestCase):
 
         # Real solver
         fn_real = self.variant(
-            lambda z, tau, fl: self.model.newton_method_flux_vacua(
+            lambda z, tau, fl: self.model_newton.newton_method_flux_vacua(
                 z, tau, fl,
                 step_size_Newton=1.0, tol=1e-10, max_iters=100,
                 solver_mode="real"
