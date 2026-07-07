@@ -7,12 +7,10 @@ name: CI
 #    a few minutes of GHA wall time.  Includes tests/test_coniLCS_limit.py
 #    (the NB13-fingerprint coniLCS regression net) — those tests have no
 #    `slow` marker and are picked up by `pytest -m "not slow"`.
-#  * test-sharded — full-coverage suite, split into a matrix of shards via
-#    pytest-split across python-version x shard-id.  Each shard finishes well
-#    under GitHub's 6h per-job cap while the matrix collectively covers the
-#    whole suite.  This REPLACES the old serial `full` job, which ran the
-#    entire suite on a single runner and routinely hit the 6h cap and was
-#    cancelled.
+#  * test-full — full-coverage suite, split by path first and by pytest-split
+#    only inside genuinely heavy files.  This avoids repeatedly importing the
+#    whole test tree in every shard, which is expensive for coniLCS/freezer
+#    fixtures.
 #
 # jaxpolylog version exclusion
 # ----------------------------
@@ -37,8 +35,8 @@ env:
   JAXPOLYLOG_PIN: "jaxpolylog>=0.1.0,!=0.2.0"
 
 # Cancel any in-flight runs on the same ref when a new commit lands.
-# Without this, every push spawns 19 jobs (fast=2 + docs=1 +
-# test-sharded=16) on top of the previous push's still-running ones,
+# Without this, every push spawns many jobs (fast + docs + full test matrix)
+# on top of the previous push's still-running ones,
 # quickly overflowing GitHub's ~20-concurrent-Ubuntu-job free-tier cap.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -118,22 +116,88 @@ jobs:
             -d /tmp/sphinx-doctree \
             documentation/source /tmp/sphinx-out
 
-  test-sharded:
-    name: Test sharded (py${{ matrix.python-version }}, shard ${{ matrix.shard }}/8)
-    # Full-coverage suite split into N parallel shards via pytest-split.
+  test-full:
+    name: Full (${{ matrix.suite }}, py${{ matrix.python-version }})
+    # Full-coverage suite split by file/group first, and only then by
+    # pytest-split inside genuinely heavy files.  This avoids the old
+    # `pytest tests/ --splits=N` topology, where every shard collected and
+    # imported every test module, repeatedly paying import-time coniLCS/freezer
+    # setup costs.
     # Runs on every push/PR + weekly cron + manual dispatch.
-    #
-    # Shard count: 8.  Bumped from 4 after one shard hit the 6h GHA cap due
-    # to pytest-split's default *count-based* balancing (JIT-heavy tests
-    # clustered unevenly).  Use the greedy least-duration splitter plus the
-    # committed `.test_durations` seed so expensive tests are distributed
-    # across shards instead of landing in contiguous module-sized chunks.
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        include:
+          - suite: light-core
+            python-version: "3.13"
+            paths: "tests/test_flux_utils.py tests/test_flux_utils_helpers.py tests/test_hypergeometric_models.py tests/test_lattice_utils.py tests/test_lcs.py tests/test_pytree_stability.py tests/test_sampling.py tests/test_sampling_backend_helpers.py tests/test_util_core.py"
+            split_args: ""
+          - suite: geometry-medium
+            python-version: "3.13"
+            paths: "tests/test_conifold_bulk_eft.py tests/test_css.py tests/test_periods.py"
+            split_args: ""
+          - suite: coniLCS
+            python-version: "3.13"
+            paths: "tests/test_coniLCS_limit.py"
+            split_args: ""
+          - suite: conifold-basis
+            python-version: "3.13"
+            paths: "tests/test_conifold_basis.py"
+            split_args: ""
+          - suite: freezer
+            python-version: "3.13"
+            paths: "tests/test_freezer.py"
+            split_args: ""
+          - suite: flux-eft-1
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=1 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-eft-2
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=2 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-eft-3
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=3 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-eft-4
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=4 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-eft-5
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=5 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-eft-6
+            python-version: "3.13"
+            paths: "tests/test_flux_eft.py"
+            split_args: "--splits=6 --group=6 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-vacua-finder-1
+            python-version: "3.13"
+            paths: "tests/test_flux_vacua_finder.py"
+            split_args: "--splits=2 --group=1 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-vacua-finder-2
+            python-version: "3.13"
+            paths: "tests/test_flux_vacua_finder.py"
+            split_args: "--splits=2 --group=2 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: critical-points-1
+            python-version: "3.13"
+            paths: "tests/test_critical_points.py"
+            split_args: "--splits=2 --group=1 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: critical-points-2
+            python-version: "3.13"
+            paths: "tests/test_critical_points.py"
+            split_args: "--splits=2 --group=2 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-bounding-1
+            python-version: "3.13"
+            paths: "tests/test_flux_bounding.py"
+            split_args: "--splits=2 --group=1 --splitting-algorithm=least_duration --durations-path .test_durations"
+          - suite: flux-bounding-2
+            python-version: "3.13"
+            paths: "tests/test_flux_bounding.py"
+            split_args: "--splits=2 --group=2 --splitting-algorithm=least_duration --durations-path .test_durations"
     steps:
       - uses: actions/checkout@v4
 
@@ -147,9 +211,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/jax
-          key: ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-sharded-s${{ matrix.shard }}-${{ hashFiles('jaxvacua/**/*.py', 'tests/**/*.py') }}
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-full-${{ matrix.suite }}-${{ hashFiles('jaxvacua/**/*.py', 'tests/**/*.py') }}
           restore-keys: |
-            ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-sharded-s${{ matrix.shard }}-
+            ${{ runner.os }}-py${{ matrix.python-version }}-jaxcache-full-${{ matrix.suite }}-
 
       - name: Install jaxvacua + deps + pytest-split
         run: |
@@ -158,11 +222,7 @@ jobs:
           pip install platformdirs
           pip install -e .
 
-      - name: Run shard ${{ matrix.shard }}/8
+      - name: Run ${{ matrix.suite }}
         env:
           JAX_ENABLE_X64: "1"
-          # Unbuffered stdio so live progress reaches the GHA log without
-          # waiting for the Python 4-8 KB stdio buffer to fill.  Remove
-          # together with ``-s`` once the css hang is diagnosed.
-          PYTHONUNBUFFERED: "1"
-        run: pytest tests/ -v -s --splits=8 --group=${{ matrix.shard }} --splitting-algorithm=least_duration --durations-path .test_durations
+        run: pytest ${{ matrix.paths }} -v ${{ matrix.split_args }}

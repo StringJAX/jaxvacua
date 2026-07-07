@@ -43,7 +43,8 @@ What is / isn't invariant
 
 Design notes
 ------------
-Heavy cytools build at import (gated/skipped if cytools is unavailable).
+Heavy cytools model construction is lazy (gated/skipped if cytools is
+unavailable).
 """
 from __future__ import annotations
 
@@ -113,6 +114,7 @@ _FLUX_SAMPLES = np.array([
 
 _MA = _MG = None
 _BUILD_ERR = None
+_MODELS_LOADED = False
 
 
 def _build(basis_change, conifold_basis):
@@ -126,17 +128,27 @@ def _build(basis_change, conifold_basis):
     )
 
 
-if _Polytope is not None:
-    try:
-        _MA = _build(_L, True)
-        _MG = _build(None, False)
-    except Exception as _exc:                                              # noqa: BLE001
-        _BUILD_ERR = f"{type(_exc).__name__}: {_exc}"
+def _get_models():
+    """Return aligned/general conifold-basis fixtures, constructing them lazily."""
+    global _MA, _MG, _BUILD_ERR, _MODELS_LOADED
+    if not _MODELS_LOADED:
+        _MODELS_LOADED = True
+        if _Polytope is None:
+            _BUILD_ERR = _CYTOOLS_ERR
+        else:
+            try:
+                _MA = _build(_L, True)
+                _MG = _build(None, False)
+            except Exception as _exc:                                      # noqa: BLE001
+                _BUILD_ERR = f"{type(_exc).__name__}: {_exc}"
+    return _MA, _MG, _BUILD_ERR
 
-_NEEDS = pytest.mark.skipif(
-    _MA is None or _MG is None,
-    reason=f"cytools/model unavailable ({_CYTOOLS_ERR or _BUILD_ERR})",
-)
+
+def _require_models():
+    ma, mg, error = _get_models()
+    if ma is None or mg is None:
+        pytest.skip(f"cytools/model unavailable ({error})")
+    return ma, mg
 
 _RUN_HEAVY_HESSIAN = os.environ.get("JAXVACUA_RUN_HEAVY_HESSIAN_TESTS") == "1"
 _SKIP_GHA_HEAVY_HESSIAN = pytest.mark.skipif(
@@ -169,14 +181,13 @@ def _recover_monodromy(MA, MG, Lt, points=_ALIGNED_POINTS):
     return np.rint(M.real)
 
 
-@_NEEDS
 class TestConifoldBasisInvariance(TestCase):
     r"""A/B invariance of the coniLCS prepotential layer across bases."""
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.MA, cls.MG = _MA, _MG
+        cls.MA, cls.MG = _require_models()
         cls.Lt = jnp.asarray(_L.T, dtype=complex)
         # integer symplectic monodromy M (Pi_aligned = M Pi_general) used to transport
         # fluxes across bases: flux_aligned = Mfull @ flux_general (Mfull = blockdiag(M, M)).

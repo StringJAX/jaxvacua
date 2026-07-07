@@ -180,6 +180,7 @@ class TestFluxBounding(TestCase):
     #  3. compute_eigenvalue_bounds
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_compute_eigenvalue_bounds_returns_positive(self):
         r"""**Description:**
         Verifies that :func:`compute_eigenvalue_bounds` returns a 3-tuple
@@ -222,6 +223,7 @@ class TestFluxBounding(TestCase):
     #  4. compute_bounding_box
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_compute_bounding_box_returns_positive(self):
         r"""**Description:**
         Verifies that :func:`compute_bounding_box` accepts explicit
@@ -253,6 +255,7 @@ class TestFluxBounding(TestCase):
     #  5. get_h_candidates
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_get_h_candidates_shape_and_type(self):
         r"""**Description:**
         Verifies that the streaming h-candidate generator produces 2D
@@ -298,6 +301,7 @@ class TestFluxBounding(TestCase):
             msg=f"h chunk columns should equal n_fluxes={self.n_fluxes}",
         )
 
+    @pytest.mark.slow
     def test_get_h_candidates_norm_bounds(self):
         r"""**Description:**
         Verifies that every streamed h-candidate satisfies the individual
@@ -680,6 +684,7 @@ class TestFluxBounding(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_compute_evs(self):
         r"""
         **Description:**
@@ -699,6 +704,7 @@ class TestFluxBounding(TestCase):
             self.assertGreater(val, 0., msg=f"{name} must be positive")
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_compute_evs_vmap(self):
         r"""
         **Description:**
@@ -748,6 +754,7 @@ class TestFluxBounding(TestCase):
     #  13. Reset and update methods
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_reset_eigenvalue_bounds(self):
         r"""
         **Description:**
@@ -762,6 +769,7 @@ class TestFluxBounding(TestCase):
         bf_tmp.reset_eigenvalue_bounds()
         self.assertFalse(bf_tmp.bounds_initialized)
 
+    @pytest.mark.slow
     def test_update_local(self):
         r"""
         **Description:**
@@ -773,6 +781,7 @@ class TestFluxBounding(TestCase):
         # update_local stores local state (no return value, just no error)
         bf_tmp.update_local(self.zsol, self.tausol, self.f_solution)
 
+    @pytest.mark.slow
     def test_update_evs(self):
         r"""
         **Description:**
@@ -917,6 +926,7 @@ class TestFluxBounding(TestCase):
     #  16. Bounding box convergence
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_compute_bounding_box_converged(self):
         r"""
         **Description:**
@@ -939,6 +949,7 @@ class TestFluxBounding(TestCase):
     #  17. enumerate_fluxes (integration test)
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_enumerate_fluxes_small(self):
         r"""
         **Description:**
@@ -997,6 +1008,7 @@ class TestFluxBounding(TestCase):
     #  18. sample_bounded_fluxes (integration test)
     # ==========================================================================
 
+    @pytest.mark.slow
     def test_sample_bounded_fluxes_small(self):
         r"""
         **Description:**

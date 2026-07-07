@@ -49,18 +49,33 @@ from jaxvacua.freezer import Freezer, ConifoldFreezer, LightSpectrum
 warnings.filterwarnings("ignore")
 
 # ---------------------------------------------------------------------------
-#  Attempt to load a conifold model for integration tests.
+#  Lazily load conifold models for integration tests.
 # ---------------------------------------------------------------------------
 _MODEL = None
 _MODEL_LOAD_ERROR = None
+_MODEL_LOADED = False
 
-try:
-    import jaxvacua
-    _MODEL = jaxvacua.FluxEFT(
-        h12=5, model_ID="aule", maximum_degree=5, limit="coniLCS",
-    )
-except Exception as exc:
-    _MODEL_LOAD_ERROR = str(exc)
+
+def _get_model():
+    """Return the shared coniLCS model, constructing it only when needed."""
+    global _MODEL, _MODEL_LOAD_ERROR, _MODEL_LOADED
+    if not _MODEL_LOADED:
+        _MODEL_LOADED = True
+        try:
+            import jaxvacua
+            _MODEL = jaxvacua.FluxEFT(
+                h12=5, model_ID="aule", maximum_degree=5, limit="coniLCS",
+            )
+        except Exception as exc:
+            _MODEL_LOAD_ERROR = f"{type(exc).__name__}: {exc}"
+    return _MODEL, _MODEL_LOAD_ERROR
+
+
+def _require_model():
+    model, error = _get_model()
+    if model is None:
+        raise unittest.SkipTest(f"Conifold model could not be loaded: {error}")
+    return model
 
 
 # ==============================================================================
@@ -123,10 +138,6 @@ class TestFreezerAbstract(TestCase):
 #  TestConifoldFreezer
 # ==============================================================================
 
-@unittest.skipIf(
-    _MODEL is None,
-    f"Conifold model could not be loaded: {_MODEL_LOAD_ERROR}",
-)
 class TestConifoldFreezer(TestCase):
     r"""
     **Description:**
@@ -147,7 +158,7 @@ class TestConifoldFreezer(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.model = _MODEL
+        cls.model = _require_model()
         cls.freezer = ConifoldFreezer(cls.model)
 
     # ------------------------------------------------------------------
@@ -313,7 +324,6 @@ class TestConifoldFreezer(TestCase):
 #  so the fixture runs in a clean public checkout.
 # ==============================================================================
 
-import pytest as _pytest
 from types import SimpleNamespace
 
 _INT_NAME  = "aule"
@@ -325,6 +335,7 @@ _INT_ATOL  = 1e-10
 _INT_MODELS = None
 _INT_PFV = None
 _INT_LOAD_ERROR = None
+_INT_LOADED = False
 
 
 def _try_load_int_models():
@@ -351,19 +362,25 @@ def _try_load_int_models():
     return SimpleNamespace(bulk=model), SimpleNamespace(flux=flux, x=x)
 
 
-try:
-    _INT_MODELS, _INT_PFV = _try_load_int_models()
-except Exception as _exc:
-    _INT_LOAD_ERROR = f"{type(_exc).__name__}: {_exc}"
+def _get_int_models():
+    """Return the shared freezer integration fixture, constructing it lazily."""
+    global _INT_MODELS, _INT_PFV, _INT_LOAD_ERROR, _INT_LOADED
+    if not _INT_LOADED:
+        _INT_LOADED = True
+        try:
+            _INT_MODELS, _INT_PFV = _try_load_int_models()
+        except Exception as _exc:
+            _INT_LOAD_ERROR = f"{type(_exc).__name__}: {_exc}"
+    return _INT_MODELS, _INT_PFV, _INT_LOAD_ERROR
 
 
-_NEEDS_INT_MODEL = _pytest.mark.skipif(
-    _INT_MODELS is None,
-    reason=f"PromotionModels unavailable ({_INT_LOAD_ERROR})",
-)
+def _require_int_models():
+    models, pfv, error = _get_int_models()
+    if models is None or pfv is None:
+        raise unittest.SkipTest(f"Conifold freezer fixture unavailable ({error})")
+    return models, pfv
 
 
-@_NEEDS_INT_MODEL
 class TestConifoldFreezerIntegration(TestCase):
     r"""
     Integration tests that pin :class:`ConifoldFreezer` to the new
@@ -378,10 +395,11 @@ class TestConifoldFreezerIntegration(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.model   = _INT_MODELS.bulk
+        models, pfv = _require_int_models()
+        cls.model   = models.bulk
         cls.freezer = ConifoldFreezer(cls.model)
-        cls.x_full  = jnp.asarray(_INT_PFV.x)
-        cls.flux    = jnp.asarray(_INT_PFV.flux)
+        cls.x_full  = jnp.asarray(pfv.x)
+        cls.flux    = jnp.asarray(pfv.flux)
         h12 = len(_INT_MVEC0)
         # Bulk-only real vector: drop the first 2 real components (Re/Im of z_cf).
         cls.x_bulk  = jnp.concatenate([cls.x_full[2:2 * h12], cls.x_full[2 * h12:]])
@@ -472,7 +490,6 @@ def _manual_schur(H, h12):
     return A - B.T @ np.linalg.inv(C) @ B
 
 
-@_NEEDS_INT_MODEL
 @pytest.mark.slow
 class TestConifoldFreezerMassSpectrum(TestCase):
     r"""
@@ -493,13 +510,14 @@ class TestConifoldFreezerMassSpectrum(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.model = _INT_MODELS.bulk
+        models, pfv = _require_int_models()
+        cls.model = models.bulk
         cls.freezer = ConifoldFreezer(cls.model)
-        cls.flux = jnp.asarray(_INT_PFV.flux)
+        cls.flux = jnp.asarray(pfv.flux)
         h12 = len(_INT_MVEC0)
         cls.h12 = h12
         cls.dim = 2 * (h12 - 1) + 2          # 2 * n_light + 2
-        x_full = jnp.asarray(_INT_PFV.x)
+        x_full = jnp.asarray(pfv.x)
         cls.x_bulk = jnp.concatenate([x_full[2:2 * h12], x_full[2 * h12:]])
         cls.BIG = 1e9                         # dw_tol to bypass the on-shell screen
         # Reconstructed full point (on-shell heavy solve) shared by parity tests.
