@@ -342,6 +342,7 @@ class TestFluxEFT(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_dW(self):
         r"""
         **Description:**
@@ -1480,6 +1481,7 @@ class TestFluxEFT(TestCase):
             )
         )
 
+    @pytest.mark.slow
     def test_auto_vmap_common_flux_eft_methods_match_scalar_calls(self):
         r"""
         **Description:**
@@ -2289,6 +2291,7 @@ class TestHessianSUGRA(TestCase):
             self.assertAllClose(fn_ref(), fn_sugra(), atol=1e-10)
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_hessian_SUGRA_shape(self):
         r"""
         **Description:**

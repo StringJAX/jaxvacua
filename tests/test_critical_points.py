@@ -125,6 +125,7 @@ class TestCriticalPointFinder(TestCase):
         self.assertEqual(self.finder.n_fluxes,     self.n_fl)
         self.assertEqual(self.finder.dimension_H3, self.dim_H3)
 
+    @pytest.mark.slow
     def test_sample_critical_points_accepts_noscale_kwarg(self):
         r"""
         **Description:**
@@ -241,6 +242,7 @@ class TestCriticalPointFinder(TestCase):
             self.assertIsInstance(res, float)
             self.assertEqual(x_sol.shape, x0[0].shape)
 
+    @pytest.mark.slow
     def test_newton_solver_residual_format(self):
         r"""
         **Description:**
@@ -307,6 +309,7 @@ class TestCriticalPointFinder(TestCase):
     # Main entry point: sample_critical_points (C8)
     # ------------------------------------------------------------------
 
+    @pytest.mark.slow
     def test_sample_critical_points_newton(self):
         r"""
         **Description:**
@@ -368,6 +371,7 @@ class TestCriticalPointFinder(TestCase):
                 n_nonsusy, 0,
                 msg="ISD- with noscale=True should find non-SUSY critical points")
 
+    @pytest.mark.slow
     def test_sample_critical_points_classify_false(self):
         r"""
         **Description:**

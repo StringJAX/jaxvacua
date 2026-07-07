@@ -32,7 +32,7 @@ The tests use small Kreuzer-Skarke fixtures so expensive geometry is exercised
 without requiring large model data.
 """
 
-import sys, os, warnings
+import sys, warnings
 import jax
 import pytest
 from functools import partial
@@ -41,20 +41,6 @@ from util import *
 
 sys.path.append("./../")
 import jaxvacua
-
-
-# ---------------------------------------------------------------------------
-# Diagnostic autouse fixture (kept for future use).  Writes START/END markers
-# around every test directly to fd 2, bypassing pytest's stdout/stderr capture
-# (combine with ``-s`` and ``PYTHONUNBUFFERED=1`` on the CI command).
-# Flip ``autouse=False`` -> ``autouse=True`` to re-enable when diagnosing a
-# hang in this file again.
-# ---------------------------------------------------------------------------
-@pytest.fixture(autouse=False)
-def _ci_test_marker(request):
-    os.write(2, f">>> START {request.node.nodeid}\n".encode())
-    yield
-    os.write(2, f">>> END   {request.node.nodeid}\n".encode())
 
 
 # ==============================================================================
@@ -349,6 +335,7 @@ class TestCSSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_ddK(self):
         r"""**Description:**
         Tests all second (mixed and unmixed) derivatives of the Kähler
@@ -510,6 +497,7 @@ class TestCSSector(TestCase):
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_kahler_metric(self):
         r"""**Description:**
         Tests the Kähler metric :math:`K_{I\overline{J}}`, its inverse
@@ -2085,6 +2073,3 @@ class TestMonodromyAsymmetric(TestCase):
                 msg=f"apply_monodromy returned non-integer flux dtype "
                     f"{np.asarray(f_new).dtype} for n={n_vec}",
             )
-
-    import atexit
-    atexit.register(lambda: print(">>> test_css.py module exit", flush=True))

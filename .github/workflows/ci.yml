@@ -125,10 +125,9 @@ jobs:
     #
     # Shard count: 8.  Bumped from 4 after one shard hit the 6h GHA cap due
     # to pytest-split's default *count-based* balancing (JIT-heavy tests
-    # clustered unevenly).  For durably-balanced shards, generate
-    # `.test_durations` once locally via
-    #     pytest --store-durations
-    # and commit it — pytest-split then uses real timings.
+    # clustered unevenly).  Use the greedy least-duration splitter plus the
+    # committed `.test_durations` seed so expensive tests are distributed
+    # across shards instead of landing in contiguous module-sized chunks.
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -166,4 +165,4 @@ jobs:
           # waiting for the Python 4-8 KB stdio buffer to fill.  Remove
           # together with ``-s`` once the css hang is diagnosed.
           PYTHONUNBUFFERED: "1"
-        run: pytest tests/ -v -s --splits=8 --group=${{ matrix.shard }}
+        run: pytest tests/ -v -s --splits=8 --group=${{ matrix.shard }} --splitting-algorithm=least_duration --durations-path .test_durations

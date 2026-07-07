@@ -309,6 +309,7 @@ class TestConifoldBasisInvariance(TestCase):
         w = complex(self.MG.W_log_coeff(z_bulk, tau, flux, mode="pfv"))
         self.assertTrue(np.isfinite(w))
 
+    @pytest.mark.slow
     def test_conifold_freezer_general_basis(self):
         r"""``ConifoldFreezer`` integrate-out works in the general basis.  The
         light↔full map is ``z_full = z_cf·e_q + bulk_embedding·z_light`` (not an
@@ -462,6 +463,7 @@ class TestConifoldBasisInvariance(TestCase):
         G = np.asarray(_kahler_metric_real_interleaved(_G_from_real_hessian(jnp.asarray(HK))))
         return _geigh(0.5 * (H + H.T), 0.5 * (G + G.T), eigvals_only=True)
 
+    @pytest.mark.slow
     def test_scalar_potential_invariant(self):
         """The no-scale scalar potential V matches across bases at a matched conifold PFV.
 
@@ -495,6 +497,8 @@ class TestConifoldBasisInvariance(TestCase):
         self.assertLess(rel, 1e-9, f"full mass spectrum differs across bases: rel={rel:.2e}\n"
                                    f"MA={evA}\nMG={evG}")
 
+    @pytest.mark.slow
+    @_SKIP_GHA_HEAVY_HESSIAN
     def test_freezer_reduced_metric_covariant(self):
         """The freezer reduced Kähler metric ``G_x_light`` is basis-COVARIANT:
         ``K_aligned = J^T K_general J``, with J the light-coordinate Jacobian taken THROUGH

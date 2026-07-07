@@ -37,6 +37,7 @@ import sys, os, warnings, unittest
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from util import *
 
 jax.config.update("jax_enable_x64", True)
@@ -472,6 +473,7 @@ def _manual_schur(H, h12):
 
 
 @_NEEDS_INT_MODEL
+@pytest.mark.slow
 class TestConifoldFreezerMassSpectrum(TestCase):
     r"""
     Tests for the reduced light-field mass API of

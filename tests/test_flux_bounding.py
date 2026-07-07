@@ -45,20 +45,6 @@ import jaxvacua
 from jaxvacua.flux_bounding import bounded_fluxes
 
 
-# ---------------------------------------------------------------------------
-# Diagnostic autouse fixture (temporary).  Writes START/END markers around
-# every test directly to fd 2, bypassing pytest's stdout/stderr capture
-# (combine with ``-s`` and ``PYTHONUNBUFFERED=1`` on the CI command), so
-# CI logs show exactly which test was running when a hang occurs.  Flip
-# ``autouse=True`` -> ``autouse=False`` to disable once diagnosed.
-# ---------------------------------------------------------------------------
-@pytest.fixture(autouse=False)
-def _ci_test_marker(request):
-    os.write(2, f">>> START {request.node.nodeid}\n".encode())
-    yield
-    os.write(2, f">>> END   {request.node.nodeid}\n".encode())
-
-
 # ==============================================================================
 #  TestFluxBounding
 # ==============================================================================
@@ -98,47 +84,16 @@ class TestFluxBounding(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        
-        super().setUpClass()
-        import sys
-        def _mark(s): print(f">>> [setUpClass] {s}", file=sys.stderr, flush=True)
-        _mark("start")
         cls.h12 = 2
         cls.model = jaxvacua.FluxVacuaFinder(
             h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,
         )
-        _mark("model built")
         cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
         cls.sampler = jaxvacua.data_sampler(
             cls.model, moduli_bounds=(2., 3.), dilaton_bounds=(2., 5.),
             axion_bounds=(-0.5, 0.5), seed=42,
         )
-        _mark("sampler built")
         cls.bf = bounded_fluxes(cls.model, sampler=cls.sampler, Nmax=4)
-        _mark("bf built")
-        """
-        cls.h12 = 2
-
-        # Build model and override the a_matrix
-        # maximum_degree=2 includes instanton corrections needed for
-        # Newton convergence at the known SUSY solution
-        cls.model = jaxvacua.FluxVacuaFinder(
-            h12=cls.h12, model_ID=1, model_type="KS", maximum_degree=2,prange=20
-        )
-        cls.model.lcs_tree.a_matrix = jnp.array([[4.5, 1.5], [1.5, 0.]])
-
-        # Build sampler
-        cls.sampler = jaxvacua.data_sampler(
-            cls.model,
-            moduli_bounds=(2., 3.),
-            dilaton_bounds=(2., 5.),
-            axion_bounds=(-0.5, 0.5),
-            seed=42,
-        )
-
-        # Build bounded_fluxes instance
-        cls.bf = bounded_fluxes(cls.model, sampler=cls.sampler, Nmax=4)
-        """
         # Convenience attributes
         cls.n_fluxes = cls.model.n_fluxes          # = 2*(h12+1) = 6
         cls.dimension_H3 = cls.model.dimension_H3  # = h12+1 = 3
@@ -153,8 +108,6 @@ class TestFluxBounding(TestCase):
 
         cls.zsol = jnp.array([u1sol, u2sol])
         cls.tausol = tausol
-
-        _mark("done")
 
     # ==========================================================================
     #  1. Constructor
@@ -461,6 +414,7 @@ class TestFluxBounding(TestCase):
             msg="Converged tau should match the known SUSY vacuum",
         )
 
+    @pytest.mark.slow
     def test_newton_refine_batch_from_perturbed_start(self):
         r"""**Description:**
         Verifies that Newton refinement converges to the known SUSY vacuum
@@ -862,6 +816,7 @@ class TestFluxBounding(TestCase):
             self.assertIsInstance(result, tuple, msg=f"{name} must return a tuple")
             self.assertEqual(len(result), 2, msg=f"{name} must return (checks, label)")
 
+    @pytest.mark.slow
     def test_check_bounds_at_solution(self):
         r"""
         **Description:**
@@ -875,6 +830,7 @@ class TestFluxBounding(TestCase):
         self.assertIsInstance(results, list)
         self.assertGreater(len(results), 0)
 
+    @pytest.mark.slow
     def test_check_bounds_flat(self):
         r"""
         **Description:**
@@ -891,6 +847,7 @@ class TestFluxBounding(TestCase):
         self.assertIsInstance(results, list)
 
     @chex.variants(with_jit=True, without_jit=True)
+    @pytest.mark.slow
     def test_check_bounds_batch(self):
         r"""
         **Description:**
@@ -1067,7 +1024,7 @@ class TestFluxBounding(TestCase):
 #  TestClusterRoundTrip
 # ==============================================================================
 
-@pytest.mark.skip(reason="Cluster-roundtrip tests disabled while diagnosing GHA hang in test_flux_bounding")
+@pytest.mark.skip(reason="Cluster-roundtrip integration tests are disabled in the default suite")
 class TestClusterRoundTrip(TestCase):
     r"""
     **Description:**
