@@ -60,8 +60,9 @@ from jax import jit, vmap, Array
 from numpy.typing import ArrayLike
 from typing import Tuple, Any, Callable, Literal
 from jax.numpy import pi
+from stringjax_tools import vmapping_func_cached as _vmapping_func_cached
 # Self-made modules
-from .util import random_integer, random_uniform, vmapping_func, vmapping_func_cached, PRNGSequence
+from .util import random_integer, random_uniform, PRNGSequence
 
 
 home_dir=os.path.dirname(os.path.realpath(__file__))+"/.."
@@ -323,7 +324,7 @@ class data_sampler():
             _n_fluxes (int): Number of fluxes.
             _generators_kahler_cone (Array): Generators Kähler cone.
             _h12 (float): Number of complex structure moduli.
-            _rays_kahler_cone (Array): Rays Kähler cone.
+            _rays (Array): Rays Kähler cone.
             _tip_ray (Array): Tip of c=1 stretched Kähler cone.
             _F_inst (callable): Instanton prepotential.
             _prepot (callable): Prepotential.
@@ -977,14 +978,14 @@ class data_sampler():
         # Determine the ray basis depending on the sampling mode
         if sampling_mode in ["cone", "stretched_cone", "random_ray"]:
             if self._extremal_rays is None:
-                if self._rays is None:
+                if self._rays is not None:
                     if self._hyperplanes is None:
                         raise ValueError("Need to provide information about the Kähler cone.")
                     if sampling_mode == "random_rays":
                         rays = self.sample_rays(n_rays, rns_key=rns_key)
                         use_rays = True
                     else:
-                        rays = self._rays_kahler_cone
+                        rays = self._rays
                 else:
                     rays = self.find_interior_points(N=100, verbosity=verbosity)
             else:
@@ -1938,9 +1939,10 @@ class data_sampler():
         .. admonition:: Cached vmapped kernel
             :class: dropdown
 
-            When ``vmap=True``, this method delegates to :func:`vmapping_func_cached`
+            When ``vmap=True``, this method delegates to
+            ``stringjax_tools.vmapping_func_cached``
             rather than constructing a new ``jax.jit(jax.vmap(...))`` closure on each
-            call.  :func:`vmapping_func_cached` stores the compiled XLA kernel in an
+            call.  ``stringjax_tools.vmapping_func_cached`` stores the compiled XLA kernel in an
             LRU cache keyed on ``(func, in_axes, frozen_kwargs)``.  Subsequent calls
             with the same arguments retrieve the pre-compiled kernel directly, avoiding
             recompilation overhead — particularly important when this method is called
@@ -1974,14 +1976,14 @@ class data_sampler():
         Raises:
             ValueError: If ``mode`` or ``output`` are not among the recognised values.
 
-        See also: :func:`ISD_condition`, :func:`vmapping_func_cached`,
+        See also: :func:`ISD_condition`, ``stringjax_tools.vmapping_func_cached``,
             :func:`initial_guesses_ISD`, :func:`_ISD_sampling_PM`,
             :func:`_ISD_sampling_FH`
         """
 
         # --- vmap=True path: use cached jit(vmap(...)) to avoid recompilation ----
         if vmap:
-            return vmapping_func_cached(
+            return _vmapping_func_cached(
                 self.ISD_sampling,
                 in_axes=(in_axes[0], in_axes[0], in_axes[1], in_axes[1], in_axes[2]),
                 mode=mode,
@@ -2069,9 +2071,9 @@ class data_sampler():
         .. admonition:: Implementation notes
             :class: dropdown
 
-            **(a) Cached vmapped kernel via** :func:`vmapping_func_cached` **.**
+            **(a) Cached vmapped kernel via** ``stringjax_tools.vmapping_func_cached`` **.**
             The vmapped+jitted ISD kernel is built once before the loop using
-            :func:`vmapping_func_cached`, which stores the compiled XLA kernel in an
+            ``stringjax_tools.vmapping_func_cached``, which stores the compiled XLA kernel in an
             LRU cache keyed on ``(func, in_axes, frozen_kwargs)``.  Subsequent
             iterations retrieve the cached callable directly, avoiding recompilation
             overhead on every loop iteration.
@@ -2123,7 +2125,7 @@ class data_sampler():
         Raises:
             KeyboardInterrupt: Returns partial results if interrupted.
 
-        See also: :func:`ISD_sampling`, :func:`vmapping_func_cached`,
+        See also: :func:`ISD_sampling`, ``stringjax_tools.vmapping_func_cached``,
             :func:`initial_guesses`
         """
 
@@ -2136,10 +2138,10 @@ class data_sampler():
         effective_vmap: int = (vmap_dim * ISD_oversample_factor) if self.use_jax else vmap_dim
 
         # Fix 1: build the vmapped+jitted ISD kernel ONCE before the loop.
-        # vmapping_func_cached stores the compiled XLA kernel in an LRU cache keyed
+        # stringjax_tools.vmapping_func_cached stores the compiled XLA kernel in an LRU cache keyed
         # on (func, in_axes, frozen_kwargs), so the second and subsequent iterations
         # of the while loop retrieve the cached callable without any recompilation.
-        _ISD_vmapped = vmapping_func_cached(
+        _ISD_vmapped = _vmapping_func_cached(
             self.ISD_sampling,
             in_axes=(0, 0, 0, 0, 0),
             mode=mode,
@@ -2400,4 +2402,3 @@ def sample_in_ellipsoid(key: Array, m: Array, q: float | Array, n: int) -> Array
     x = g * r
     u_real = jnp.sqrt(2.0 * q) * (x @ inv_sqrt)
     return jnp.round(u_real)
-

@@ -628,14 +628,14 @@ class TestFluxVacuaFinder(TestCase):
     #  7. constructor and post-processing helpers
     # ==========================================================================
 
-    def test_from_model_reuses_geometry_and_sets_finder_state(self):
-        r"""``from_model`` should add finder state without rebuilding geometry."""
+    def test_from_eft_reuses_geometry_and_sets_finder_state(self):
+        r"""``from_eft`` should add finder state without rebuilding geometry."""
 
         base = jaxvacua.FluxEFT(
             h12=self.h12, model_ID=1, model_type="KS", maximum_degree=0
         )
         sampler = _StaticVacuaSampler(base)
-        finder = jaxvacua.FluxVacuaFinder.from_model(
+        finder = jaxvacua.FluxVacuaFinder.from_eft(
             base, sampler=sampler, map_to_fd=True, moduli_bounds=(2., 4.)
         )
 
@@ -649,10 +649,24 @@ class TestFluxVacuaFinder(TestCase):
         finder._calibrated_sigmas = {"H": 1.0}
         self.assertFalse(hasattr(base, "_calibrated_sigmas"))
 
+    def test_from_model_deprecated_alias_forwards_and_warns(self):
+        r"""``from_model`` is a deprecated alias for ``from_eft``: it still works
+        (including the old ``model=`` keyword) and emits a ``DeprecationWarning``."""
+        import warnings
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            finder = jaxvacua.FluxVacuaFinder.from_model(model=self.model)
+        self.assertIsInstance(finder, jaxvacua.FluxVacuaFinder)
+        self.assertIs(finder.periods, self.model.periods)
+        self.assertTrue(
+            any(issubclass(x.category, DeprecationWarning) for x in caught),
+            "from_model should emit a DeprecationWarning",
+        )
+
     def test_to_fd_disabled_is_noop_wrapper(self):
         r"""``to_fd`` should respect the finder-level ``map_to_fd`` flag."""
 
-        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        finder = jaxvacua.FluxVacuaFinder.from_eft(self.model, map_to_fd=False)
         moduli = np.array([0.6 + 3.0j, -0.7 + 2.0j])
         tau = 0.2 + 3.0j
         fluxes = np.arange(2 * self.model.n_fluxes, dtype=float)
@@ -666,7 +680,7 @@ class TestFluxVacuaFinder(TestCase):
     def test_deduplicate_vacua_collapses_rounded_duplicates(self):
         r"""Batched deduplication should keep the first representative."""
 
-        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        finder = jaxvacua.FluxVacuaFinder.from_eft(self.model, map_to_fd=False)
         moduli = jnp.array([
             [0.100000001 + 3.0j, -0.2 + 2.5j],
             [0.100000002 + 3.0j, -0.2 + 2.5j],
@@ -691,7 +705,7 @@ class TestFluxVacuaFinder(TestCase):
     def test_deduplicate_vacua_empty_batch(self):
         r"""Empty batches should round-trip without special-case crashes."""
 
-        finder = jaxvacua.FluxVacuaFinder.from_model(self.model, map_to_fd=False)
+        finder = jaxvacua.FluxVacuaFinder.from_eft(self.model, map_to_fd=False)
         moduli = jnp.zeros((0, self.h12), dtype=complex)
         tau = jnp.zeros((0,), dtype=complex)
         fluxes = jnp.zeros((0, 2 * self.model.n_fluxes))
@@ -884,7 +898,7 @@ class TestFluxVacuaFinder(TestCase):
     def test_run_calibration_orchestrates_calibration_steps(self):
         r"""``run_calibration`` should call the three calibration stages."""
 
-        finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+        finder = jaxvacua.FluxVacuaFinder.from_eft(self.model)
         calls = []
         sampler = object()
 
@@ -927,7 +941,7 @@ class TestFluxVacuaFinder(TestCase):
     def test_save_and_load_calibration_roundtrip(self):
         r"""Calibration JSON files should round-trip the sigma table."""
 
-        finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+        finder = jaxvacua.FluxVacuaFinder.from_eft(self.model)
         finder._calibrated_sigmas = {"F": 1.25, "H": 2.5}
         finder._M_cond = 12.0
         finder._tr_Minv_median = 3.0
@@ -937,7 +951,7 @@ class TestFluxVacuaFinder(TestCase):
             path = os.path.join(tmp, "calibration.json")
             saved = finder.save_calibration(Q=99, path=path)
 
-            loaded_finder = jaxvacua.FluxVacuaFinder.from_model(self.model)
+            loaded_finder = jaxvacua.FluxVacuaFinder.from_eft(self.model)
             sigmas = loaded_finder.load_calibration(saved)
 
         self.assertEqual(sigmas, {"F": 1.25, "H": 2.5})

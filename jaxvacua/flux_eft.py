@@ -58,6 +58,7 @@ from jax.tree_util import register_pytree_node
 # Enable 64 bit precision
 # JAXVacua custom imports
 from .util import *
+from .util import _PYTREE_POLICY
 from .css import css
 
 class FluxEFT(css):
@@ -723,7 +724,7 @@ class FluxEFT(css):
             .. math::
                     N_{\mathrm{flux}} = \vec{f}\Sigma \vec{h}\, ,
 
-            where :math`\vec{f}, \vec{h}` are the NSNS- and RR-fluxes respectively.
+            where :math:`\vec{f}, \vec{h}` are the RR- and NSNS-fluxes respectively.
             The symplectic pairing :math:`\Sigma` is implemented in the periods class :func:`jaxvacua.periods.periods`.
 
         Args:
@@ -4258,6 +4259,6 @@ from jaxvacua import conifold as _cf
 for _name in _cf._FLUXEFT_METHODS:
     setattr(FluxEFT, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
-unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxEFT)
+_flux_eft_flatten, _flux_eft_unflatten = _PYTREE_POLICY.make_flatteners(FluxEFT)
 
-register_pytree_node(FluxEFT, flatten_func, unflatten_func)
+register_pytree_node(FluxEFT, _flux_eft_flatten, _flux_eft_unflatten)

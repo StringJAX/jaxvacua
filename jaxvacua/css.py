@@ -61,6 +61,7 @@ from jaxpolylog import jax_polylog_vmap
 
 # JAXVacua custom imports
 from .util import *
+from .util import _PYTREE_POLICY
 from .periods import periods
 
 
@@ -316,8 +317,8 @@ class css:
             return 0.
         
         if self.periods.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
-            approx="inf"
-            #approx="patch"
+            #approx="inf"
+            approx="patch"
         elif self.periods.limit == "coniLCS":
             approx="patch"
         else:
@@ -2672,8 +2673,8 @@ for _name in _cf._CSS_METHODS:
     setattr(css, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
 
-unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, css)
+_css_flatten, _css_unflatten = _PYTREE_POLICY.make_flatteners(css)
 
-register_pytree_node(css, flatten_func, unflatten_func)
+register_pytree_node(css, _css_flatten, _css_unflatten)
 
        

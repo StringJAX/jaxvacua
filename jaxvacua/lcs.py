@@ -55,7 +55,7 @@ from jax.scipy.special import zeta
 from jax import Array
 from .conifold import compute_a_matrix, get_basis_change, Conifold
 from .cytools_interface import compute_intersection_numbers_coo, cytools_model_data_init
-from .util import load_zipped_pickle,flatten_func,unflatten_func_class
+from .util import load_zipped_pickle, _PYTREE_POLICY
 
 
 from itertools import permutations
@@ -492,7 +492,7 @@ class lcs_tree(object):
         # Transform second Chern class by basis change
         self.c2 = jnp.matmul(L, self.c2)
         
-        self.intnums_coo = compute_intersection_numbers_coo(self.intnums).astype(int)
+        self.intnums_coo = np.rint(compute_intersection_numbers_coo(self.intnums)).astype(int)
         
         # Transform cone generators and rays to new basis
         if self.generators_kahler_cone is not None:
@@ -559,7 +559,7 @@ class lcs_tree(object):
                     for k in range(j,self.h12):
                         if self.intnums[i][j][k]!=0:
                             perms=np.unique(list(itertools.permutations([i,j,k])),axis=0)
-                            dlist.append([i,j,k,int(self.intnums[i][j][k])*len(perms)])
+                            dlist.append([i,j,k,int(np.rint(self.intnums[i][j][k]))*len(perms)])
                         
             self.intnums_coo_sym=jnp.array(dlist)
             
@@ -633,7 +633,7 @@ class lcs_tree(object):
                     else:
                         Y = np.array(Y,dtype=float)
 
-                    X = X.astype(int)
+                    X = np.rint(X).astype(int)
 
                     charges = jnp.array(X)
                     invariants = jnp.array(Y)
@@ -740,7 +740,7 @@ class lcs_tree(object):
                     x = np.array(x,dtype=float)
                     
                 if "intnums" in key or "c2" in key or "conifold" in key:
-                    x = x.astype(np.int32)
+                    x = np.rint(x).astype(np.int32)
 
                 d[key] = jnp.array(x)
 
@@ -900,7 +900,7 @@ class lcs_tree(object):
 
 
 # Register the lcs_tree class as a pytree node for JAX transformations
-unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, lcs_tree)
+_lcs_flatten, _lcs_unflatten = _PYTREE_POLICY.make_flatteners(lcs_tree)
 
 # Register lcs_tree
-register_pytree_node(lcs_tree, flatten_func, unflatten_func)
+register_pytree_node(lcs_tree, _lcs_flatten, _lcs_unflatten)

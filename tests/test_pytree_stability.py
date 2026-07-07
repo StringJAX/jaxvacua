@@ -17,7 +17,7 @@
 Purpose
 -------
 Lock the JAX pytree contract for ``FluxVacuaFinder`` (and, by extension, the
-other ``register_pytree_node`` classes that share ``util.flatten_func``):
+other classes registered through JAXVacua's shared pytree policy):
 
 - the treedef must be hashable (else jit/vmap caching fails);
 - the treedef must be **stable** across lazy-cache mutation — accessing the
@@ -46,7 +46,7 @@ jax.config.update("jax_enable_x64", True)
 
 sys.path.append("./../")
 import jaxvacua
-from jaxvacua.util import _PYTREE_IGNORE, _STATIC_KEYS, flatten_func
+from jaxvacua.util import _PYTREE_IGNORE, _PYTREE_POLICY, _STATIC_KEYS
 
 warnings.filterwarnings("ignore")
 
@@ -90,7 +90,7 @@ class TestPytreeStability(TestCase):
         _ = self.finder.sampler
         self.finder._calibrated_sigmas = {"H": 1.0}
         self.finder._M_eigvecs = np.eye(2)
-        children, aux = flatten_func(self.finder)
+        children, aux = _PYTREE_POLICY.flatten(self.finder)
         aux_keys = self._aux_keys(aux)
         for k in _PYTREE_IGNORE:
             self.assertNotIn(k, aux_keys, f"{k} leaked into aux_data")
@@ -100,7 +100,7 @@ class TestPytreeStability(TestCase):
         f = jaxvacua.FluxVacuaFinder(
             h12=2, model_ID=1, model_type="KS", maximum_degree=0, Q=123,
         )
-        children, aux = flatten_func(f)
+        children, aux = _PYTREE_POLICY.flatten(f)
         aux_keys = self._aux_keys(aux)
         self.assertIn("_Q", aux_keys)
         self.assertIn("_Q", _STATIC_KEYS)

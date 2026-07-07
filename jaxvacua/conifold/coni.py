@@ -47,6 +47,7 @@ import numpy as np
 import jax.numpy as jnp
 from jax import Array
 from jax.tree_util import register_pytree_node
+from stringjax_tools import PytreePolicy as _PytreePolicy
 
 # cytools is an optional dependency: only needed to construct a Conifold from
 # toric geometry (Polytope / Triangulation).  Guard the import so importing the
@@ -363,32 +364,14 @@ class Conifold:
 # ``polytope()`` and ``dual_triangulation()`` return ``None``.
 # --------------------------------------------------------------------------
 
-_CONIFOLD_DYNAMIC_KEYS = (
-    # Hot-path attributes (plain names)
-    'conifold_curve', 'conifold_curve0',
-    'bulk_embedding', 'bulk_projection', 'embedding',
-    # Lazy-getter backing storage (underscore-prefixed)
-    '_basis_change', '_flop_edge', '_one_face_divisors',
-)
 _CONIFOLD_STATIC_KEYS = ('ncf',)
-
-
-def _flatten_conifold(obj):
-    children = tuple(getattr(obj, k, None) for k in _CONIFOLD_DYNAMIC_KEYS)
-    aux_data = tuple((k, getattr(obj, k, None)) for k in _CONIFOLD_STATIC_KEYS)
-    return children, aux_data
-
-
-def _unflatten_conifold(aux_data, children):
-    obj = object.__new__(Conifold)
-    for k, v in aux_data:
-        object.__setattr__(obj, k, v)
-    for k, v in zip(_CONIFOLD_DYNAMIC_KEYS, children):
-        object.__setattr__(obj, k, v)
-    # Cytools refs are not part of the pytree — set to None on the way back.
-    object.__setattr__(obj, '_polytope', None)
-    object.__setattr__(obj, '_dual_triangulation', None)
-    return obj
+_CONIFOLD_PYTREE_POLICY = _PytreePolicy(
+    static_keys=_CONIFOLD_STATIC_KEYS,
+    ignore_defaults={
+        '_polytope': None,
+        '_dual_triangulation': None,
+    },
+)
 
 
 # Pytree registration must run exactly once per process.  Guard with an
@@ -396,6 +379,7 @@ def _unflatten_conifold(aux_data, children):
 # legacy ``jaxvacua.conifold_utils`` shim) don't trip jax's "already
 # registered" check.
 if not getattr(Conifold, "_pytree_registered", False):
+    _flatten_conifold, _unflatten_conifold = _CONIFOLD_PYTREE_POLICY.make_flatteners(Conifold)
     register_pytree_node(Conifold, _flatten_conifold, _unflatten_conifold)
     Conifold._pytree_registered = True
 

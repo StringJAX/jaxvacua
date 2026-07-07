@@ -22,7 +22,7 @@ is used by several higher-level workflows.
 Main public API
 ---------------
 - PRNG and random wrappers.
-- Flattening, JIT/vmap adapter, matrix diagnostics and compressed pickle IO.
+- JAXVacua auto-vmap defaults, matrix diagnostics and compressed pickle IO.
 
 Design notes
 ------------
@@ -47,7 +47,6 @@ from jaxvacua.util import (
     get_auto_vmap_default_shapes,
     get_auto_vmap_defaults,
     is_outlier,
-    jit_with_static_args,
     load_zipped_pickle,
     mergeDictionary,
     random_integer,
@@ -61,12 +60,7 @@ from jaxvacua.util import (
     set_auto_vmap_default_shapes,
     set_auto_vmap_defaults,
     subsets,
-    vmapping_func_cached,
 )
-
-
-def _scaled_square(x, scale=1):
-    return scale * x * x
 
 
 def test_prng_sequence_reproducible_and_advances():
@@ -112,24 +106,6 @@ def test_random_jit_helpers_match_bounds_contract():
     integers = np.asarray(random_integer_jit(key_i, 2, 4, shape=(256,)))
     assert integers.shape == (256,)
     assert set(np.unique(integers)).issubset({2, 3, 4})
-
-
-def test_vmapping_func_cached_reuses_kernel_object():
-    r"""Repeated cached vmap construction returns the same wrapper object."""
-    vmapped_a = vmapping_func_cached(_scaled_square, in_axes=0, scale=3)
-    vmapped_b = vmapping_func_cached(_scaled_square, in_axes=0, scale=3)
-
-    assert vmapped_a is vmapped_b
-    np.testing.assert_allclose(np.asarray(vmapped_a(jnp.arange(4.0))), [0, 3, 12, 27])
-
-
-def test_jit_with_static_args_handles_static_python_values():
-    r"""The static-argument wrapper works for small Python configuration values."""
-    def affine(x, scale, offset):
-        return scale * x + offset
-
-    wrapped = jit_with_static_args(affine, static_argnums=(1, 2))
-    np.testing.assert_allclose(np.asarray(wrapped(jnp.array([1.0, 2.0]), 2.0, 5.0)), [7, 9])
 
 
 def test_auto_vmap_uses_jaxvacua_local_shape_defaults():

@@ -61,6 +61,7 @@ from jaxpolylog import jax_polylog_vmap
 
 # JAXVacua custom imports
 from .util import *
+from .util import _PYTREE_POLICY
 from .lcs import lcs_tree
 
 
@@ -302,6 +303,14 @@ class periods:
             self.h12 = self._lcs_tree.h12
         else:
             self.h12 = h12
+            
+        gv_charges = self._lcs_tree.gv_charges
+        if self.include_mirror_wsi==False and gv_charges is not None:
+            if len(gv_charges)>0:
+                warnings.warn(f"Mirror worldsheet instanton corrections are disabled, but GV charges are provided. This may lead to inconsistent results!")
+                #self.include_mirror_wsi = True
+                
+            
 
         # Define the symplectic pairing matrix for the periods. This is a constant matrix that encodes the symplectic structure of the period vector. It is defined as
         self.sigma = self.sigma()
@@ -728,8 +737,8 @@ class periods:
             return 0.
         
         if self.limit in ["LCS","coniLCS_series","coniLCS_bulk"]:
-            approx="inf"
-            #approx="patch"
+            #approx="inf"
+            approx="patch"
         elif self.limit == "coniLCS":
             approx="patch"
         else:
@@ -1622,6 +1631,6 @@ from jaxvacua import conifold as _cf
 for _name in _cf._PERIODS_METHODS:
     setattr(periods, _name, _cf._ConifoldGated(getattr(_cf, _name)))
 
-unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, periods)
+_periods_flatten, _periods_unflatten = _PYTREE_POLICY.make_flatteners(periods)
 
-register_pytree_node(periods, flatten_func, unflatten_func)
+register_pytree_node(periods, _periods_flatten, _periods_unflatten)

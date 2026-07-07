@@ -40,7 +40,7 @@ Main public API
 Design notes
 ------------
 Stateless post-processing helpers delegate to ``jaxvacua.flux_utils``.  Use
-``FluxVacuaFinder.from_model(model, sampler=None)`` to reuse an existing
+``FluxVacuaFinder.from_eft(eft, sampler=None)`` to reuse an existing
 ``FluxEFT`` geometry without recomputing it.
 """
 
@@ -59,10 +59,12 @@ import jax.numpy as jnp
 from jax import Array
 from jax import pure_callback
 from jax.tree_util import register_pytree_node
+from stringjax_tools import vmapping_func_cached as _vmapping_func_cached
 
 # Enable 64 bit precision
 # JAXVacua custom imports
 from .util import *
+from .util import _PYTREE_POLICY
 from .flux_eft import FluxEFT
 from .sampling import data_sampler
 from . import flux_utils
@@ -114,7 +116,7 @@ class FluxVacuaFinder(FluxEFT):
     code that uses ``FluxEFT`` works unchanged if you swap in a
     ``FluxVacuaFinder`` — Liskov-substitutable.
 
-    Use :meth:`from_model` to construct a finder from an existing
+    Use :meth:`from_eft` to construct a finder from an existing
     ``FluxEFT`` instance without re-doing the geometry computation
     (useful when running multiple finders against the same model).
 
@@ -297,9 +299,9 @@ class FluxVacuaFinder(FluxEFT):
         )
 
     @classmethod
-    def from_model(
+    def from_eft(
         cls,
-        model: FluxEFT,
+        eft: FluxEFT,
         sampler: "data_sampler" = None,
         map_to_fd: bool = False,
         flux_bounds: tuple = (-10, 10),
@@ -321,21 +323,21 @@ class FluxVacuaFinder(FluxEFT):
         * You already have a ``FluxEFT`` and want to run a finder on it
           without rebuilding the geometry (which can be slow for large
           h12).
-        * You want multiple finders on the same model (e.g. different
+        * You want multiple finders on the same ``FluxEFT`` (e.g. different
           ``sampler`` bounds, different ``map_to_fd``).
         * You have a custom :class:`FluxEFT` subclass and want the
           finder methods on top of it.
 
-        Internally clones the ``model``'s ``__dict__`` into a freshly
+        Internally clones the ``eft``'s ``__dict__`` into a freshly
         allocated ``FluxVacuaFinder`` instance.  The two instances
         thereafter share references to the same arrays / sub-objects
-        (``lcs_tree``, ``periods``, ``css``, …).  Mutating the model
+        (``lcs_tree``, ``periods``, ``css``, …).  Mutating the eft
         will be visible on the finder; mutating finder-only state
         (``_map_to_fd``, ``_calibrated_sigmas``, …) does *not* leak
-        back into the model.
+        back into the eft.
 
         Args:
-            model (FluxEFT): Instance whose state to clone.
+            eft (FluxEFT): Instance whose state to clone.
             sampler (data_sampler, optional): If given, used instead of
                 lazy-constructing one from the bounds kwargs.
             map_to_fd (bool, optional): Whether to map results to the
@@ -352,20 +354,20 @@ class FluxVacuaFinder(FluxEFT):
                 if ``sampler is None``.
 
         Returns:
-            FluxVacuaFinder: New instance sharing geometry with ``model``.
+            FluxVacuaFinder: New instance sharing geometry with ``eft``.
 
         **Example:**
 
         .. code-block:: python
 
-            model  = jvc.FluxEFT(h12=2, model_ID=1, maximum_degree=5)
-            # ... use model for some FluxEFT-only work ...
-            finder = jvc.FluxVacuaFinder.from_model(model)
+            eft    = jvc.FluxEFT(h12=2, model_ID=1, maximum_degree=5)
+            # ... use eft for some FluxEFT-only work ...
+            finder = jvc.FluxVacuaFinder.from_eft(eft)
             vacua  = finder.sample_critical_points(Q=200, n_target=10)
         """
         finder = cls.__new__(cls)
-        finder.__dict__.update(model.__dict__)
-        # Finder-only state (not inherited from the model)
+        finder.__dict__.update(eft.__dict__)
+        # Finder-only state (not inherited from the eft)
         finder._map_to_fd = map_to_fd
         finder._sampler_flux_bounds = _freeze_sampler_config(flux_bounds)
         finder._sampler_axion_bounds = _freeze_sampler_config(axion_bounds)
@@ -381,6 +383,23 @@ class FluxVacuaFinder(FluxEFT):
             seed=seed,
         )
         return finder
+
+    @classmethod
+    def from_model(cls, model=None, *args, **kwargs) -> "FluxVacuaFinder":
+        r"""
+        **Description:**
+        Deprecated alias for :meth:`from_eft`, kept for backward compatibility.
+        The classmethod and its first argument were renamed from
+        ``from_model(model, ...)`` to ``from_eft(eft, ...)`` because the argument
+        is a :class:`FluxEFT`, not a generic "model".  The old ``model=`` keyword
+        still works; a ``DeprecationWarning`` is emitted.
+        """
+        warnings.warn(
+            "FluxVacuaFinder.from_model is deprecated; use "
+            "FluxVacuaFinder.from_eft (the argument is a FluxEFT).",
+            DeprecationWarning, stacklevel=2,
+        )
+        return cls.from_eft(model, *args, **kwargs)
 
     @property
     def sampler(self) -> "data_sampler":
@@ -1257,15 +1276,15 @@ class FluxVacuaFinder(FluxEFT):
                 
                 if mode == "ISD":
 
-                    linearised_shifts_ISD_v = vmapping_func_cached(self.linearised_shifts,mode="ISD",**kwargs)
-                    linearised_shifts_H_v = vmapping_func_cached(self.linearised_shifts,mode="Hflux",**kwargs)
-                    linearised_shifts_F_v = vmapping_func_cached(self.linearised_shifts,mode="Fflux",**kwargs)
+                    linearised_shifts_ISD_v = _vmapping_func_cached(self.linearised_shifts,mode="ISD",**kwargs)
+                    linearised_shifts_H_v = _vmapping_func_cached(self.linearised_shifts,mode="Hflux",**kwargs)
+                    linearised_shifts_F_v = _vmapping_func_cached(self.linearised_shifts,mode="Fflux",**kwargs)
 
                 elif mode == "random":
 
-                    linearised_shifts_ISD_v = vmapping_func_cached(self.linearised_shifts,mode="random",**kwargs)
-                    linearised_shifts_H_v = vmapping_func_cached(self.linearised_shifts,mode="Hflux_random",**kwargs)
-                    linearised_shifts_F_v = vmapping_func_cached(self.linearised_shifts,mode="Fflux_random",**kwargs)
+                    linearised_shifts_ISD_v = _vmapping_func_cached(self.linearised_shifts,mode="random",**kwargs)
+                    linearised_shifts_H_v = _vmapping_func_cached(self.linearised_shifts,mode="Hflux_random",**kwargs)
+                    linearised_shifts_F_v = _vmapping_func_cached(self.linearised_shifts,mode="Fflux_random",**kwargs)
                 
                 optimisers = [linearised_shifts_ISD_v,linearised_shifts_H_v,linearised_shifts_F_v]
                 
@@ -1478,13 +1497,13 @@ class FluxVacuaFinder(FluxEFT):
         
         if optimiser_init is None:
             kwargs = {"mode":mode,"Q":Q,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
-            find_solution_init = vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,None),return_flag=False,**kwargs)
-            optimiser_init = vmapping_func_cached(find_solution_init,in_axes=(None,None,0))
+            find_solution_init = _vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,None),return_flag=False,**kwargs)
+            optimiser_init = _vmapping_func_cached(find_solution_init,in_axes=(None,None,0))
         
         if optimiser_steps is None:
             kwargs = {"mode":mode,"Q":Q,"constraints":constraints,"remove_NANs":True,"step_size":step_size}
-            find_solution_steps = vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,0),return_flag=True,**kwargs)
-            optimiser_steps = vmapping_func_cached(find_solution_steps,in_axes=(0,0,0))
+            find_solution_steps = _vmapping_func_cached(self.linearised_shifts,in_axes=(0,0,0),return_flag=True,**kwargs)
+            optimiser_steps = _vmapping_func_cached(find_solution_steps,in_axes=(0,0,0))
 
         #if not (fluxes_init is None):
         #    N = 0
@@ -3178,6 +3197,6 @@ class FluxVacuaFinder(FluxEFT):
         return results
 
 
-unflatten_func = lambda aux_data, children: unflatten_func_class(aux_data, children, FluxVacuaFinder)
+_finder_flatten, _finder_unflatten = _PYTREE_POLICY.make_flatteners(FluxVacuaFinder)
 
-register_pytree_node(FluxVacuaFinder, flatten_func, unflatten_func)
+register_pytree_node(FluxVacuaFinder, _finder_flatten, _finder_unflatten)

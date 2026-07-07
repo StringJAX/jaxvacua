@@ -65,24 +65,9 @@ except ImportError:
 # --- Third-party --------------------------------------------------------------
 import numpy as np
 from flint import fmpz_mat                  # exact integer LLL for ``orthogonal_lattice``
-from stringjax_tools.jit import (
-    is_static as _sjt_is_static,
-    jit_with_dynamic_static_args as _sjt_jit_with_dynamic_static_args,
-    jit_with_static_args as _sjt_jit_with_static_args,
-)
-from stringjax_tools.pytrees import (
-    flatten_func as _sjt_flatten_func,
-    unflatten_func_class as _sjt_unflatten_func_class,
-)
+from stringjax_tools.pytrees import PytreePolicy as _PytreePolicy
 from stringjax_tools.auto_vectorise import (
-    ArgSpec,
     auto_vmap as _sjt_auto_vmap,
-    clear_auto_vmap_caches,
-)
-from stringjax_tools.vmap import (
-    _build_vmap_jit as _sjt_build_vmap_jit,
-    vmapping_func as _sjt_vmapping_func,
-    vmapping_func_cached as _sjt_vmapping_func_cached,
 )
 
 # --- JAX ----------------------------------------------------------------------
@@ -390,157 +375,6 @@ def random_integer_jit(
     """
     return jax.random.randint(rns_key, shape=shape, minval=lower_bound,
                               maxval=upper_bound + 1)
-
-
-# ==============================================================================
-# 2. JIT / vmap helpers
-# ==============================================================================
-
-def vmapping_func(
-    func: Callable,
-    in_axes: Optional[Union[int, Tuple]] = None,
-    **kwargs: Any,
-) -> Callable:
-    r"""
-    **Description:**
-    Build a JIT-compiled, vmapped wrapper around ``func`` with optional
-    keyword arguments frozen inside the closure.
-
-    .. note::
-        Each call constructs a *fresh* ``jax.jit(jax.vmap(...))`` object;
-        this defeats JAX's compilation cache and forces XLA recompilation.
-        Use :func:`vmapping_func_cached` if you call the same combination
-        repeatedly.
-
-    Args:
-        func (Callable): Function to be vmapped.
-        in_axes (int | tuple, optional): Forwarded to ``jax.vmap``.
-        **kwargs:        Keyword arguments to be bound inside the closure.
-
-    Returns:
-        Callable: JIT-compiled vmapped function.
-    """
-    return _sjt_vmapping_func(func, in_axes=in_axes, **kwargs)
-
-
-def _build_vmap_jit(
-    func: Callable,
-    in_axes: Optional[Union[int, Tuple]],
-    frozen_kwargs: Tuple[Tuple[str, Any], ...],
-) -> Callable:
-    r"""
-    **Description:**
-    Module-level LRU-cached factory that builds and stores a
-    ``jax.jit(jax.vmap(...))`` kernel.  Called by
-    :func:`vmapping_func_cached`; not intended for direct use.
-
-    The cache key is managed by :mod:`stringjax_tools`, which snapshots
-    keyword values for cache-key construction while retaining the original
-    values inside the closure.
-
-    Args:
-        func (Callable):           Hashable callable to be vmapped.
-        in_axes (int | tuple | None): Batch-axis specification forwarded to
-            ``jax.vmap``.
-        frozen_kwargs (tuple):     Sorted tuple of ``(key, value)`` pairs
-            representing keyword arguments to be bound inside the closure.
-
-    Returns:
-        Callable: JIT-compiled vmapped function.
-    """
-    return _sjt_build_vmap_jit(func, in_axes, frozen_kwargs)
-
-
-def vmapping_func_cached(
-    func: Callable,
-    in_axes: Optional[Union[int, Tuple]] = None,
-    **kwargs: Any,
-) -> Callable:
-    r"""
-    **Description:**
-    Cached variant of :func:`vmapping_func`.  Returns a JIT-compiled vmapped
-    function, **reusing the previously compiled XLA kernel** whenever
-    ``(func, in_axes, kwargs)`` match a prior call.  Keyword values may be
-    unhashable; :mod:`stringjax_tools` builds a robust cache-key
-    representation internally.
-
-    Args:
-        func (Callable):     Function to be vmapped.  Must be hashable;
-            Python bound methods satisfy this requirement.
-        in_axes (int | tuple | None, optional): Forwarded to ``jax.vmap``.
-            Must be hashable (tuples of ints or ``None``).  Default ``None``.
-        **kwargs:            Keyword arguments to be bound inside the
-            closure.
-
-    Returns:
-        Callable: JIT-compiled vmapped function, reused from cache when
-        possible.
-
-    .. note::
-        The backing LRU cache is module-level (capacity 256) and persists
-        for the lifetime of the Python process.
-    """
-    return _sjt_vmapping_func_cached(func, in_axes=in_axes, **kwargs)
-
-
-def jit_with_static_args(
-    func: Callable,
-    static_argnums: Tuple[int, ...] = (),
-) -> Callable:
-    r"""
-    **Description:**
-    Wrap ``func`` with ``jax.jit``, treating positional arguments at the
-    indices in ``static_argnums`` as compile-time constants.
-
-    Args:
-        func (Callable):                The function to be JIT-compiled.
-        static_argnums (tuple[int, ...]): Positions of arguments to mark as
-            static.  Default ``()``.
-
-    Returns:
-        Callable: JIT-compiled wrapper around ``func``.
-
-    Example:
-        .. code-block:: python
-
-            def f(x, y, n): return x + y + n
-            jit_f = jit_with_static_args(f, static_argnums=(2,))
-    """
-    return _sjt_jit_with_static_args(func, static_argnums=static_argnums)
-
-
-def is_static(arg: Any) -> bool:
-    r"""
-    **Description:**
-    Heuristic test for whether ``arg`` should be treated as a JAX static
-    argument.  Delegates to :mod:`stringjax_tools`, which treats JAX and NumPy
-    arrays as dynamic/traced and ordinary Python configuration values as
-    static.
-
-    Args:
-        arg (Any): The argument to test.
-
-    Returns:
-        bool: ``True`` if static, ``False`` if it should be traced.
-    """
-    return _sjt_is_static(arg)
-
-
-def jit_with_dynamic_static_args(func: Callable) -> Callable:
-    r"""
-    **Description:**
-    Build a wrapper that re-JITs ``func`` on each call, using
-    :func:`is_static` to dynamically decide which positional arguments are
-    static.  Convenient for prototyping; in production code prefer
-    :func:`jit_with_static_args` so the trace cache hits.
-
-    Args:
-        func (Callable): The function to be JIT-compiled.
-
-    Returns:
-        Callable: Wrapper that rebuilds the JIT plan per call.
-    """
-    return _sjt_jit_with_dynamic_static_args(func)
 
 
 # ==============================================================================
@@ -1028,66 +862,13 @@ _PYTREE_IGNORE_DEFAULTS = {
     "_Q_auto_warning_issued": False,
 }
 
-
-def flatten_func(obj: Any) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
-    r"""
-    **Description:**
-    Flatten ``obj`` for the JAX pytree protocol.
-
-    Splits ``obj.__dict__`` into:
-      * ``children`` — values that are JAX arrays / pytrees and should be
-        traced;
-      * ``aux_data`` — ``(child_keys, static_items)``, where ``child_keys``
-        names the traced children and ``static_items`` stores static
-        ``(key, value)`` pairs.
-
-    The classification is: a key in :data:`_PYTREE_IGNORE` is dropped entirely
-    (cache / scratch state, not part of the pytree); otherwise a value is
-    **static** iff its Python type is ``str`` / ``bool`` or its key appears in
-    :data:`_STATIC_KEYS`; everything else is a traced child.
-
-    Args:
-        obj (Any): Instance to flatten.  Any class registered with
-            :func:`jax.tree_util.register_pytree_node`.
-
-    Returns:
-        tuple: ``(children, aux_data)`` — the standard pytree flatten output.
-    """
-    return _sjt_flatten_func(
-        obj,
-        static_keys=_STATIC_KEYS,
-        ignore_keys=_PYTREE_IGNORE,
-        static_types=(str, bool),
-        validate_static=True,
-    )
-
-
-def unflatten_func_class(
-    aux_data: Tuple[Any, ...],
-    children: Tuple[Any, ...],
-    myclass: type,
-) -> Any:
-    r"""
-    **Description:**
-    Inverse of :func:`flatten_func` for a specific class ``myclass``.
-
-    Bypasses ``__init__`` (which often has side-effects) — restores the
-    object via ``object.__new__`` + ``setattr`` of each saved attribute.
-
-    Args:
-        aux_data (tuple): Auxiliary data from :func:`flatten_func`.
-        children (tuple): Children (traced values) from :func:`flatten_func`.
-        myclass (type): Class to reconstruct.
-
-    Returns:
-        myclass: A fresh instance with all flattened attributes restored.
-    """
-    return _sjt_unflatten_func_class(
-        aux_data,
-        children,
-        myclass,
-        ignore_defaults=_PYTREE_IGNORE_DEFAULTS,
-    )
+_PYTREE_POLICY = _PytreePolicy(
+    static_keys=_STATIC_KEYS,
+    ignore_keys=_PYTREE_IGNORE,
+    ignore_defaults=_PYTREE_IGNORE_DEFAULTS,
+    static_types=(str, bool),
+    validate_static=True,
+)
 
 
 # ==============================================================================
