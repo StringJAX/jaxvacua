@@ -9,7 +9,7 @@ In [2308.15525](https://arxiv.org/abs/2308.15525) we construct large ensembles o
 ## Key results
 
 - **First explicit examples**: We construct the first explicit non-supersymmetric flux vacua of the Saltman–Silverstein type [[hep-th/0402135]](https://arxiv.org/abs/hep-th/0402135) in Calabi-Yau orientifold compactifications with integer fluxes satisfying the tadpole constraint.
-- **Geometries studied**: The degree-18 hypersurface $\mathbb{CP}_{1,1,1,6,9}$ (one complex structure modulus) and 10 additional orientifolds with $h^{1,2} = 2$ or $3$.
+- **Geometries studied**: The degree-18 hypersurface $\mathbb{CP}_{1,1,1,6,9}$ (two complex structure moduli on its symmetric locus) and 10 additional orientifolds with $h^{1,2} = 2$ or $3$.
 - **Hierarchical vacuum energy**: Multiple solutions are found where the vacuum energy is hierarchically suppressed relative to $m_{3/2}^2 M_{\mathrm{Pl}}^2$, a prerequisite for low-energy supersymmetry breaking scenarios and de Sitter uplifting.
 - **$W_0$ distributions**: The $W_0$ distribution at non-supersymmetric minima is found to differ systematically from the Gaussian distribution of supersymmetric ISD vacua, providing a comparative benchmark for landscape statistics.
 

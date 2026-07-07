@@ -20,7 +20,6 @@ Lattice / basis algebra
     :toctree: _autosummary
 
     get_basis_change
-    compute_a_matrix
     get_bulk_embedding
     get_bulk_projection
     get_embedding

@@ -149,16 +149,6 @@ Advanced and case studies
    * - :doc:`Hulek--Verrill attractor demo <notebooks/05_advanced/18_hulek_verrill_jaxvacua_demo>`
      - A compact custom-period example connecting attractor points and flux-vacuum notation.
 
-Standalone helper packages
---------------------------
-
-The experimental auto-vectorisation helper has been moved into
-``packages/auto_vectorise`` so it can be promoted to a separate GitHub and
-PyPI package.  New examples should import directly from ``auto_vectorise``;
-the JAXVacua package tree no longer contains the helper module.  The
-standalone tutorial now lives at
-``packages/auto_vectorise/docs/notebooks/01_auto_vectorisation_helpers.ipynb``.
-
 External workflow tutorials
 ---------------------------
 

@@ -98,7 +98,7 @@ on :class:`FluxVacuaFinder`.
     FluxVacuaFinder.calibrate_priors
     FluxVacuaFinder.save_calibration
     FluxVacuaFinder.load_calibration
-    FluxVacuaFinder.from_model
+    FluxVacuaFinder.from_eft
 
 
 Shared finder utilities

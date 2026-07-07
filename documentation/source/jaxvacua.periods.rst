@@ -40,7 +40,7 @@ The period vector and the Kähler potential then read
 
    \begin{aligned}
        \Pi(z)
-           &= \bigl( X^0,\ X^i,\ F_i,\ F_0 \bigr),
+           &= \bigl( F_0,\ F_i,\ X^0,\ X^i \bigr),
               \quad X^0 = 1,\ X^i = z^i,\
               F_i = \partial_i F,\
               F_0 = 2 F - z^i \partial_i F, \\[2pt]

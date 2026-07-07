@@ -27,15 +27,11 @@ PRNG / random sampling
 JIT / vmap helpers
 ------------------
 
-Auto-vectorisation helpers provide JAXVacua-local shape defaults on top of
-``stringjax_tools.auto_vectorise``.  They do not mutate the standalone
-``stringjax_tools`` global defaults at import time.
-
-.. autosummary::
-    :toctree: _autosummary
-    :template: custom-class-template.rst
-
-    ArgSpec
+The auto-vectorisation helper :func:`auto_vmap` fixes the shapes of the
+standard JAXVacua inputs — the complex-structure moduli, the axio-dilaton and
+the flux vector — so that the core methods can be ``vmap``-ped over batches of
+those inputs in a controlled, testable way (the expected input shapes are set
+in one place rather than re-specified at every call site).
 
 .. autosummary::
     :toctree: _autosummary
@@ -47,12 +43,6 @@ Auto-vectorisation helpers provide JAXVacua-local shape defaults on top of
     set_auto_vmap_default_shapes
     get_auto_vmap_default_shapes
     reset_auto_vmap_default_shapes
-    clear_auto_vmap_caches
-    vmapping_func
-    vmapping_func_cached
-    jit_with_static_args
-    jit_with_dynamic_static_args
-    is_static
 
 
 Array / numerical helpers
@@ -108,20 +98,6 @@ Model-data I/O
     :toctree: _autosummary
 
     save_model_data
-
-
-Pytree flatten / unflatten
---------------------------
-
-Generic flatten / unflatten functions used by ``register_pytree_node`` for
-the project's pytree-registered classes (``periods``, ``css``, ``FluxEFT``,
-``FluxVacuaFinder`` and ``lcs_tree``).
-
-.. autosummary::
-    :toctree: _autosummary
-
-    flatten_func
-    unflatten_func_class
 
 
 Number-theoretic / lattice helpers
