@@ -530,7 +530,7 @@ class TestPeriodSector(TestCase):
         .. math::
             \partial_{X^I} K \,,\quad \partial_{\bar{X}^I} K \,,
 
-        returned by :func:`grad_kahler_potential_per`.
+        returned by :func:`dK_per`.
 
         The two derivatives are related by complex conjugation:
 
@@ -545,13 +545,13 @@ class TestPeriodSector(TestCase):
         """
 
         # holomorphic derivative
-        dK = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=False))(self.z, self.cz)
+        dK = self.variant(lambda x, y: self.model.dK_per(x, y, conj=False))(self.z, self.cz)
 
         chex.assert_type(dK, complex)
         chex.assert_shape(dK, (self.model.h12 + 1,))   # one entry per X^I
 
         # anti-holomorphic derivative
-        dK_c = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=True))(self.z, self.cz)
+        dK_c = self.variant(lambda x, y: self.model.dK_per(x, y, conj=True))(self.z, self.cz)
 
         chex.assert_type(dK_c, complex)
         chex.assert_shape(dK_c, (self.model.h12 + 1,))
@@ -822,8 +822,8 @@ class TestPeriodSector(TestCase):
 
         1. **Shape**: :math:`D\Pi` has shape ``(2(h^{1,2}+1), h^{1,2}+1)``.
         2. **Conjugation**: :math:`(D\Pi)_c = \overline{D\Pi}`.
-        3. **Consistency** with :func:`grad_period_vector_per` and
-           :func:`grad_kahler_potential_per`:
+        3. **Consistency** with :func:`dPi_per` and
+           :func:`dK_per`:
 
            .. math::
                D_I\Pi = \partial_{X^I}\Pi + (\partial_{X^I}K)\,\Pi \,.
@@ -854,8 +854,8 @@ class TestPeriodSector(TestCase):
 
         # ---- consistency: DPi = dPi + outer(Pi, dK) ----
         Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=False))(self.z)
-        dPi = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=False))(self.z)
-        dK  = self.variant(lambda x, y: self.model.grad_kahler_potential_per(x, y, conj=False))(self.z, self.cz)
+        dPi = self.variant(lambda x: self.model.dPi_per(x, conj=False))(self.z)
+        dK  = self.variant(lambda x, y: self.model.dK_per(x, y, conj=False))(self.z, self.cz)
 
         # D_I Pi = dPi + outer(Pi, dK)
         DPi_manual = dPi + jnp.outer(Pi, dK)
@@ -872,8 +872,8 @@ class TestPeriodSector(TestCase):
         r"""**Description:**
 
         Test the prepotential :math:`F` and its derivatives returned by
-        :func:`prepot_per`, :func:`prepot_grad_per`, and
-        :func:`prepot_grad_grad_per`, as well as the individual LCS
+        :func:`prepot_per`, :func:`dF_per`, and
+        :func:`ddF_per`, as well as the individual LCS
         decomposition :func:`F_LCS_per`, :func:`F_LCS_poly_per`, and
         :func:`F_inst_per`.
 
@@ -915,8 +915,8 @@ class TestPeriodSector(TestCase):
         F_LCS      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.z)
         F_LCS_poly = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.z)
         F_inst     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.z)
-        dF         = self.variant(lambda x: self.model.prepot_grad_per(x, conj=conj))(self.z)
-        ddF        = self.variant(lambda x: self.model.prepot_grad_grad_per(x, conj=conj))(self.z)
+        dF         = self.variant(lambda x: self.model.dF_per(x, conj=conj))(self.z)
+        ddF        = self.variant(lambda x: self.model.ddF_per(x, conj=conj))(self.z)
 
         # ---- conj=True ----
         conj = True
@@ -924,8 +924,8 @@ class TestPeriodSector(TestCase):
         F_LCS_c      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.cz)
         F_LCS_poly_c = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.cz)
         F_inst_c     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.cz)
-        dF_c         = self.variant(lambda x: self.model.prepot_grad_per(x, conj=conj))(self.cz)
-        ddF_c        = self.variant(lambda x: self.model.prepot_grad_grad_per(x, conj=conj))(self.cz)
+        dF_c         = self.variant(lambda x: self.model.dF_per(x, conj=conj))(self.cz)
+        ddF_c        = self.variant(lambda x: self.model.ddF_per(x, conj=conj))(self.cz)
 
         # ---- shapes ----
         chex.assert_shape(dF,   (self.model.h12 + 1,))
@@ -998,7 +998,7 @@ class TestPeriodSector(TestCase):
         Test the period vector :math:`\Pi`, its ordinary gradient
         :math:`\partial_{X^I}\Pi`, and its Kähler-covariant derivative
         :math:`D_I\Pi` returned by :func:`period_vector_per`,
-        :func:`grad_period_vector_per`, and :func:`D_period_vector_per`.
+        :func:`dPi_per`, and :func:`D_period_vector_per`.
 
         The period vector is defined as
 
@@ -1027,12 +1027,12 @@ class TestPeriodSector(TestCase):
         # ---- period vector ----
         conj = False
         Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.z)
-        dPi = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=conj))(self.z)
+        dPi = self.variant(lambda x: self.model.dPi_per(x, conj=conj))(self.z)
         DPi = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
 
         conj = True
         Pi_c  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.cz)
-        dPi_c = self.variant(lambda x: self.model.grad_period_vector_per(x, conj=conj))(self.cz)
+        dPi_c = self.variant(lambda x: self.model.dPi_per(x, conj=conj))(self.cz)
         DPi_c = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
 
         # ---- shapes ----
@@ -1108,7 +1108,7 @@ class TestCustomPeriodInputs(TestCase):
 
         Pi = model.period_vector_per(X)
         Pi_c = model.period_vector_per(cX, conj=True)
-        ddF = model.prepot_grad_grad_per(X)
+        ddF = model.ddF_per(X)
         N = model.gauge_kinetic_matrix(X, cX)
 
         chex.assert_shape(Pi, (4,))

@@ -281,6 +281,7 @@ class periods:
                         model_data["maximum_degree"]=maximum_degree
                         model_data["limit"]=limit
                         model_data["conifold_basis"]=conifold_basis
+                        model_data["model_ID"]=model_ID
                         
                         self._lcs_tree = lcs_tree.from_dict(model_data)
                     else:
@@ -874,7 +875,7 @@ class periods:
 
         See also: :func:`F_LCS_per`
 
-        See also: :func:`prepot_grad_grad_per`
+        See also: :func:`ddF_per`
 
         See also: :func:`gauge_kinetic_matrix`
 
@@ -893,7 +894,7 @@ class periods:
     
     
     @partial(jit, static_argnums = (2,))
-    def prepot_grad_per(self, XPer: Array, conj: bool = False) -> Array:
+    def dF_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -913,7 +914,7 @@ class periods:
         return jax.grad(self.prepot_per,holomorphic=True)(XPer,conj=conj)
 
     @partial(jit, static_argnums = (2,))
-    def prepot_grad_grad_per(self, XPer: Array, conj: bool = False) -> Array:
+    def ddF_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -937,7 +938,7 @@ class periods:
         """
 
         #Second derivative of prepotential:
-        return jax.jacrev(self.prepot_grad_per,holomorphic=True)(XPer,conj=conj)
+        return jax.jacrev(self.dF_per,holomorphic=True)(XPer,conj=conj)
 
     @auto_vmap(XPer=1)
     @partial(jit, static_argnums = (2,))
@@ -988,10 +989,12 @@ class periods:
         if self._period_input_used:
             return self.period_input(XPer,conj=conj)
         elif self._prepotential_input_used or self.limit in ["LCS","coniLCS","coniLCS_bulk"]:
-            return jnp.concatenate((self.prepot_grad_per(XPer,conj=conj), XPer))
+            return jnp.concatenate((self.dF_per(XPer,conj=conj), XPer))
         else:
             raise ValueError("Period vector undefined! If no input was provided, use one of the pre-implemented methods!")
 
+    Pi_per = period_vector_per
+    
     @auto_vmap(XPer=1, cXPer=1)
     @partial(jit, static_argnums = ())
     def A_per(self, XPer: Array, cXPer: Array) -> complex:
@@ -1056,7 +1059,7 @@ class periods:
 
     
     @partial(jit, static_argnums = (2,))
-    def grad_period_vector_per(self, XPer: Array, conj: bool = False) -> Array:
+    def dPi_per(self, XPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -1077,7 +1080,7 @@ class periods:
     
     
     @partial(jit, static_argnums = (3,))
-    def grad_kahler_potential_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
+    def dK_per(self, XPer: Array, cXPer: Array, conj: bool = False) -> Array:
         r"""
 
         **Description:**
@@ -1121,13 +1124,13 @@ class periods:
 
         """
         
-        dK = self.grad_kahler_potential_per(XPer,cXPer,conj=conj)
+        dK = self.dK_per(XPer,cXPer,conj=conj)
 
         if not conj:
-            dPi = self.grad_period_vector_per(XPer,conj=conj)
+            dPi = self.dPi_per(XPer,conj=conj)
             return dPi+jnp.outer(self.period_vector_per(XPer,conj=conj),dK)
         else:
-            dPi = self.grad_period_vector_per(cXPer,conj=conj)
+            dPi = self.dPi_per(cXPer,conj=conj)
             return dPi+jnp.outer(self.period_vector_per(cXPer,conj=conj),dK)
 
     
@@ -1328,10 +1331,10 @@ class periods:
         """
 
         # Compute matrix of second holomorphic derivatives of the prepotential
-        FIJ=self.prepot_grad_grad_per(XPer)
+        FIJ=self.ddF_per(XPer)
 
         # Compute the complex conjugate matrix of second anti-holomorphic derivatives of the conjugate prepotential
-        cFIJ=self.prepot_grad_grad_per(cXPer,conj=True)
+        cFIJ=self.ddF_per(cXPer,conj=True)
 
         # Split into conjugated and not conjugated function
         if not conj:

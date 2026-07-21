@@ -114,7 +114,7 @@ class lcs_tree(object):
                  
                  # Model and limit data
                  model_type: str = "KS",
-                 model_ID: int = 1,
+                 model_ID: int | None = None,
                  limit: str = "LCS",
                  name: str | None = None,
                  
@@ -564,6 +564,7 @@ class lcs_tree(object):
             self.intnums_coo_sym=jnp.array(dlist)
             
         # Update a_matrixs if necessary
+        
         if self.a_matrix is not None:
             
             if self.basis_change is not None:
@@ -571,16 +572,11 @@ class lcs_tree(object):
                 
             self.a_matrix = jnp.array(self.a_matrix)
         else:
-            
+        
             a_matrix = np.zeros((self.h12, self.h12))
             
             for I1 in range(self.h12):
                 for I2 in range(self.h12):
-                    """
-                    if type(self.model_ID)==int:
-                        a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
-                    else:
-                    """
                     if I1>=I2:
                         a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
                     elif I1<I2:
@@ -881,6 +877,18 @@ class lcs_tree(object):
                 
                 self._update_conifold_curve_and_index()
                 
+        if "intnums" in kwargs:
+            a_matrix = np.zeros((self.h12, self.h12))
+            
+            for I1 in range(self.h12):
+                for I2 in range(self.h12):
+                    if I1>=I2:
+                        a_matrix[I1][I2] = self.intnums[I1][I1][I2]/2.
+                    elif I1<I2:
+                        a_matrix[I1][I2] = self.intnums[I1][I2][I2]/2.
+                            
+            self.a_matrix = jnp.array(a_matrix)
+                
     
     def __copy__(self):
         r"""
@@ -897,6 +905,98 @@ class lcs_tree(object):
         obj = type(self).__new__(self.__class__)
         obj.__dict__.update(self.__dict__)
         return obj
+
+    def to_cydata_kwargs(self) -> dict:
+        r"""
+        **Description:**
+        Map this ``lcs_tree`` to the keyword arguments of ``pfvs.CYData`` (the
+        external PFV enumerator, github.com/natemacfadden/pfvs).  Needs no
+        ``pfvs`` import — useful for inspecting the mapping; see :meth:`to_cydata`
+        for the wrapped object.
+
+        .. admonition:: Details
+            :class: dropdown
+
+            pfvs works in exact integer arithmetic (flint), so the topological
+            data (intersection numbers, second Chern class, Kähler-cone
+            hyperplanes) are round-and-cast to ``int`` (a :class:`ValueError` is
+            raised if they are not integer-valued in this basis).  pfvs' ``h11``
+            is the kappa dimension (= this tree's ``h12``), so pfvs' ``h21`` is
+            this tree's ``h11``.  For a conifold geometry the tree must be in the
+            conifold-aligned frame (``conifold_basis=True``): the data are then
+            already aligned (curve = ``conifold.conifold_curve0`` = ``(1,0,...)``),
+            so ``coni_cob`` is the identity and pfvs does not re-rotate.
+            ``conifold_basis=False`` is not supported (the jaxvacua/pfvs
+            ``coni_cob`` convention for the unaligned frame is not pinned — it does
+            not reproduce the aligned flat direction) and raises.
+
+        Returns:
+            dict: ``{h21, kappa, c2, H, coni_curve, coni_cob}`` for ``pfvs.CYData``.
+
+        Raises:
+            ValueError: If the topological data are not integer-valued.
+            NotImplementedError: For a ``conifold_basis=False`` conifold model.
+        """
+        def _int(a):
+            arr = np.asarray(a, dtype=float)
+            rounded = np.rint(arr)
+            if arr.size and np.max(np.abs(arr - rounded)) > 1e-9:
+                raise ValueError("lcs_tree.to_cydata_kwargs: non-integer "
+                                 "topological data — not a valid pfvs input in "
+                                 "this basis.")
+            return rounded.astype(int)
+
+        kappa = _int(self.intnums)
+        coni = getattr(self, "conifold", None)
+        coni_curve = None
+        coni_cob = None
+        if coni is not None:
+            if not getattr(self, "conifold_basis", True):
+                # The conifold_basis=False -> pfvs `coni_cob` convention is not
+                # pinned: passing Lambda = get_basis_change(curve) does NOT
+                # reproduce the aligned flat direction (verified — pfvs returns a
+                # different p).  Guard rather than emit a silently-wrong CYData.
+                raise NotImplementedError(
+                    "lcs_tree.to_cydata(): pfvs interop is verified only for "
+                    "conifold_basis=True (the conifold-aligned frame). The "
+                    "conifold_basis=False -> pfvs coni_cob convention is not yet "
+                    "pinned; rebuild the model with conifold_basis=True for pfvs "
+                    "interop."
+                )
+            # data already conifold-aligned -> pfvs must NOT re-rotate.
+            coni_curve = _int(coni.conifold_curve0)
+            coni_cob = np.eye(kappa.shape[0], dtype=int)
+        return dict(
+            h21=int(self.h11),          # pfvs h11 == kappa dim == this tree's h12
+            kappa=kappa,
+            c2=_int(self.c2),
+            H=_int(self.hyperplanes),
+            coni_curve=coni_curve,
+            coni_cob=coni_cob,
+        )
+
+    def to_cydata(self):
+        r"""
+        **Description:**
+        Build a ``pfvs.CYData`` from this ``lcs_tree`` (requires the optional
+        ``pfvs`` package).  See :meth:`to_cydata_kwargs` for the ungated mapping
+        and :func:`jaxvacua.flux_utils.has_pfvs` to test availability.
+
+        Returns:
+            pfvs.CYData: The wrapped geometry.
+
+        Raises:
+            ImportError: With a friendly install hint if ``pfvs`` is unavailable.
+        """
+        from .flux_utils import _import_pfvs
+        pfvs = _import_pfvs()
+        if pfvs is None:
+            raise ImportError(
+                "lcs_tree.to_cydata() requires the optional `pfvs` package "
+                "(github.com/natemacfadden/pfvs). Install it, e.g. "
+                "`pip install jaxvacua[pfvs]`."
+            )
+        return pfvs.CYData(**self.to_cydata_kwargs())
 
 
 # Register the lcs_tree class as a pytree node for JAX transformations
