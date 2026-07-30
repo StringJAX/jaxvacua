@@ -164,6 +164,25 @@ _PERIODS_METHODS = (
     "delete_coni_index",
 )
 
+# When attached to ``periods``, drop the redundant ``_per`` marker (every method on
+# the period object is period-coordinate, so the suffix only adds confusion there).
+# The MODULE keeps the ``_per`` names — they distinguish the period-coordinate
+# prepotential functions from their modulus-coordinate twins
+# (``F_coniLCS_bulk``/``_exp``/``_series``) that live in the same module and attach to
+# ``css``. Names not listed here attach unchanged.
+_PERIODS_ATTACH_RENAME = {
+    "F_coniLCS_series_per": "F_coniLCS_series",
+    "F_coniLCS_exp_per": "F_coniLCS_exp",
+    "F_coni_per": "F_coni",
+    "F_inst_per_coni": "F_inst_coni",
+    "F_coniLCS_poly_split_per": "F_coniLCS_poly_split",
+    "dF_coniLCS_poly_per": "dF_coniLCS_poly",
+    "ddF_coniLCS_poly_per": "ddF_coniLCS_poly",
+    "dddF_coniLCS_poly_per": "dddF_coniLCS_poly",
+    "ddddF_coniLCS_poly_per": "ddddF_coniLCS_poly",
+    "F_coniLCS_bulk_per": "F_coniLCS_bulk",
+}
+
 _CSS_METHODS = (
     # From coniLCS_prepotential.py
     "F_coniLCS_bulk",
@@ -216,4 +235,5 @@ __all__ = [
     # Descriptor + method-name lists used by the consumer modules' setattr blocks
     "_ConifoldGated",
     "_PERIODS_METHODS", "_CSS_METHODS", "_FLUXEFT_METHODS",
+    "_PERIODS_ATTACH_RENAME",
 ]

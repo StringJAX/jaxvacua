@@ -47,6 +47,7 @@ from scipy.optimize import root
 
 import jaxvacua as jvc
 from jaxvacua.freezer import ConifoldFreezer
+from jaxvacua.vacuum import PFVData
 
 # Local test infrastructure (TestCase + assertAllClose).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -832,6 +833,83 @@ class TestConiLCSVsConiLCSSeriesAgreement(TestCase):
         self.assertLess(diff, 0.2,
                         msg=f"|DW^lcs - DW^series|_inf = {diff:.3e} on bulk "
                             f"directions — series should agree at |z_cf|≪1")
+
+
+# ============================================================================
+# Group — coniPFV algebra (§6.4 eq 7.28) and the analytic racetrack
+# ============================================================================
+
+@_NEEDS_CYTOOLS
+@_NEEDS_MODEL
+class TestConiPFVAlgebra(TestCase):
+    r"""
+    **Description:**
+    Exercise the PFV algebra added to :mod:`jaxvacua.flux_utils` in the conifold
+    case (arXiv:2512.17095 §6.4 eq 7.28) on the NB13 fixture, using the default
+    conifold PFV ``M=[4,-8,8]``, ``K=[-8,3,-6]``: the p-vector is bulk-only, the
+    flatness condition is :math:`K\cdot p = K_{\rm bulk}\cdot\hat p = 0`, and the
+    conifold modulus is the exponential throat (not :math:`p\,\tau`).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model = _MODEL
+        cls.lt    = _MODEL.lcs_tree
+        cls.M     = jnp.asarray(_M_DEFAULT, dtype=float)
+        cls.K     = jnp.asarray(_K_DEFAULT, dtype=float)
+        cls.tau   = 0.0 + 1.0 / _GS_DEFAULT * 1j
+
+    def test_p_vector_is_bulk_only(self):
+        r"""**Description:** the coniLCS p-vector is the bulk :math:`\hat p`
+        (length ``h12-1``), and :math:`z_{\rm bulk} = \hat p\,\tau`."""
+        p = self.model.pfv_p_vector(self.M, self.K)
+        self.assertEqual(tuple(np.asarray(p).shape), (_H11 - 1,))
+        z0 = self.model.pfv_to_moduli(self.M, self.K, self.tau)
+        self.assertAllClose(np.asarray(z0)[1:], np.asarray(p) * self.tau,
+                            rtol=0, atol=1e-10)
+
+    def test_conditions_hold_for_reference_conipfv(self):
+        r"""**Description:** every §6.4 condition (incl. ``Mcf!=0``, the facet
+        containment ``p in K_cf`` and the tadpole) holds for the fixture."""
+        c = self.model.pfv_conditions(self.M, self.K)
+        for key in ("det N!=0", "K.p==0", "Mcf!=0", "p in K_cf",
+                    "a.T@M in Z", "24*b@M in 24Z", "tadpole 0<=Qflux<=Q"):
+            self.assertIn(key, c)
+            self.assertTrue(bool(c[key][0]), msg=f"coniPFV condition {key!r} must hold")
+
+    def test_Kp_is_bulk_contraction(self):
+        r"""**Description:** ``K.p`` is the bulk contraction
+        :math:`K_{\rm bulk}\cdot\hat p` and vanishes for the fixture."""
+        c = self.model.pfv_conditions(self.M, self.K)
+        self.assertAllClose(float(np.asarray(c["K.p==0"][1])), 0.0, rtol=0, atol=1e-9)
+
+    def test_zcf_is_exponential_throat(self):
+        r"""**Description:** the conifold modulus is exponentially small and is
+        NOT the linear ``p*tau`` locus."""
+        z0 = self.model.pfv_to_moduli(self.M, self.K, self.tau)
+        self.assertLess(abs(complex(np.asarray(z0)[0])), 1e-2)
+
+    def test_pfvdata_on_conifold(self):
+        r"""**Description:** :class:`PFVData` builds on a conifold model and its
+        accessors delegate correctly."""
+        pd = PFVData.from_fluxes(self.model, self.M, self.K)
+        self.assertIsNotNone(pd.p)
+        self.assertEqual(tuple(np.asarray(pd.p).shape), (_H11 - 1,))
+        self.assertAllClose(pd.to_flux(), self.model.pfv_to_flux(self.M, self.K),
+                            rtol=0, atol=1e-12)
+        self.assertAllClose(pd.moduli(self.tau),
+                            self.model.pfv_to_moduli(self.M, self.K, self.tau),
+                            rtol=0, atol=1e-12)
+
+    def test_racetrack_estimate(self):
+        r"""**Description:** the analytic racetrack produces a valid, finite
+        estimate with a positive string coupling for the conifold PFV."""
+        rt = self.model.pfv_racetrack(self.M, self.K)
+        self.assertTrue(bool(rt["valid"]))
+        gs = float(rt["gs"])
+        self.assertTrue(np.isfinite(gs) and gs > 0.0)
+        self.assertTrue(np.isfinite(float(rt["log10_W0"])))
 
 
 if __name__ == "__main__":

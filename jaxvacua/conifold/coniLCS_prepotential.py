@@ -83,10 +83,10 @@ def F_coniLCS_bulk_per(self, XPer: Array, conj: bool = False) -> complex:
     Returns:
         complex: Value of the bulk-approximated coniLCS prepotential.
 
-    See also: :func:`F_LCS_per`, :func:`F_coniLCS_series_per`
+    See also: :func:`F_LCS`, :func:`F_coniLCS_series_per`
     """
 
-    return self.F_LCS_per(XPer,conj=conj)+self.lcs_tree.conifold.ncf*(self.lcs_tree.conifold.conifold_curve0@XPer[1:])*XPer[0]/24.
+    return self.F_LCS(XPer,conj=conj)+self.lcs_tree.conifold.ncf*(self.lcs_tree.conifold.conifold_curve0@XPer[1:])*XPer[0]/24.
 
 
 
@@ -121,7 +121,7 @@ def F_coniLCS_poly_split_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bo
         X_mod  = Xcf * e_q + bulk_embedding @ Xbulk
         XPer   = jnp.append(jnp.array([X0]), X_mod)
 
-    return self.F_LCS_poly_per(XPer,conj=conj)
+    return self.F_LCS_poly(XPer,conj=conj)
 
 
 @partial(jit, static_argnums = (4,))
@@ -143,7 +143,7 @@ def dF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool = 
     See also: :func:`F_coniLCS_series_per`
     """
 
-    return jax.grad(self.F_coniLCS_poly_split_per,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
+    return jax.grad(self.F_coniLCS_poly_split,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
 
 @partial(jit, static_argnums = (4,))
 def ddF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool = False) -> complex:
@@ -164,7 +164,7 @@ def ddF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool =
     See also: :func:`F_coniLCS_series_per`
     """
 
-    return jax.grad(self.dF_coniLCS_poly_per,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
+    return jax.grad(self.dF_coniLCS_poly,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
 
 @partial(jit, static_argnums = (4,))
 def dddF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool = False) -> complex:
@@ -185,7 +185,7 @@ def dddF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool 
     See also: :func:`F_coniLCS_series_per`
     """
 
-    return jax.grad(self.ddF_coniLCS_poly_per,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
+    return jax.grad(self.ddF_coniLCS_poly,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
 
 
 @partial(jit, static_argnums = (4,))
@@ -208,7 +208,7 @@ def ddddF_coniLCS_poly_per(self, X0: Array, Xcf: Array, Xbulk: Array, conj: bool
     """
 
     # This function should vanish!
-    return jax.grad(self.dddF_coniLCS_poly_per,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
+    return jax.grad(self.dddF_coniLCS_poly,holomorphic=True,argnums=1)(X0,Xcf,Xbulk,conj=conj)
 
 
 @partial(jit, static_argnums = (3,4,))
@@ -472,21 +472,21 @@ def F_coniLCS_exp_per(self,
     if n == 0:
         # Zeroth-order term (value of F at conifold point)
         val = (
-            self.F_coniLCS_poly_split_per(X0, Xcf, XPerBulk, conj=conj)
+            self.F_coniLCS_poly_split(X0, Xcf, XPerBulk, conj=conj)
             - coeff_cf * jax.scipy.special.zeta(3, q=1)
         )
 
     elif n == 1:
         # First derivative
         val = (
-            self.dF_coniLCS_poly_per(X0, Xcf, XPerBulk, conj=conj)
+            self.dF_coniLCS_poly(X0, Xcf, XPerBulk, conj=conj)
             - coeff_cf * jax.scipy.special.zeta(2, q=1)
         )
 
     elif n == 2:
         # Second derivative
         val = (
-            self.ddF_coniLCS_poly_per(X0, Xcf, XPerBulk, conj=conj)
+            self.ddF_coniLCS_poly(X0, Xcf, XPerBulk, conj=conj)
             - coeff_cf * 3 / 2
         )
 
@@ -494,7 +494,7 @@ def F_coniLCS_exp_per(self,
         # Third derivative
         # Uses ζ(0) = -1/2 and B₁ = +1/2
         val = (
-            self.dddF_coniLCS_poly_per(X0, Xcf, XPerBulk, conj=conj)
+            self.dddF_coniLCS_poly(X0, Xcf, XPerBulk, conj=conj)
             + coeff_cf / 2
         )
 
@@ -510,7 +510,7 @@ def F_coniLCS_exp_per(self,
 
 
     if self.include_mirror_wsi:
-        val = val + self.F_inst_per_coni(X0,XPerBulk,conj=conj,n=n)
+        val = val + self.F_inst_coni(X0,XPerBulk,conj=conj,n=n)
 
     if n>0:
         val = val*(XConi)**(n)
@@ -572,7 +572,7 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     # and captures the singular behaviour at the conifold point
     # F_coni_per is basis-aware (identifies X^cf via the conifold charge), so
     # pass the full period vector rather than the index-0/1 slice.
-    val = self.F_coni_per(XPer, conj=conj)
+    val = self.F_coni(XPer, conj=conj)
 
     # ----------------------------------------
     # Extract periods (basis-aware)
@@ -605,7 +605,7 @@ def F_coniLCS_series_per(self, XPer: Array, conj: bool = False) -> complex:
     for n_exp in range(self.nmax + 1):
 
         # Add nth-order term in expansion
-        tmp = self.F_coniLCS_exp_per(
+        tmp = self.F_coniLCS_exp(
             X0,           # X^0 (overall scaling period)
             XConi,        # NOTE: passed as Xcf-like argument (implementation detail)
             XPerBulk,     # Bulk periods
@@ -757,7 +757,7 @@ def F_coniLCS_exp(self,
     XConi    = 1. + 0*1j    # Conifold period X_cf (normalisation marker)
     X0       = XPer[0]    # Fundamental period X^0
 
-    return self.periods.F_coniLCS_exp_per(X0, XConi, XPerBulk, conj=conj, n=n)
+    return self.periods.F_coniLCS_exp(X0, XConi, XPerBulk, conj=conj, n=n)
 
 
 @partial(jit, static_argnums = (2,3,))
@@ -819,4 +819,4 @@ def F_coniLCS_series(self,
     """
 
 
-    return self.periods.F_coniLCS_series_per(self.moduli_to_periods(moduli,conj=conj),conj=conj)
+    return self.periods.F_coniLCS_series(self.moduli_to_periods(moduli,conj=conj),conj=conj)

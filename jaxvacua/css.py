@@ -78,7 +78,7 @@ class css:
                  maximum_degree: int = 0,
                  mirror_cy: Optional["cytools.CalabiYau"] = None,
                  model_data: dict | None = None,
-                 lcs_tree_input: object | None = None,
+                 lcs_tree: object | None = None,
                  model_file: str = "",
                  use_cytools: bool = False,
                  basis_change: Array | None = None,
@@ -135,7 +135,7 @@ class css:
                                maximum_degree = maximum_degree,
                                mirror_cy = mirror_cy,
                                model_data = model_data,
-                               lcs_tree_input = lcs_tree_input,
+                               lcs_tree = lcs_tree,
                                model_file = model_file,
                                use_cytools = use_cytools,
                                basis_change = basis_change,
@@ -805,9 +805,9 @@ class css:
         .. note::
 
             We provide the option to compute the pre-potential and some additional functions
-            in terms of the periods directly, see in particular :func:`jaxvacua.periods.periods.F_LCS_per`, 
-            :func:`jaxvacua.periods.periods.prepot_per`
-            and :func:`jaxvacua.periods.periods.period_vector_per`.
+            in terms of the periods directly, see in particular :func:`jaxvacua.periods.periods.F_LCS`, 
+            :func:`jaxvacua.periods.periods.prepot`
+            and :func:`jaxvacua.periods.periods.period_vector`.
         
         .. warning::
             The moduli space limit around which the pre-potential is computed is set by the global parameter ``self.periods.limit``. 
@@ -826,7 +826,7 @@ class css:
         Aliases:
             :func:`F`
             
-        See also: :func:`prepot_per`
+        See also: :func:`prepot`
         
         """
         
@@ -843,7 +843,7 @@ class css:
                 
             mod = self.moduli_to_periods(moduli,conj=conj)
 
-            return self.periods.prepot_per(mod,conj=conj)
+            return self.periods.prepot(mod,conj=conj)
     
     F = prepot
         
@@ -922,7 +922,7 @@ class css:
             
         .. note::
             To compute the period vector in terms of the periods directly, please use
-            :func:`jaxvacua.periods.periods.period_vector_per`.
+            :func:`jaxvacua.periods.periods.period_vector`.
         
         Args:
             moduli (Array): Complex structure moduli values.
@@ -931,11 +931,14 @@ class css:
         Returns:
             Array: Value of the period vector :math:`\Pi`.
 
+        Note:
+            Also available under the aliases ``Pi`` and ``Pi_vec``.
+
         See also: :func:`prepot`
     
         See also: :func:`dF`
     
-        See also: :func:`jaxvacua.periods.periods.period_vector_per`
+        See also: :func:`jaxvacua.periods.periods.period_vector`
         
         """
         
@@ -952,8 +955,12 @@ class css:
                 
             X = self.moduli_to_periods(moduli,conj=conj)
 
-            return self.periods.period_vector_per(X,conj=conj)
+            return self.periods.period_vector(X,conj=conj)
         
+    # Short aliases for the period vector Pi (matches periods.py: period_vector/Pi/Pi_vec).
+    Pi = period_vector
+    Pi_vec = period_vector
+
     @partial(jit, static_argnums = ())
     def mirror_volume(
                     self, 
@@ -1027,7 +1034,7 @@ class css:
             .. math::
                 \mathcal{A}(z^i,\overline{z}^i)=-\text{i}\, \int_{X}\, \Omega_3\wedge \overline{\Omega}_3 = -\text{i}\, \Pi^\dagger(\overline{z}^i)\cdot \Sigma\cdot \Pi(z^i)\, .
         
-            The period vector can be computed via :func:`period_vector` or :func:`jaxvacua.periods.periods.period_vector_per`.
+            The period vector can be computed via :func:`period_vector` or :func:`jaxvacua.periods.periods.period_vector`.
 
         
         Args:
@@ -2460,7 +2467,7 @@ class css:
                 [jnp.array([1.0 + 0j], dtype=jnp.complex_),
                  z.astype(jnp.complex_)]
             )
-            Fa = jax.grad(self.periods.F_LCS_poly_per, holomorphic=True)(X)
+            Fa = jax.grad(self.periods.F_LCS_poly, holomorphic=True)(X)
             return jnp.concatenate([Fa, X])
 
         A = vmap(Pi_poly)(zs)
@@ -2604,7 +2611,7 @@ class css:
             [jnp.array([1.0 + 0j], dtype=jnp.complex_),
              jnp.asarray(z, dtype=jnp.complex_)]
         )
-        Fa = jax.grad(self.periods.F_LCS_poly_per, holomorphic=True)(X)
+        Fa = jax.grad(self.periods.F_LCS_poly, holomorphic=True)(X)
         return jnp.concatenate([Fa, X])
 
     def verify_monodromy(

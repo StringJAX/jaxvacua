@@ -215,27 +215,17 @@ def _W_log_coeff_pfv(self, z, tau, flux, conj=False):
     Mvec = f2[1:]
     Kvec = h1[1:]
 
-    # Racetrack split of the bulk fluxes.  Aligned basis: plain index-0/1 slices.
-    # General basis: N's indices are moduli-type (split via the conifold
-    # embedding e_q + bulk_embedding, as in _split_conifold_bulk); the K-flux and
-    # the conifold R-flux P1 are covariant (conifold via e_q); the conifold row
-    # of the a-matrix is e_q·a.  Both reduce to the slices when aligned.
-    N = self.lcs_tree.intnums @ Mvec
+    # Conifold/bulk split, shared with flux_utils.pfv_to_moduli (see
+    # _pfv_coni_split).  The conifold R-flux P1 and the conifold row of the
+    # a-matrix are not functions of (M, K) and are formed here.
+    from ..flux_utils import _pfv_coni_split
+    Nhat, Ncb, Kbulk, Kcf, _Mcf = _pfv_coni_split(self, Mvec, Kvec)
     if self.lcs_tree.conifold_basis:
         P1     = f1[1]
-        Nhat   = N[1:, 1:]
-        Ncb    = N[0, 1:]
-        Kbulk  = Kvec[1:]
-        Kcf    = Kvec[0]
         a_coni = self.lcs_tree.a_matrix[0]
     else:
         e_q = self.lcs_tree.conifold.embedding
-        be  = self.lcs_tree.conifold.bulk_embedding
         P1     = f1[1:] @ e_q
-        Nhat   = be.T @ N @ be
-        Ncb    = e_q @ N @ be
-        Kbulk  = Kvec @ be
-        Kcf    = Kvec @ e_q
         a_coni = e_q @ self.lcs_tree.a_matrix
 
     pvec   = jnp.linalg.inv(Nhat) @ Kbulk

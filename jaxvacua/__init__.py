@@ -116,6 +116,8 @@ from .flux_bounding import *
 from .sampling import *
 from .hypergeometric_models import *
 from .freezer import *
+from .vacuum import *
+from .flux_utils import has_pfvs
 
 # ── Re-apply precision setting ────────────────────────────────────────────
 # Some dependencies (e.g. jaxpolylog) re-enable x64 at import time.

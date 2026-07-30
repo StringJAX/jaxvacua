@@ -110,11 +110,11 @@ def _try_load_models():
         h12=h12, model_ID=_NAME, limit="coniLCS", **_kw,
     ).lcs_tree
     models = types.SimpleNamespace(
-        bulk    = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+        bulk    = jvc.FluxEFT(h12=h12, lcs_tree=lcs_tree,
                               limit="coniLCS_bulk",   **_kw),
-        series  = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+        series  = jvc.FluxEFT(h12=h12, lcs_tree=lcs_tree,
                               limit="coniLCS_series", **_kw),
-        conilcs = jvc.FluxEFT(h12=h12, lcs_tree_input=lcs_tree,
+        conilcs = jvc.FluxEFT(h12=h12, lcs_tree=lcs_tree,
                               limit="coniLCS",        **_kw),
     )
     pfv = types.SimpleNamespace(
@@ -402,7 +402,7 @@ class TestPerPeriodVsPerModulus(TestCase):
     r"""
     The css-side helpers ``F_coniLCS_exp(zbulk, n)`` (used by
     ``W_log_coeff(mode="autodiff")``) must equal the periods-side
-    ``F_coniLCS_exp_per`` evaluated at ``XPer = (1, z_cf, *zbulk)``.
+    ``F_coniLCS_exp`` evaluated at ``XPer = (1, z_cf, *zbulk)``.
 
     With ``z_cf = 0`` and ``XPer[0] = 1``, the n-th Taylor coefficient is
     purely a function of zbulk, so the two reductions must agree.
@@ -415,7 +415,7 @@ class TestPerPeriodVsPerModulus(TestCase):
         # The css-side helper goes:
         #   moduli  = [0, *z_bulk]
         #   XPer    = moduli_to_periods(moduli)
-        #   F_coniLCS_exp_per(X0=XPer[0], XConi=1, XPerBulk=XPer[2:], n=n)
+        #   F_coniLCS_exp(X0=XPer[0], XConi=1, XPerBulk=XPer[2:], n=n)
         # So we replicate the same chain on the periods side.
         moduli = jnp.append(jnp.zeros(1), z_bulk)
         XPer = m.moduli_to_periods(moduli, conj=False)
@@ -424,7 +424,7 @@ class TestPerPeriodVsPerModulus(TestCase):
         XPerBulk = XPer[2:]
         for n in (0, 1, 2):
             f_css = m.F_coniLCS_exp(z_bulk, conj=False, n=n)
-            f_per = m.periods.F_coniLCS_exp_per(X0, XConi, XPerBulk,
+            f_per = m.periods.F_coniLCS_exp(X0, XConi, XPerBulk,
                                                  conj=False, n=n)
             self.assertAllClose(f_css, f_per, atol=_ATOL,
                                 msg=f"n={n}: css vs periods disagree")

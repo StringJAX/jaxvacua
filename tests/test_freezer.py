@@ -43,7 +43,8 @@ from util import *
 jax.config.update("jax_enable_x64", True)
 
 sys.path.append("./../")
-from jaxvacua.freezer import Freezer, ConifoldFreezer, LightSpectrum
+import jaxvacua as jvc
+from jaxvacua.freezer import Freezer, ConifoldFreezer, LightSpectrum, PFVEFT
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -351,7 +352,7 @@ def _try_load_int_models():
     tree = jvc.periods(h12=len(_INT_MVEC0), model_ID=_INT_NAME, limit="coniLCS").lcs_tree
     tree.update(limit="coniLCS")
     model = jvc.FluxVacuaFinder(
-        lcs_tree_input=tree, limit="coniLCS", h12=len(_INT_MVEC0), ncf=2,
+        lcs_tree=tree, limit="coniLCS", h12=len(_INT_MVEC0), ncf=2,
         use_gvs=True, prange=20, maximum_degree=2, conifold_basis=True,
     )
     Mf = jnp.asarray(_INT_MVEC0.astype(float)); Kf = jnp.asarray(_INT_KVEC0.astype(float))
@@ -692,6 +693,350 @@ class TestConifoldFreezerMassSpectrum(TestCase):
         b = self.freezer.bulk_mass_spectrum(
             self.x_bulk, self.flux, reduction="schur", dw_tol=self.BIG)
         self.assertAllClose(a.masses, b.masses, atol=0.0)
+
+
+class TestPFVEFTLCS(TestCase):
+    r"""
+    :class:`PFVEFT` on the CP[1,1,1,6,9] LCS reference PFV (``M=[-16,50]``,
+    ``K=[3,-4]``, ``p=[0.4,0.3]``).  The ansatz ``z = p*tau`` is linear, so the
+    primary gates (Jacobian / Hessian frozen == autodiff) hold to machine zero.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.m = jvc.FluxVacuaFinder(h12=2, model_ID=1, maximum_degree=2,
+                                    limit="LCS", model_type="KS")
+        cls.M = jnp.array([-16.0, 50.0]); cls.K = jnp.array([3.0, -4.0])
+        cls.p = cls.m.pfv_p_vector(cls.M, cls.K)
+        cls.flux = cls.m.pfv_to_flux(cls.M, cls.K)
+        cls.eft = PFVEFT.from_fluxes(cls.m, cls.M, cls.K)
+        moduli, tau, _res = cls.m.newton_method_flux_vacua(
+            cls.p * 6.85j, 6.85j, cls.flux, solver_mode="real",
+            tol=1e-12, max_iters=300)
+        cls.tau_vac = complex(tau)
+        cls.x_light = jnp.array([cls.tau_vac.real, cls.tau_vac.imag])
+
+    def test_construction(self):
+        self.assertEqual(self.eft.n_light, 0)
+        self.assertEqual(self.eft.heavy_indices, (0, 1))
+        self.assertFalse(self.eft._is_coni)
+        self.assertTrue(self.eft.flux_matches(self.flux))
+
+    def test_jacobian_frozen_equals_autodiff(self):
+        r"""The constant tangent equals ``jax.jacobian(_real_light_to_full)`` at
+        an arbitrary point (linear ansatz)."""
+        for xl in (self.x_light, jnp.array([0.1, 5.0])):
+            J = self.eft._real_light_jacobian
+            J_auto = jax.jacobian(lambda a: self.eft._real_light_to_full(a, self.flux))(xl)
+            self.assertAllClose(J, J_auto, rtol=0, atol=1e-10)
+
+    def test_hessian_frozen_equals_autodiff(self):
+        r"""``ddV_x_light(frozen) == ddV_x_light(autodiff)`` (linear ansatz)."""
+        for xl in (self.x_light, jnp.array([0.1, 5.0])):
+            Hf = self.eft.ddV_x_light(xl, self.flux, noscale=True, reduction="frozen")
+            Ha = self.eft.ddV_x_light(xl, self.flux, noscale=True, reduction="autodiff")
+            self.assertAllClose(Hf, Ha, rtol=1e-6, atol=1e-9)
+
+    def test_hessian_tangent_equals_autodiff(self):
+        r"""``ddV_x_light(tangent) == ddV_x_light(autodiff)``: for LCS the linear
+        flat direction makes the on-shell tangent exact everywhere (no O(dV) term
+        because the slaving is linear)."""
+        for xl in (self.x_light, jnp.array([0.1, 5.0])):
+            Ht = self.eft.ddV_x_light(xl, self.flux, noscale=True, reduction="tangent")
+            Ha = self.eft.ddV_x_light(xl, self.flux, noscale=True, reduction="autodiff")
+            self.assertAllClose(Ht, Ha, rtol=1e-6, atol=1e-9)
+
+    def test_light_mass_spectrum_default_reduction_is_tangent(self):
+        r"""A ``PFVEFT`` mass defaults to the F-flat ``"tangent"`` reduction (the
+        racetrack mass), NOT the base-class ``"schur"`` V-minimum reduction: a PFV
+        slaves its moduli along the flat direction (``dW=0``), which is not a
+        V-valley, so the two reductions genuinely differ."""
+        from jaxvacua.freezer import Freezer, ConifoldFreezer
+        self.assertEqual(Freezer._default_light_reduction, "schur")
+        self.assertEqual(ConifoldFreezer._default_light_reduction, "schur")
+        self.assertEqual(PFVEFT._default_light_reduction, "tangent")
+        s_def = self.eft.light_mass_spectrum(self.x_light, self.flux, dw_tol=1e-2)
+        s_tan = self.eft.light_mass_spectrum(self.x_light, self.flux,
+                                             reduction="tangent", dw_tol=1e-2)
+        self.assertEqual(s_def.reduction, "tangent")
+        self.assertAllClose(s_def.masses, s_tan.masses, rtol=1e-10, atol=0)
+
+    def test_light_mass_spectrum_accepts_tangent_and_rejects_bogus(self):
+        r"""``light_mass_spectrum`` accepts the ``"tangent"`` reduction (it used to
+        allow only frozen/schur/autodiff) and still rejects an unknown scheme."""
+        s = self.eft.light_mass_spectrum(self.x_light, self.flux,
+                                         reduction="tangent", dw_tol=1e-2)
+        self.assertEqual(s.reduction, "tangent")
+        self.assertTrue(np.all(np.isfinite(s.masses)))
+        with self.assertRaises(ValueError):
+            self.eft.light_mass_spectrum(self.x_light, self.flux,
+                                         reduction="bogus", dw_tol=1e-2)
+
+    def test_assume_conjugate_matches_value(self):
+        r"""``DW_light(assume_conjugate=True)`` skips the second heavy solve and
+        must give the same VALUE at ``tau_c == conj(tau)``.
+
+        Only the value is asserted.  The option re-parents the antiholomorphic
+        branch onto ``(z_light, tau)``, so its behaviour under differentiation
+        w.r.t. the conjugate arguments is not guaranteed in general -- but on this
+        LCS fixture the ``d/d tau_c`` derivatives were *measured to agree exactly*
+        (the tau_c dependence of ``D_tau W`` flows through the direct ``tau_c``
+        argument of ``model.DW``, not through ``z_full_c``, because ``p`` is real
+        and the reconstruction is linear).  No claim is pinned either way: the
+        docstring documents the caution, and the recommended use stays evaluation
+        only."""
+        empty = jnp.array([], dtype=complex)
+        tau, tau_c = self.tau_vac, np.conj(self.tau_vac)
+        exact = self.eft.DW_light(empty, empty, tau, tau_c, self.flux)
+        fast = self.eft.DW_light(empty, empty, tau, tau_c, self.flux,
+                                 assume_conjugate=True)
+        self.assertAllClose(fast, exact, rtol=1e-10, atol=0)
+
+    def test_DW_light_length1_and_DW_x_light_length2(self):
+        r"""At ``n_light=0`` the covariant light F-term is length-1 (no empty-
+        float-index TypeError) and the real light gradient is length-2."""
+        empty = jnp.array([], dtype=complex)
+        dwc = self.eft.DW_light(empty, empty, self.tau_vac,
+                                np.conj(self.tau_vac), self.flux)
+        self.assertEqual(dwc.shape, (1,))
+        self.assertEqual(self.eft.DW_x_light(self.x_light, self.flux).shape, (2,))
+
+    def test_on_shell_DW_x_light_small(self):
+        r"""The tau F-term nearly vanishes on the flat direction at the vacuum."""
+        dwl = self.eft.DW_x_light(self.x_light, self.flux)
+        self.assertLess(float(jnp.max(jnp.abs(dwl))), 1e-6)
+
+    def test_jit_equals_eager(self):
+        r"""The EFT is jit-compatible (captured/static object; model is a pytree)."""
+        eager = self.eft.DW_x_light(self.x_light, self.flux)
+        jitted = jax.jit(lambda xl, f: self.eft.DW_x_light(xl, f))(self.x_light, self.flux)
+        self.assertAllClose(jitted, eager, rtol=0, atol=1e-10)
+
+    def test_vmap_over_tau(self):
+        r"""The light coordinate vectorises: vmap over a batch of tau == loop."""
+        taus = jnp.array([[0.0, 6.85], [0.1, 7.0], [0.0, 6.5]])
+        v = jax.vmap(lambda xl: self.eft.DW_x_light(xl, self.flux))(taus)
+        loop = jnp.stack([self.eft.DW_x_light(taus[i], self.flux) for i in range(3)])
+        self.assertAllClose(v, loop, rtol=0, atol=1e-10)
+
+    def test_guards(self):
+        from types import SimpleNamespace
+        other = SimpleNamespace(periods=SimpleNamespace(limit="Kpoint"), h12=2,
+                                lcs_tree=SimpleNamespace())
+        self.assertRaises(NotImplementedError, PFVEFT, other, jnp.array([0.4, 0.3]))
+        hyp = SimpleNamespace(periods=SimpleNamespace(limit="LCS"), h12=1,
+                              lcs_tree=SimpleNamespace())
+        self.assertRaises(NotImplementedError, PFVEFT, hyp, jnp.array([1.0]))
+        # wrong-length p
+        self.assertRaises(ValueError, PFVEFT, self.m, jnp.array([0.4, 0.3, 0.2]))
+
+    def test_pfveft_is_a_registered_pytree(self):
+        r"""PFVEFT is a registered pytree, so ``self`` can be a *traced argument*
+        of the compiled reduced-EFT kernels rather than a closure constant (which
+        would bake the model's arrays into the HLO and serve them stale after a
+        model edit).  Its arrays are leaves; its ``str``/``bool``/``int`` config
+        travels in the treedef."""
+        leaves = jax.tree_util.tree_leaves(self.eft)
+        self.assertGreater(len(leaves), 1)
+        self.assertGreater(len(jax.tree_util.tree_leaves(self.eft.model)), 1)
+        # static config must NOT be a traced leaf
+        treedef_repr = str(jax.tree_util.tree_structure(self.eft))
+        self.assertIn(self.eft.mode, treedef_repr)
+        self.assertNotIn(self.eft.mode, [str(l) for l in leaves])
+
+    def test_pytree_does_not_duplicate_the_model_payload(self):
+        r"""The freezer's leaves are exactly its own arrays plus the model's --
+        no duplicated period/GV payload.  Guards the ``lcs_tree`` property: when
+        it was a stored attribute it was flattened a second time, doubling the
+        arrays passed into every compiled kernel."""
+        n_model = len(jax.tree_util.tree_leaves(self.eft.model))
+        n_own = (len(jax.tree_util.tree_leaves(self.eft.p))
+                 + len(jax.tree_util.tree_leaves(self.eft.flux)))
+        self.assertEqual(len(jax.tree_util.tree_leaves(self.eft)), n_model + n_own)
+        self.assertIs(self.eft.lcs_tree, self.eft.model.lcs_tree)
+
+    def test_pytree_roundtrip_preserves_config(self):
+        r"""flatten -> unflatten preserves the static configuration the compiled
+        kernels branch on; a lost ``mode`` or ``_eom_iters`` would silently change
+        the reconstruction."""
+        leaves, treedef = jax.tree_util.tree_flatten(self.eft)
+        clone = jax.tree_util.tree_unflatten(treedef, leaves)
+        self.assertEqual(clone.mode, self.eft.mode)
+        self.assertEqual(clone._eom_iters, self.eft._eom_iters)
+        self.assertEqual(clone._is_coni, self.eft._is_coni)
+        self.assertEqual(tuple(clone.heavy_indices), tuple(self.eft.heavy_indices))
+        self.assertAllClose(clone.p, self.eft.p, rtol=0, atol=0)
+
+    def test_freezer_subclass_is_auto_registered(self):
+        r"""Subclassing ``Freezer`` is a documented extension point, and pytree
+        registration is keyed on the exact type, so subclasses must register
+        themselves automatically (otherwise a user subclass would fail as soon as
+        it reached a compiled kernel)."""
+        class _MySubFreezer(PFVEFT):
+            pass
+        sub = _MySubFreezer(self.m, self.p, flux=self.flux)
+        # An UNregistered class flattens to exactly one opaque leaf (itself);
+        # a registered one exposes its arrays, so this is a functional check
+        # that JAX accepted the auto-registration -- no private API needed.
+        leaves = jax.tree_util.tree_leaves(sub)
+        self.assertGreater(len(leaves), 1)
+        self.assertNotIn(sub, leaves)
+
+    def test_schur_surfaces_H_hh_conditioning(self):
+        r"""The schur reduction surfaces the heavy-block conditioning
+        ``rcond(H_hh)`` in ``LightSpectrum.info`` (the deep-throat precision
+        guard); the frozen reduction does not compute it."""
+        spec = self.eft.light_mass_spectrum(self.x_light, self.flux, reduction="schur")
+        self.assertIn("H_hh_rcond", spec.info)
+        self.assertNotIn("H_hh_rcond",
+                         self.eft.light_mass_spectrum(
+                             self.x_light, self.flux, reduction="frozen").info)
+
+    def test_eom_mode_solves_moduli_eom(self):
+        r"""mode='eom' Newton-solves the moduli F-terms at fixed tau (residual
+        driven to ~0, below the ansatz), stays near the ansatz ``z = p*tau``
+        (leading order), holds tau fixed, and is jit/autodiff-compatible through
+        the Newton."""
+        tau = 6.0j                                    # generic (off the vacuum)
+        xl = jnp.array([tau.real, tau.imag])
+        eom = PFVEFT.from_fluxes(self.m, self.M, self.K, mode="eom")
+        n_z = 2 * self.m.h12
+        x_ans = self.eft._real_light_to_full(xl, self.flux)
+        x_eom = eom._real_light_to_full(xl, self.flux)
+        r_ans = float(jnp.max(jnp.abs(self.m.DW_x(x_ans, self.flux)[:n_z])))
+        r_eom = float(jnp.max(jnp.abs(self.m.DW_x(x_eom, self.flux)[:n_z])))
+        self.assertLess(r_eom, 1e-8)
+        self.assertLess(r_eom, r_ans)
+        self.assertAllClose(x_eom[n_z:], x_ans[n_z:], rtol=0, atol=1e-12)  # tau fixed
+        self.assertLess(float(jnp.max(jnp.abs(x_eom[:n_z] - x_ans[:n_z]))), 1e-3)
+        xj = jax.jit(lambda a, f: eom._real_light_to_full(a, f))(xl, self.flux)
+        self.assertAllClose(xj, x_eom, rtol=0, atol=1e-10)
+        self.assertTrue(np.all(np.isfinite(np.asarray(
+            eom.ddV_x_light(xl, self.flux, reduction="autodiff")))))
+
+
+class TestPFVEFTConiLCS(TestCase):
+    r"""
+    coniLCS :class:`PFVEFT` on the built-in 'aule' fixture: bulk slaved
+    ``z_bulk = p_hat*tau`` AND ``z_cf`` integrated out analytically.  Skipped if
+    the conifold fixture is unavailable.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        models, pfv = _require_int_models()
+        cls.model = models.bulk
+        cls.M = jnp.asarray(_INT_MVEC0.astype(float))
+        cls.K = jnp.asarray(_INT_KVEC0.astype(float))
+        cls.p_hat = cls.model.pfv_p_vector(cls.M, cls.K)
+        cls.flux = jnp.asarray(cls.model.pfv_to_flux(cls.M, cls.K))
+        cls.tau = complex(_INT_TAU0)
+        cls.eft = PFVEFT.from_fluxes(cls.model, cls.M, cls.K, apply_correction=True)
+        cls.x_light = jnp.array([cls.tau.real, cls.tau.imag])
+
+    def test_is_coni_and_p_hat_length(self):
+        self.assertTrue(self.eft._is_coni)
+        self.assertEqual(self.eft.n_light, 0)
+        self.assertEqual(self.eft.p.shape, (self.model.h12 - 1,))
+
+    def test_reconstruct_structure(self):
+        r"""bulk == p_hat*tau exactly; conifold == compute_zcf exactly."""
+        empty = jnp.array([], dtype=complex)
+        z_full = self.eft.reconstruct_full_moduli(empty, self.tau, self.flux)
+        self.assertEqual(z_full.shape, (self.model.h12,))
+        self.assertAllClose(z_full[1:], self.p_hat * self.tau, rtol=0, atol=1e-12)
+        z_cf = self.model.compute_zcf(self.p_hat * self.tau, jnp.conj(self.p_hat * self.tau),
+                                      self.tau, jnp.conj(self.tau), self.flux,
+                                      mode="manual", apply_correction=True, conj=False)
+        self.assertAllClose(complex(z_full[0]), complex(z_cf), rtol=0, atol=1e-12)
+
+    def test_full_point_matches_conifoldfreezer(self):
+        r"""PFVEFT reuses the ConifoldFreezer z_cf machinery: identical full point."""
+        x_full = self.eft._real_light_to_full(self.x_light, self.flux)
+        cf = ConifoldFreezer(self.model)
+        x_bulk = self.model._convert_complex_to_real(
+            self.p_hat * self.tau, jnp.conj(self.p_hat * self.tau),
+            self.tau, jnp.conj(self.tau))
+        x_full_cf = cf._real_light_to_full(x_bulk, self.flux, mode="manual",
+                                           apply_correction=True)
+        self.assertAllClose(x_full, x_full_cf, rtol=0, atol=1e-12)
+
+    def test_zcf_backreaction_captured(self):
+        r"""z_cf(tau) is nonlinear -> autodiff Hessian carries the back-reaction
+        (differs from frozen); both finite."""
+        Hf = np.asarray(self.eft.ddV_x_light(self.x_light, self.flux, reduction="frozen"))
+        Ha = np.asarray(self.eft.ddV_x_light(self.x_light, self.flux, reduction="autodiff"))
+        self.assertTrue(np.all(np.isfinite(Hf)) and np.all(np.isfinite(Ha)))
+        self.assertGreater(float(np.max(np.abs(Hf - Ha))), 1e-12)
+
+    def test_onshell_tangent_matches_jacfwd(self):
+        r"""mode='eom': the closed-form implicit-function tangent
+        (:meth:`PFVEFT._onshell_tangent`) equals the forward-mode AD tangent of the
+        Newton heavy solve — validating the analytic derivative that
+        ``reduction="tangent"`` uses instead of differentiating through the loop."""
+        eom = PFVEFT.from_fluxes(self.model, self.M, self.K, mode="eom",
+                                 apply_correction=True)
+        J_ift = np.asarray(eom._onshell_tangent(self.x_light, self.flux))
+        J_ad = np.asarray(jax.jacfwd(
+            lambda a: eom._real_light_to_full(a, self.flux))(self.x_light))
+        self.assertAllClose(J_ift, J_ad, rtol=1e-5, atol=1e-8)
+
+    def test_tangent_reduction_finite_and_backreacting(self):
+        r"""``reduction="tangent"`` is finite and, via the true on-shell tangent,
+        carries the z_cf back-reaction (so it differs from the frozen selection
+        block)."""
+        eom = PFVEFT.from_fluxes(self.model, self.M, self.K, mode="eom",
+                                 apply_correction=True)
+        Ht = np.asarray(eom.ddV_x_light(self.x_light, self.flux, reduction="tangent"))
+        Hf = np.asarray(eom.ddV_x_light(self.x_light, self.flux, reduction="frozen"))
+        self.assertTrue(np.all(np.isfinite(Ht)))
+        self.assertEqual(Ht.shape, (2, 2))
+        self.assertGreater(float(np.max(np.abs(Ht - Hf))), 1e-12)
+
+    def test_guardrail_warns_on_ansatz_and_frozen(self):
+        r"""A coniLCS PFVEFT Hessian in the default mode='ansatz' / reduction=
+        'frozen' warns: both are physically wrong for a coniLCS light mass."""
+        import warnings as _w
+        with _w.catch_warnings(record=True) as rec:
+            _w.simplefilter("always")
+            self.eft.ddV_x_light(self.x_light, self.flux, reduction="frozen")
+        blob = " ".join(str(r.message) for r in rec)
+        self.assertIn("frozen", blob)
+        self.assertIn("ansatz", blob)
+
+    def test_eom_mode_solves_full_moduli_eom(self):
+        r"""coniLCS mode='eom' Newton-solves the FULL moduli F-terms (bulk +
+        conifold) at fixed tau: the residual is driven to ~0 (below the ansatz),
+        tau is held fixed, z_cf stays near its throat solve while the bulk is
+        genuinely corrected away from ``p_hat*tau``, and the solve is
+        jit/autodiff-compatible."""
+        tau = complex(self.tau) * 0.95              # off the joint vacuum
+        xl = jnp.array([tau.real, tau.imag])
+        eom = PFVEFT.from_fluxes(self.model, self.M, self.K, mode="eom",
+                                 apply_correction=True)
+        n_z = 2 * self.model.h12
+        x_ans = self.eft._real_light_to_full(xl, self.flux)     # ansatz EFT
+        x_eom = eom._real_light_to_full(xl, self.flux)
+        r_ans = float(jnp.max(jnp.abs(self.model.DW_x(x_ans, self.flux)[:n_z])))
+        r_eom = float(jnp.max(jnp.abs(self.model.DW_x(x_eom, self.flux)[:n_z])))
+        self.assertLess(r_eom, 1e-7)
+        self.assertLess(r_eom, r_ans)
+        self.assertAllClose(x_eom[n_z:], x_ans[n_z:], rtol=0, atol=1e-12)   # tau fixed
+        # z_cf slot (real idx 0,1) barely moves; the bulk is genuinely corrected.
+        self.assertLess(float(jnp.max(jnp.abs(x_eom[:2] - x_ans[:2]))), 1e-3)
+        self.assertGreater(float(jnp.max(jnp.abs(x_eom[2:n_z] - x_ans[2:n_z]))), 1e-4)
+        xj = jax.jit(lambda a, f: eom._real_light_to_full(a, f))(xl, self.flux)
+        self.assertAllClose(xj, x_eom, rtol=0, atol=1e-9)
+        self.assertTrue(np.all(np.isfinite(np.asarray(
+            eom.ddV_x_light(xl, self.flux, reduction="autodiff")))))
+
+    def test_conifold_basis_false_rejected(self):
+        from types import SimpleNamespace
+        mock = SimpleNamespace(periods=SimpleNamespace(limit="coniLCS"), h12=3,
+                               lcs_tree=SimpleNamespace(conifold_basis=False))
+        self.assertRaises(NotImplementedError, PFVEFT, mock, jnp.array([0.4, 0.3]))
 
 
 if __name__ == "__main__":

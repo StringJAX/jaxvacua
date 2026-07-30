@@ -812,6 +812,13 @@ def save_model_data(
 # https://docs.jax.dev/en/latest/_autosummary/jax.tree_util.register_pytree_node.html
 # ==============================================================================
 
+#: Moduli-space limits that carry a conifold modulus.  The single definition
+#: shared by :mod:`jaxvacua.freezer` (which branches its reconstruction on it)
+#: and :mod:`jaxvacua.vacuum` (which gates the conifold diagnostics on it), so
+#: the two cannot drift apart.
+CONI_LIMITS: Tuple[str, ...] = ("coniLCS", "coniLCS_series", "coniLCS_bulk")
+
+
 # Class attributes that must travel as auxiliary (static / hashable) data
 # rather than as JAX-traced children.  Anything in this set, plus any value
 # whose Python type is ``str`` or ``bool``, is preserved verbatim across the

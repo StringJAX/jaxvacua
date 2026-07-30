@@ -56,6 +56,9 @@ setup(
     extras_require={
         'notebooks': ['jupyterlab', 'ipywidgets', 'anywidget'],
         'viz': ['matplotlib', 'seaborn', 'plotly'],
+        # External PFV enumerator (github.com/natemacfadden/pfvs) + its deps,
+        # for the jaxvacua.flux_utils <-> pfvs interop bridge (optional).
+        'pfvs': ['pfvs', 'latticepts', 'ortools', 'python-flint', 'matplotlib'],
     },
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',

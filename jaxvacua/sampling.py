@@ -597,6 +597,10 @@ class data_sampler():
         sampling_modes = ["box","sphere","tadpole_bound","tadpole_cancel"]
         if sampling_mode not in sampling_modes:
             raise ValueError(f"`sampling_mode` should be one of {sampling_modes}, but is {sampling_mode}!")
+        
+        if sampling_mode not in ["sphere","tadpole_bound","tadpole_cancel"]:
+            if radius is None:
+                radius = self._Q
 
         modes = [None,"full","half"]
         if mode not in modes:
@@ -627,10 +631,9 @@ class data_sampler():
             elif sampling_mode == "tadpole_cancel":
                 flag = self._tadpole(flux) == radius
             else:  # "sphere"
-                flux_np = np.asarray(flux)
-                flag = np.sqrt(np.sum(flux_np * flux_np, axis=1)) <= radius
+                flag = jnp.sqrt(jnp.sum(flux * flux, axis=1)) <= radius
 
-            valid = np.asarray(flux)[np.asarray(flag)]
+            valid = jnp.asarray(flux)[flag]
             if valid.shape[0] > 0:
                 chunks.append(valid)
                 n_collected += valid.shape[0]
@@ -1204,6 +1207,7 @@ class data_sampler():
             maxval_moduli: Any = None,
             axion_sampling_mode: str = "box",
             moduli_sampling_mode: str = "cone",
+            stretching: float = 0.0,
             use_rays: bool = False,
             time_out: float = 60.0,
         ) -> np.ndarray | Array:
@@ -1240,7 +1244,7 @@ class data_sampler():
         
         moduli_val = self.get_axions(N,rns_key=rns_key,minval=minval_axions,maxval=maxval_axions,sampling_mode=axion_sampling_mode)
         
-        moduli_val += 1j*self.get_moduli(N,rns_key=rns_key,minval=minval_moduli,maxval=maxval_moduli,sampling_mode=moduli_sampling_mode,use_rays=use_rays,time_out=time_out)
+        moduli_val += 1j*self.get_moduli(N,rns_key=rns_key,minval=minval_moduli,maxval=maxval_moduli,sampling_mode=moduli_sampling_mode,stretching=stretching,use_rays=use_rays,time_out=time_out)
         
         return moduli_val
 
@@ -1512,6 +1516,7 @@ class data_sampler():
         filter_moduli: bool = False,
         include_fluxes: bool = True,
         use_rays: bool = False,
+        stretching: float = 0.0,
         time_out: float = 60.0,
     ) -> Tuple[Array, Array] | Tuple[Array, Array, Array]:
         r"""
@@ -1610,6 +1615,7 @@ class data_sampler():
                 axion_sampling_mode="box",
                 moduli_sampling_mode=moduli_sampling_mode,
                 use_rays=use_rays,
+                stretching = stretching,
                 time_out=time_out
             )
             if filter_moduli:
@@ -2036,11 +2042,13 @@ class data_sampler():
         fluxes_sampling_mode: str = "box",
         flux_mode: str = "full",
         Nmax: float | None = None,
+        flux_radius: float = 10.0,
         filter_moduli: bool = False,
         mode: str = "ISD+",
         vmap_dim: int | None = None,
         ISD_oversample_factor: int = 10,
         use_rays: bool = False,
+        stretching: float = 0.0,
         time_out: float = 60.0,
         print_progress: bool = False,
     ) -> Tuple[Array, Array, Array]:
@@ -2115,7 +2123,10 @@ class data_sampler():
                 More points per iteration → fewer iterations → fewer device syncs.
                 Ignored when ``use_jax=False``.  Default ``10``.
             print_progress (bool): Print a running sample count.  Default ``False``.
-
+            stretching (float): Stretching parameter for moduli sampling.  Default ``0.0``.
+            use_rays (bool): Use rays to sample points in the Kähler cone.  Default ``False``.
+            time_out (float): Timeout in seconds for moduli sampling.  Default ``60.0``.
+            
         Returns:
             Tuple[Array, Array, Array]: ``(moduli, tau, fluxes)`` where
                 moduli has shape ``(N, h12)``, tau has shape ``(N,)``, and
@@ -2128,9 +2139,18 @@ class data_sampler():
         See also: :func:`ISD_sampling`, ``stringjax_tools.vmapping_func_cached``,
             :func:`initial_guesses`
         """
+        
+        
 
         if vmap_dim is None:
             vmap_dim = N
+            
+        if Nmax is None:
+            if self._Q is None:
+                raise ValueError(
+                    "Model does not have a defined D3-tadpole Q. Please provide an explicit value!"
+                )
+            Nmax = self._Q
 
         # When using JAX, process ISD_oversample_factor × more points per outer iteration
         # to reduce the total number of iterations (and therefore device syncs).
@@ -2175,7 +2195,8 @@ class data_sampler():
                     filter_moduli=filter_moduli,
                     include_fluxes=False,
                     use_rays=use_rays,
-                    time_out=time_out
+                    time_out=time_out,
+                    stretching=stretching
                 )
 
                 fluxes0 = self.get_fluxes(
@@ -2185,7 +2206,7 @@ class data_sampler():
                     minval=minval_fluxes,
                     maxval=maxval_fluxes,
                     sampling_mode=fluxes_sampling_mode,
-                    radius=Nmax,
+                    radius=flux_radius,
                 )[:, : self._n_fluxes]
 
                 # Fix 1: call the pre-built cached kernel instead of re-entering
@@ -2198,12 +2219,7 @@ class data_sampler():
 
                 Nflux = self._tadpole(fluxes_ISD_integer)
 
-                if Nmax is None:
-                    if self._Q is None:
-                        raise ValueError(
-                            "Model does not have a defined D3-tadpole Q. Please provide an explicit value!"
-                        )
-                    Nmax = self._Q
+                
 
                 flag = (Nflux <= Nmax) & (Nflux >= 0)
                 z0_valid = z0[flag]

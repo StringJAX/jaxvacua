@@ -49,3 +49,31 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if item.name.endswith("__with_jit") or "__with_jit[" in item.name:
             item.add_marker(pytest.mark.slow)
+
+
+@pytest.fixture(autouse=True)
+def precision_guard():
+    """Snapshot and restore the global JAX/JAXVacua precision around each test.
+
+    ``jaxvacua.set_precision`` mutates the process-global ``jax_enable_x64`` flag
+    and the module-level ``FLOAT``/``COMPLEX`` dtypes; without a restore a stray
+    precision change would leak into subsequent tests and make results
+    order-dependent.  This does not pin a particular precision, so the
+    ``JAXVACUA_PRECISION=float32`` whole-run mode is unaffected.
+    """
+    import jaxvacua as _jvc
+
+    x64 = jax.config.jax_enable_x64
+    flt = getattr(_jvc, "FLOAT", None)
+    cplx = getattr(_jvc, "COMPLEX", None)
+    prec = getattr(_jvc, "precision", None)
+    try:
+        yield
+    finally:
+        jax.config.update("jax_enable_x64", x64)
+        if flt is not None:
+            _jvc.FLOAT = flt
+        if cplx is not None:
+            _jvc.COMPLEX = cplx
+        if prec is not None:
+            _jvc.precision = prec

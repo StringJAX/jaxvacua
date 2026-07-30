@@ -444,7 +444,7 @@ class TestPeriodSector(TestCase):
 
 
     # ==========================================================================
-    # Mirror volume (A_per)
+    # Mirror volume (A)
     # ==========================================================================
 
     @chex.variants(with_jit=True, without_jit=True)
@@ -456,7 +456,7 @@ class TestPeriodSector(TestCase):
         .. math::
             \widetilde{\mathcal{V}} = -\mathrm{i}\,\Pi^\dagger \Sigma \Pi
 
-        returned by :func:`A_per` is a real positive scalar.
+        returned by :func:`A` is a real positive scalar.
 
         Args:
             None
@@ -470,14 +470,14 @@ class TestPeriodSector(TestCase):
             well-defined.
         """
 
-        Vtilde = self.variant(self.model.A_per)(self.z, self.cz)
+        Vtilde = self.variant(self.model.A)(self.z, self.cz)
 
         # must be a scalar
         chex.assert_type(Vtilde, complex)
         chex.assert_shape(Vtilde, ())
         # imaginary part must vanish
         self.assertAllClose(Vtilde.imag, 0.,
-                            msg="Mirror CY volume A_per must be real")
+                            msg="Mirror CY volume A must be real")
 
 
     # ==========================================================================
@@ -493,7 +493,7 @@ class TestPeriodSector(TestCase):
         .. math::
             K = -\ln\!\left(-\mathrm{i}\,\Pi^\dagger\Sigma\Pi\right)
 
-        returned by :func:`kahler_potential_per`.
+        returned by :func:`kahler_potential`.
 
         Args:
             None
@@ -506,7 +506,7 @@ class TestPeriodSector(TestCase):
             :math:`\widetilde{\mathcal{V}} > 0`.
         """
 
-        KP = self.variant(self.model.kahler_potential_per)(self.z, self.cz)
+        KP = self.variant(self.model.kahler_potential)(self.z, self.cz)
 
         # must be a scalar
         chex.assert_type(KP, complex)
@@ -530,7 +530,7 @@ class TestPeriodSector(TestCase):
         .. math::
             \partial_{X^I} K \,,\quad \partial_{\bar{X}^I} K \,,
 
-        returned by :func:`dK_per`.
+        returned by :func:`dK`.
 
         The two derivatives are related by complex conjugation:
 
@@ -545,13 +545,13 @@ class TestPeriodSector(TestCase):
         """
 
         # holomorphic derivative
-        dK = self.variant(lambda x, y: self.model.dK_per(x, y, conj=False))(self.z, self.cz)
+        dK = self.variant(lambda x, y: self.model.dK(x, y, conj=False))(self.z, self.cz)
 
         chex.assert_type(dK, complex)
         chex.assert_shape(dK, (self.model.h12 + 1,))   # one entry per X^I
 
         # anti-holomorphic derivative
-        dK_c = self.variant(lambda x, y: self.model.dK_per(x, y, conj=True))(self.z, self.cz)
+        dK_c = self.variant(lambda x, y: self.model.dK(x, y, conj=True))(self.z, self.cz)
 
         chex.assert_type(dK_c, complex)
         chex.assert_shape(dK_c, (self.model.h12 + 1,))
@@ -571,8 +571,8 @@ class TestPeriodSector(TestCase):
         r"""**Description:**
 
         Test the period matrices :math:`P_{IJ}` and :math:`Q^I{}_J` and their
-        inverses returned by :func:`P_per`, :func:`Q_per`, :func:`Q_inv_per`,
-        and :func:`PQ_per`.
+        inverses returned by :func:`P`, :func:`Q`, :func:`Q_inv`,
+        and :func:`PQ`.
 
         These matrices are defined as
 
@@ -596,16 +596,16 @@ class TestPeriodSector(TestCase):
         """
 
         conj = False
-        P = self.variant(lambda x, y: self.model.P_per(x, y, conj=conj))(self.z, self.cz)
-        Q = self.variant(lambda x, y: self.model.Q_per(x, y, conj=conj))(self.z, self.cz)
-        Qinv = self.variant(lambda x, y: self.model.Q_inv_per(x, y, conj=conj))(self.z, self.cz)
-        P_mod, Q_mod = self.variant(lambda x, y: self.model.PQ_per(x, y, conj=conj))(self.z, self.cz)
+        P = self.variant(lambda x, y: self.model.P(x, y, conj=conj))(self.z, self.cz)
+        Q = self.variant(lambda x, y: self.model.Q(x, y, conj=conj))(self.z, self.cz)
+        Qinv = self.variant(lambda x, y: self.model.Q_inv(x, y, conj=conj))(self.z, self.cz)
+        P_mod, Q_mod = self.variant(lambda x, y: self.model.PQ(x, y, conj=conj))(self.z, self.cz)
 
         conj = True
-        P_c = self.variant(lambda x, y: self.model.P_per(x, y, conj=conj))(self.z, self.cz)
-        Q_c = self.variant(lambda x, y: self.model.Q_per(x, y, conj=conj))(self.z, self.cz)
-        Qinv_c = self.variant(lambda x, y: self.model.Q_inv_per(x, y, conj=conj))(self.z, self.cz)
-        P_mod_c, Q_mod_c = self.variant(lambda x, y: self.model.PQ_per(x, y, conj=conj))(self.z, self.cz)
+        P_c = self.variant(lambda x, y: self.model.P(x, y, conj=conj))(self.z, self.cz)
+        Q_c = self.variant(lambda x, y: self.model.Q(x, y, conj=conj))(self.z, self.cz)
+        Qinv_c = self.variant(lambda x, y: self.model.Q_inv(x, y, conj=conj))(self.z, self.cz)
+        P_mod_c, Q_mod_c = self.variant(lambda x, y: self.model.PQ(x, y, conj=conj))(self.z, self.cz)
 
         # ---- shapes ----
         # P matrix (conj=False) must be (h12+1) x (h12+1)
@@ -620,13 +620,13 @@ class TestPeriodSector(TestCase):
         chex.assert_shape(Qinv,  (self.model.h12 + 1, self.model.h12 + 1))
         # Q inverse (conj=True) must have the same shape
         chex.assert_shape(Qinv_c, (self.model.h12 + 1, self.model.h12 + 1))
-        # P from PQ_per (conj=False) must be (h12+1) x (h12+1)
+        # P from PQ (conj=False) must be (h12+1) x (h12+1)
         chex.assert_shape(P_mod,   (self.model.h12 + 1, self.model.h12 + 1))
-        # P from PQ_per (conj=True) must have the same shape
+        # P from PQ (conj=True) must have the same shape
         chex.assert_shape(P_mod_c, (self.model.h12 + 1, self.model.h12 + 1))
-        # Q from PQ_per (conj=False) must be (h12+1) x (h12+1)
+        # Q from PQ (conj=False) must be (h12+1) x (h12+1)
         chex.assert_shape(Q_mod,   (self.model.h12 + 1, self.model.h12 + 1))
-        # Q from PQ_per (conj=True) must have the same shape
+        # Q from PQ (conj=True) must have the same shape
         chex.assert_shape(Q_mod_c, (self.model.h12 + 1, self.model.h12 + 1))
 
         # ---- Q_inv = inv(Q) ----
@@ -640,12 +640,12 @@ class TestPeriodSector(TestCase):
                             msg="Q_inv must equal conj(Q_inv_c)")
         self.assertAllClose(Q,   jnp.conj(Q_c),    msg="Q must equal conj(Q_c)")
         self.assertAllClose(P,   jnp.conj(P_c),    msg="P must equal conj(P_c)")
-        self.assertAllClose(Q_mod, jnp.conj(Q_mod_c), msg="Q from PQ_per must equal conj(Q_c from PQ_per)")
-        self.assertAllClose(P_mod, jnp.conj(P_mod_c), msg="P from PQ_per must equal conj(P_c from PQ_per)")
+        self.assertAllClose(Q_mod, jnp.conj(Q_mod_c), msg="Q from PQ must equal conj(Q_c from PQ)")
+        self.assertAllClose(P_mod, jnp.conj(P_mod_c), msg="P from PQ must equal conj(P_c from PQ)")
 
-        # ---- PQ_per must agree with individual P_per / Q_per ----
-        self.assertAllClose(Q_mod, Q, msg="Q returned by PQ_per must agree with Q_per")
-        self.assertAllClose(P_mod, P, msg="P returned by PQ_per must agree with P_per")
+        # ---- PQ must agree with individual P / Q ----
+        self.assertAllClose(Q_mod, Q, msg="Q returned by PQ must agree with Q")
+        self.assertAllClose(P_mod, P, msg="P returned by PQ must agree with P")
 
 
     # ==========================================================================
@@ -661,7 +661,7 @@ class TestPeriodSector(TestCase):
         .. math::
             \Pi = \begin{pmatrix} \mathcal{F}_I \\ X^I \end{pmatrix}
 
-        returned by :func:`period_vector_per`.
+        returned by :func:`period_vector`.
 
         Two identities are verified:
 
@@ -670,7 +670,7 @@ class TestPeriodSector(TestCase):
            .. math::
                \Pi^T \Sigma \Pi = 0 \,.
 
-        2. **Mirror volume** (definition of :func:`A_per`):
+        2. **Mirror volume** (definition of :func:`A`):
 
            .. math::
                -\mathrm{i}\,\bar\Pi^T \Sigma \Pi = \widetilde{\mathcal{V}} \,,
@@ -690,8 +690,8 @@ class TestPeriodSector(TestCase):
 
         sig = self.model.sigma
 
-        Pi   = self.variant(lambda x: self.model.period_vector_per(x, conj=False))(self.z)
-        Pi_c = self.variant(lambda x: self.model.period_vector_per(x, conj=True))(self.cz)
+        Pi   = self.variant(lambda x: self.model.period_vector(x, conj=False))(self.z)
+        Pi_c = self.variant(lambda x: self.model.period_vector(x, conj=True))(self.cz)
 
         # ---- shape ----
         chex.assert_shape(Pi,   (2 * (self.model.h12 + 1),))
@@ -704,8 +704,8 @@ class TestPeriodSector(TestCase):
         self.assertAllClose(iso, 0. + 0.j, rtol=1e-11, atol=1e-11,
                             msg="Period vector must be isotropic: Pi^T sigma Pi = 0")
 
-        # ---- 2. mirror volume: A_per = -i Pi_c^T sigma Pi ----
-        A = self.variant(self.model.A_per)(self.z, self.cz)
+        # ---- 2. mirror volume: A = -i Pi_c^T sigma Pi ----
+        A = self.variant(self.model.A)(self.z, self.cz)
         A_from_Pi = -1j * jnp.dot(Pi_c, jnp.matmul(sig, Pi))
         self.assertAllClose(A_from_Pi, A, rtol=1e-11, atol=1e-11,
                             msg="Mirror volume must equal -i Pi_c^T sigma Pi")
@@ -784,10 +784,10 @@ class TestPeriodSector(TestCase):
             X = X.at[0].set(1.0 + 0.0j)
             cX = jnp.conj(X)
 
-            Pi = self.model.period_vector_per(X, conj=False)
-            Pi_c = self.model.period_vector_per(cX, conj=True)
+            Pi = self.model.period_vector(X, conj=False)
+            Pi_c = self.model.period_vector(cX, conj=True)
             iso = jnp.dot(Pi, jnp.matmul(sig, Pi))
-            A = self.model.A_per(X, cX)
+            A = self.model.A(X, cX)
             A_from_Pi = -1j * jnp.dot(Pi_c, jnp.matmul(sig, Pi))
             self.assertAllClose(iso, 0.0 + 0.0j, rtol=1e-10, atol=1e-10)
             self.assertAllClose(A_from_Pi, A, rtol=1e-10, atol=1e-10)
@@ -816,14 +816,14 @@ class TestPeriodSector(TestCase):
         .. math::
             D_I\Pi_a = \partial_{X^I}\Pi_a + (\partial_{X^I} K)\,\Pi_a
 
-        returned by :func:`D_period_vector_per`.
+        returned by :func:`D_period_vector`.
 
         The following identities are verified:
 
         1. **Shape**: :math:`D\Pi` has shape ``(2(h^{1,2}+1), h^{1,2}+1)``.
         2. **Conjugation**: :math:`(D\Pi)_c = \overline{D\Pi}`.
-        3. **Consistency** with :func:`dPi_per` and
-           :func:`dK_per`:
+        3. **Consistency** with :func:`dPi` and
+           :func:`dK`:
 
            .. math::
                D_I\Pi = \partial_{X^I}\Pi + (\partial_{X^I}K)\,\Pi \,.
@@ -841,8 +841,8 @@ class TestPeriodSector(TestCase):
         """
 
         # ---- evaluate covariant and ordinary derivatives ----
-        DPi = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=False))(self.z, self.cz)
-        DPi_c = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=True))(self.z, self.cz)
+        DPi = self.variant(lambda x, y: self.model.D_period_vector(x, y, conj=False))(self.z, self.cz)
+        DPi_c = self.variant(lambda x, y: self.model.D_period_vector(x, y, conj=True))(self.z, self.cz)
 
         # ---- shape ----
         chex.assert_shape(DPi,   (2 * (self.model.h12 + 1), self.model.h12 + 1))
@@ -853,9 +853,9 @@ class TestPeriodSector(TestCase):
                             msg="(D Pi)_c must equal conj(D Pi)")
 
         # ---- consistency: DPi = dPi + outer(Pi, dK) ----
-        Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=False))(self.z)
-        dPi = self.variant(lambda x: self.model.dPi_per(x, conj=False))(self.z)
-        dK  = self.variant(lambda x, y: self.model.dK_per(x, y, conj=False))(self.z, self.cz)
+        Pi  = self.variant(lambda x: self.model.period_vector(x, conj=False))(self.z)
+        dPi = self.variant(lambda x: self.model.dPi(x, conj=False))(self.z)
+        dK  = self.variant(lambda x, y: self.model.dK(x, y, conj=False))(self.z, self.cz)
 
         # D_I Pi = dPi + outer(Pi, dK)
         DPi_manual = dPi + jnp.outer(Pi, dK)
@@ -872,10 +872,10 @@ class TestPeriodSector(TestCase):
         r"""**Description:**
 
         Test the prepotential :math:`F` and its derivatives returned by
-        :func:`prepot_per`, :func:`dF_per`, and
-        :func:`ddF_per`, as well as the individual LCS
-        decomposition :func:`F_LCS_per`, :func:`F_LCS_poly_per`, and
-        :func:`F_inst_per`.
+        :func:`prepot`, :func:`dF`, and
+        :func:`ddF`, as well as the individual LCS
+        decomposition :func:`F_LCS`, :func:`F_LCS_poly`, and
+        :func:`F_inst`.
 
         The LCS polynomial prepotential is
 
@@ -911,21 +911,21 @@ class TestPeriodSector(TestCase):
 
         # ---- conj=False ----
         conj = False
-        F          = self.variant(lambda x: self.model.prepot_per(x, conj=conj))(self.z)
-        F_LCS      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.z)
-        F_LCS_poly = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.z)
-        F_inst     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.z)
-        dF         = self.variant(lambda x: self.model.dF_per(x, conj=conj))(self.z)
-        ddF        = self.variant(lambda x: self.model.ddF_per(x, conj=conj))(self.z)
+        F          = self.variant(lambda x: self.model.prepot(x, conj=conj))(self.z)
+        F_LCS      = self.variant(lambda x: self.model.F_LCS(x, conj=conj))(self.z)
+        F_LCS_poly = self.variant(lambda x: self.model.F_LCS_poly(x, conj=conj))(self.z)
+        F_inst     = self.variant(lambda x: self.model.F_inst(x, conj=conj))(self.z)
+        dF         = self.variant(lambda x: self.model.dF(x, conj=conj))(self.z)
+        ddF        = self.variant(lambda x: self.model.ddF(x, conj=conj))(self.z)
 
         # ---- conj=True ----
         conj = True
-        F_c          = self.variant(lambda x: self.model.prepot_per(x, conj=conj))(self.cz)
-        F_LCS_c      = self.variant(lambda x: self.model.F_LCS_per(x, conj=conj))(self.cz)
-        F_LCS_poly_c = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.cz)
-        F_inst_c     = self.variant(lambda x: self.model.F_inst_per(x, conj=conj))(self.cz)
-        dF_c         = self.variant(lambda x: self.model.dF_per(x, conj=conj))(self.cz)
-        ddF_c        = self.variant(lambda x: self.model.ddF_per(x, conj=conj))(self.cz)
+        F_c          = self.variant(lambda x: self.model.prepot(x, conj=conj))(self.cz)
+        F_LCS_c      = self.variant(lambda x: self.model.F_LCS(x, conj=conj))(self.cz)
+        F_LCS_poly_c = self.variant(lambda x: self.model.F_LCS_poly(x, conj=conj))(self.cz)
+        F_inst_c     = self.variant(lambda x: self.model.F_inst(x, conj=conj))(self.cz)
+        dF_c         = self.variant(lambda x: self.model.dF(x, conj=conj))(self.cz)
+        ddF_c        = self.variant(lambda x: self.model.ddF(x, conj=conj))(self.cz)
 
         # ---- shapes ----
         chex.assert_shape(dF,   (self.model.h12 + 1,))
@@ -949,19 +949,19 @@ class TestPeriodSector(TestCase):
 
         # ---- LCS boundary conditions (polynomial part) at z^i = 0 ----
         conj = False
-        F_0 = self.variant(lambda x: self.model.F_LCS_poly_per(x, conj=conj))(self.z0)
+        F_0 = self.variant(lambda x: self.model.F_LCS_poly(x, conj=conj))(self.z0)
         dF_0 = self.variant(
-            lambda x: jax.grad(self.model.F_LCS_poly_per, holomorphic=True)(x, conj=conj)
+            lambda x: jax.grad(self.model.F_LCS_poly, holomorphic=True)(x, conj=conj)
         )(self.z0)
         ddF_0 = self.variant(
             lambda x: jax.jacfwd(
-                jax.grad(self.model.F_LCS_poly_per, holomorphic=True),
+                jax.grad(self.model.F_LCS_poly, holomorphic=True),
                 holomorphic=True)(x, conj=conj)
         )(self.z0)
         dddF_0 = self.variant(
             lambda x: jax.jacfwd(
                 jax.jacfwd(
-                    jax.grad(self.model.F_LCS_poly_per, holomorphic=True),
+                    jax.grad(self.model.F_LCS_poly, holomorphic=True),
                     holomorphic=True),
                 holomorphic=True)(x, conj=conj)
         )(self.z0)
@@ -997,8 +997,8 @@ class TestPeriodSector(TestCase):
 
         Test the period vector :math:`\Pi`, its ordinary gradient
         :math:`\partial_{X^I}\Pi`, and its Kähler-covariant derivative
-        :math:`D_I\Pi` returned by :func:`period_vector_per`,
-        :func:`dPi_per`, and :func:`D_period_vector_per`.
+        :math:`D_I\Pi` returned by :func:`period_vector`,
+        :func:`dPi`, and :func:`D_period_vector`.
 
         The period vector is defined as
 
@@ -1026,14 +1026,14 @@ class TestPeriodSector(TestCase):
 
         # ---- period vector ----
         conj = False
-        Pi  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.z)
-        dPi = self.variant(lambda x: self.model.dPi_per(x, conj=conj))(self.z)
-        DPi = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
+        Pi  = self.variant(lambda x: self.model.period_vector(x, conj=conj))(self.z)
+        dPi = self.variant(lambda x: self.model.dPi(x, conj=conj))(self.z)
+        DPi = self.variant(lambda x, y: self.model.D_period_vector(x, y, conj=conj))(self.z, self.cz)
 
         conj = True
-        Pi_c  = self.variant(lambda x: self.model.period_vector_per(x, conj=conj))(self.cz)
-        dPi_c = self.variant(lambda x: self.model.dPi_per(x, conj=conj))(self.cz)
-        DPi_c = self.variant(lambda x, y: self.model.D_period_vector_per(x, y, conj=conj))(self.z, self.cz)
+        Pi_c  = self.variant(lambda x: self.model.period_vector(x, conj=conj))(self.cz)
+        dPi_c = self.variant(lambda x: self.model.dPi(x, conj=conj))(self.cz)
+        DPi_c = self.variant(lambda x, y: self.model.D_period_vector(x, y, conj=conj))(self.z, self.cz)
 
         # ---- shapes ----
         chex.assert_shape(Pi,   (2 * (self.model.h12 + 1),))   # full symplectic period vector
@@ -1063,13 +1063,13 @@ class TestPeriodSector(TestCase):
         ])
         cX_batch = jnp.conj(X_batch)
 
-        Pi_batch = self.model.period_vector_per(X_batch)
-        Pi_scalar = jnp.stack([self.model.period_vector_per(X_batch[i]) for i in range(2)])
+        Pi_batch = self.model.period_vector(X_batch)
+        Pi_scalar = jnp.stack([self.model.period_vector(X_batch[i]) for i in range(2)])
         self.assertAllClose(Pi_batch, Pi_scalar, rtol=1e-10, atol=1e-10)
 
-        K_batch = self.model.kahler_potential_per(X_batch, cX_batch)
+        K_batch = self.model.kahler_potential(X_batch, cX_batch)
         K_scalar = jnp.stack([
-            self.model.kahler_potential_per(X_batch[i], cX_batch[i])
+            self.model.kahler_potential(X_batch[i], cX_batch[i])
             for i in range(2)
         ])
         self.assertAllClose(K_batch, K_scalar, rtol=1e-10, atol=1e-10)
@@ -1106,9 +1106,9 @@ class TestCustomPeriodInputs(TestCase):
         self.assertTrue(model._prepotential_input_used)
         self.assertFalse(model._period_input_used)
 
-        Pi = model.period_vector_per(X)
-        Pi_c = model.period_vector_per(cX, conj=True)
-        ddF = model.ddF_per(X)
+        Pi = model.period_vector(X)
+        Pi_c = model.period_vector(cX, conj=True)
+        ddF = model.ddF(X)
         N = model.gauge_kinetic_matrix(X, cX)
 
         chex.assert_shape(Pi, (4,))
@@ -1131,9 +1131,9 @@ class TestCustomPeriodInputs(TestCase):
 
         self.assertTrue(model._period_input_used)
         self.assertFalse(model._prepotential_input_used)
-        self.assertAllClose(model.period_vector_per(X), Pi(X), atol=1e-12)
+        self.assertAllClose(model.period_vector(X), Pi(X), atol=1e-12)
         self.assertAllClose(
-            model.period_vector_per(jnp.conj(X), conj=True),
+            model.period_vector(jnp.conj(X), conj=True),
             jnp.conj(Pi(X)),
             atol=1e-12,
         )

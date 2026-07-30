@@ -1908,7 +1908,7 @@ class TestMonodromyAsymmetric(TestCase):
         )
 
         cls.model = jaxvacua.FluxEFT(
-            lcs_tree_input=cls.lcs_tree, h12=2, maximum_degree=0,
+            lcs_tree=cls.lcs_tree, h12=2, maximum_degree=0,
             limit="LCS",
         )
         cls.h = cls.model.h12

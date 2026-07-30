@@ -77,7 +77,7 @@ class FluxEFT(css):
         maximum_degree: int = 0,
         mirror_cy: Any | None = None,
         model_data: dict | None = None,
-        lcs_tree_input: object | None = None,
+        lcs_tree: object | None = None,
         model_file: str = "",
         use_cytools: bool = False,
         basis_change: Array | None = None,
@@ -137,7 +137,7 @@ class FluxEFT(css):
             maximum_degree=maximum_degree,
             mirror_cy=mirror_cy,
             model_data=model_data,
-            lcs_tree_input = lcs_tree_input,
+            lcs_tree = lcs_tree,
             model_file = model_file,
             use_cytools=use_cytools,
             basis_change=basis_change,
@@ -4096,7 +4096,7 @@ class FluxEFT(css):
         DDW = self.DDW_general(moduli,jnp.conj(moduli),tau,jnp.conj(tau),fluxes)
         cDDW = jnp.conj(DDW)
         
-        DPi = self.periods.D_period_vector_per(self.moduli_to_periods(moduli),self.moduli_to_periods(jnp.conj(moduli),conj=True),conj=False)
+        DPi = self.periods.D_period_vector(self.moduli_to_periods(moduli),self.moduli_to_periods(jnp.conj(moduli),conj=True),conj=False)
         DPi = DPi[:,1:].T
 
         N = -1j*jnp.exp(Kcs)*jnp.matmul(jnp.matmul(jnp.conj(IKM),cDDW)[:-1].T,DPi)[-1]*(tau-jnp.conj(tau))
@@ -4166,7 +4166,7 @@ class FluxEFT(css):
         
         Fi_bar = jnp.matmul(IKM[:-1,:-1],fterms_mod)
 
-        DPi = self.periods.D_period_vector_per(self.moduli_to_periods(moduli),self.moduli_to_periods(jnp.conj(moduli),conj=True),conj=False)
+        DPi = self.periods.D_period_vector(self.moduli_to_periods(moduli),self.moduli_to_periods(jnp.conj(moduli),conj=True),conj=False)
         DPi = DPi[:,1:].T
 
         cDPi = jnp.conj(DPi)
@@ -4243,10 +4243,28 @@ from .flux_utils import (
     pfv_to_flux as _pfv_to_flux_func,
     pfv_to_moduli as _pfv_to_moduli_func,
     flux_to_pfv as _flux_to_pfv_func,
+    N_matrix as _N_matrix_func,
+    pfv_p_vector as _pfv_p_vector_func,
+    pfv_conditions as _pfv_conditions_func,
+    pfv_racetrack as _pfv_racetrack_func,
 )
 FluxEFT.pfv_to_flux = _pfv_to_flux_func
 FluxEFT.pfv_to_moduli = _pfv_to_moduli_func
 FluxEFT.flux_to_pfv = _flux_to_pfv_func
+FluxEFT.N_matrix = _N_matrix_func
+FluxEFT.pfv_p_vector = _pfv_p_vector_func
+FluxEFT.pfv_conditions = _pfv_conditions_func
+FluxEFT.pfv_racetrack = _pfv_racetrack_func
+
+
+def _pfv_data(self, M, K):
+    r"""Return a :class:`~jaxvacua.vacuum.PFVData` for this model and the flux
+    quanta ``(M, K)``."""
+    from .vacuum import PFVData  # function-local: avoid the flux_eft<->vacuum import cycle
+    return PFVData.from_fluxes(self, M, K)
+
+
+FluxEFT.pfv_data = _pfv_data
 
 
 # Conifold methods are attached via the ``_ConifoldGated`` descriptor so they

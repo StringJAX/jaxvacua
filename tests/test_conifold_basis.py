@@ -201,6 +201,18 @@ class TestConifoldBasisInvariance(TestCase):
             z_al = jnp.asarray(z)
             yield z_al, self.Lt @ z_al
 
+    def test_to_cydata_supports_aligned_only(self):
+        r"""``lcs_tree.to_cydata`` (pfvs interop) supports only the
+        conifold-aligned frame: the aligned tree yields a kwargs mapping with
+        ``coni_cob = I`` (no re-rotation), while the general
+        (``conifold_basis=False``) tree raises — the jaxvacua/pfvs ``coni_cob``
+        convention is not pinned there (it does not reproduce the aligned p)."""
+        kw = self.MA.lcs_tree.to_cydata_kwargs()
+        self.assertTrue(np.array_equal(kw["coni_cob"],
+                                       np.eye(kw["kappa"].shape[0], dtype=int)))
+        self.assertRaises(NotImplementedError, self.MG.lcs_tree.to_cydata_kwargs)
+        self.assertRaises(NotImplementedError, self.MG.lcs_tree.to_cydata)
+
     def test_setup_flags(self):
         self.assertTrue(bool(self.MA.lcs_tree.conifold_basis))
         self.assertFalse(bool(self.MG.lcs_tree.conifold_basis))
