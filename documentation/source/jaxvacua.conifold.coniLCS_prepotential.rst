@@ -21,6 +21,12 @@ prepotential and its Taylor expansion in the conifold modulus
 Per-period family (attached to ``periods``)
 -------------------------------------------
 
+.. note::
+   These are documented under their module-level names, which keep the ``_per``
+   marker that distinguishes them from the per-modulus twins below.  On the
+   :class:`~jaxvacua.periods.periods` object they are attached **without** the
+   suffix — e.g. ``periods.F_coniLCS_bulk`` for ``F_coniLCS_bulk_per``.
+
 .. autosummary::
     :toctree: _autosummary
 

@@ -132,6 +132,10 @@ Analysis and pipelines
      - Mass spectra, Hessians, and stability diagnostics.
    * - :doc:`Landscape statistics <notebooks/04_analysis_and_pipelines/15_landscape_statistics>`
      - Distribution-level analysis of vacuum ensembles.
+   * - :doc:`The Vacuum class <notebooks/04_analysis_and_pipelines/20_vacuum_class>`
+     - Packaging a solved point as a record, checking whether it is physical,
+       comparing two solves, and storing collections.  Worked through for an
+       LCS and a coni-LCS vacuum side by side.
 
 Advanced and case studies
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -148,6 +152,8 @@ Advanced and case studies
      - Local Dataset B and mirror-octic literature checks with full scans left opt-in.
    * - :doc:`Hulek--Verrill attractor demo <notebooks/05_advanced/18_hulek_verrill_jaxvacua_demo>`
      - A compact custom-period example connecting attractor points and flux-vacuum notation.
+   * - :doc:`The PFV pipeline <notebooks/05_advanced/19_pfv_pipeline>`
+     - Bridge a jaxvacua geometry to the external ``pfvs`` enumerator, cross-check the PFV algebra, and build a ``PFVEFT``.  ``pfvs`` is optional and installed from source (it is not on PyPI); ``jaxvacua[pfvs]`` supplies its dependencies.
 
 External workflow tutorials
 ---------------------------

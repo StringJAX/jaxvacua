@@ -44,6 +44,7 @@ Subpackages
     jaxvacua.flux_vacua_finder
     jaxvacua.flux_bounding
     jaxvacua.flux_utils
+    jaxvacua.vacuum
     jaxvacua.freezer
     jaxvacua.conifold
     jaxvacua.hypergeometric_models

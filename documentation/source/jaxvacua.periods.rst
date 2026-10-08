@@ -71,9 +71,9 @@ Prepotential
 
 .. autosummary::
 
-    periods.prepot_per
-    periods.prepot_grad_per
-    periods.prepot_grad_grad_per
+    periods.prepot
+    periods.dF
+    periods.ddF
 
 
 
@@ -82,13 +82,13 @@ Period vector and derivatives
 
 .. autosummary::
 
-    periods.period_vector_per
-    periods.grad_period_vector_per
-    periods.D_period_vector_per
-    periods.PQ_per
-    periods.P_per
-    periods.Q_inv_per
-    periods.Q_per
+    periods.period_vector
+    periods.dPi
+    periods.D_period_vector
+    periods.PQ
+    periods.P
+    periods.Q_inv
+    periods.Q
 
 
 Mirror dual volume and Kähler potential
@@ -96,9 +96,9 @@ Mirror dual volume and Kähler potential
 
 .. autosummary::
 
-    periods.A_per
-    periods.kahler_potential_per
-    periods.grad_kahler_potential_per
+    periods.A
+    periods.kahler_potential
+    periods.dK
     periods.sigma
     periods.compute_a_shift_monodromy
 

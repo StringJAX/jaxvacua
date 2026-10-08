@@ -52,6 +52,23 @@ Constructors
     lcs_tree.from_cytools
 
 
+Export to ``pfvs``
+-----------------------------------
+
+``to_cydata`` builds a ``pfvs.CYData`` (the external PFV enumerator,
+github.com/natemacfadden/pfvs) from the tree's topology; ``to_cydata_kwargs``
+returns the same mapping as a plain ``dict`` without importing ``pfvs`` (useful
+for inspection).  ``pfvs`` is optional and **not on PyPI**: install it from source with
+``pip install git+https://github.com/natemacfadden/pfvs``; its
+dependencies come from ``pip install jaxvacua[pfvs]``.
+Test availability with :func:`jaxvacua.flux_utils.has_pfvs`.
+
+.. autosummary::
+
+    lcs_tree.to_cydata
+    lcs_tree.to_cydata_kwargs
+
+
 Conversion helpers
 -----------------------------------
 

@@ -280,9 +280,9 @@ The period computation infrastructure is spread across several modules:
 
 .. autosummary::
 
-    periods.period_vector_per
-    periods.prepot_per
-    periods.kahler_potential_per
+    periods.period_vector
+    periods.prepot
+    periods.kahler_potential
 
 ```
 

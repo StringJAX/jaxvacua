@@ -16,34 +16,36 @@
 
     .. autosummary::
     
-        ~periods.A_per
-        ~periods.D_period_vector_per
-        ~periods.F_LCS_per
-        ~periods.F_LCS_poly_per
-        ~periods.F_inst_per
+        ~periods.A
+        ~periods.D_period_vector
+        ~periods.F_LCS
+        ~periods.F_LCS_poly
+        ~periods.F_inst
         ~periods.ISD_matrix
         ~periods.M
         ~periods.N
-        ~periods.PQ_per
-        ~periods.P_per
-        ~periods.Q_inv_per
-        ~periods.Q_per
+        ~periods.P
+        ~periods.PQ
+        ~periods.Pi
+        ~periods.Pi_vec
+        ~periods.Q
+        ~periods.Q_inv
         ~periods.__init__
         ~periods.compute_a_shift_monodromy
+        ~periods.dF
+        ~periods.dK
         ~periods.dM
         ~periods.dM_c
         ~periods.dN
         ~periods.dN_c
+        ~periods.dPi
+        ~periods.ddF
         ~periods.gauge_kinetic_matrix
         ~periods.gauge_kinetic_matrix_periods
         ~periods.gauge_kinetic_matrix_prepotential
-        ~periods.grad_kahler_potential_per
-        ~periods.grad_period_vector_per
-        ~periods.kahler_potential_per
-        ~periods.period_vector_per
-        ~periods.prepot_grad_grad_per
-        ~periods.prepot_grad_per
-        ~periods.prepot_per
+        ~periods.kahler_potential
+        ~periods.period_vector
+        ~periods.prepot
         ~periods.sigma
     
     
@@ -54,16 +56,16 @@
 
     .. autosummary::
     
-        ~periods.F_coniLCS_bulk_per
-        ~periods.F_coniLCS_exp_per
-        ~periods.F_coniLCS_poly_split_per
-        ~periods.F_coniLCS_series_per
-        ~periods.F_coni_per
-        ~periods.F_inst_per_coni
-        ~periods.dF_coniLCS_poly_per
-        ~periods.ddF_coniLCS_poly_per
-        ~periods.dddF_coniLCS_poly_per
-        ~periods.ddddF_coniLCS_poly_per
+        ~periods.F_coni
+        ~periods.F_coniLCS_bulk
+        ~periods.F_coniLCS_exp
+        ~periods.F_coniLCS_poly_split
+        ~periods.F_coniLCS_series
+        ~periods.F_inst_coni
+        ~periods.dF_coniLCS_poly
+        ~periods.ddF_coniLCS_poly
+        ~periods.dddF_coniLCS_poly
+        ~periods.ddddF_coniLCS_poly
         ~periods.delete_coni_index
         ~periods.lcs_tree
     

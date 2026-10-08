@@ -12,3 +12,4 @@ Expensive scans are disabled by default.
    ../notebooks/05_advanced/16_sampling_benchmarks_and_performance
    ../notebooks/05_advanced/17_flux_bounding_case_studies
    ../notebooks/05_advanced/18_hulek_verrill_jaxvacua_demo
+   ../notebooks/05_advanced/19_pfv_pipeline
