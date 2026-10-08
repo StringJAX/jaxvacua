@@ -432,11 +432,22 @@ def compute_zcf(self,
         tau (Array): Axio-dilaton.
         ctau (Array): Complex-conjugate axio-dilaton.
         flux (Array): Flux vector.
-        mode ({"manual", "autodiff"}): Which :func:`W_log_coeff` route to use.
-            ``"manual"`` is the closed-form ``kappa`` / ``a_matrix`` / ``b_vector``
-            + ``Li`` assembly (replaces the old ``compute_zcf_explicit``);
-            ``"autodiff"`` is the css-side ``F_coniLCS_exp`` route (replaces the
-            old ``compute_zcf_compact``). Both must agree numerically.
+        mode ({"manual", "autodiff", "pfv"}): Which :func:`W_log_coeff` route to
+            use.
+
+            * ``"manual"`` (default) -- the closed-form ``kappa`` / ``a_matrix``
+              / ``b_vector`` + ``Li`` assembly (replaces the old
+              ``compute_zcf_explicit``).
+            * ``"autodiff"`` -- the css-side ``F_coniLCS_exp`` +
+              ``dF_coniLCS_exp`` route (replaces the old
+              ``compute_zcf_compact``). Basis-general, and **agrees with**
+              ``"manual"`` numerically in either basis.
+            * ``"pfv"`` -- the PFV / linear-racetrack approximation, built from
+              the integer fluxes alone. It **deliberately does not agree** with
+              the other two: it is an approximation that becomes exact only at
+              the racetrack-stationary point, so a discrepancy against
+              ``"manual"`` measures how far the vacuum sits from the PFV locus
+              (this is the comparison tabulated in the coni-LCS tutorial).
         apply_correction (bool): If True, add :func:`log_coeff_K_corr` to
             ``W_log_coeff`` before exponentiating (replaces the old
             ``compute_zcf_correction`` multiplicative factor).
@@ -475,11 +486,22 @@ def compute_zcf_x(self, x_bulk, flux, mode="manual", apply_correction=False, con
     Args:
         x_bulk (Array): Full real-coord vector containing the bulk moduli and axio-dilaton (without the conifold modulus).
         flux (Array): Flux vector.
-        mode ({"manual", "autodiff"}): Which :func:`W_log_coeff` route to use.
-            ``"manual"`` is the closed-form ``kappa`` / ``a_matrix`` / ``b_vector``
-            + ``Li`` assembly (replaces the old ``compute_zcf_explicit``);
-            ``"autodiff"`` is the css-side ``F_coniLCS_exp`` route (replaces the
-            old ``compute_zcf_compact``). Both must agree numerically.
+        mode ({"manual", "autodiff", "pfv"}): Which :func:`W_log_coeff` route to
+            use.
+
+            * ``"manual"`` (default) -- the closed-form ``kappa`` / ``a_matrix``
+              / ``b_vector`` + ``Li`` assembly (replaces the old
+              ``compute_zcf_explicit``).
+            * ``"autodiff"`` -- the css-side ``F_coniLCS_exp`` +
+              ``dF_coniLCS_exp`` route (replaces the old
+              ``compute_zcf_compact``). Basis-general, and **agrees with**
+              ``"manual"`` numerically in either basis.
+            * ``"pfv"`` -- the PFV / linear-racetrack approximation, built from
+              the integer fluxes alone. It **deliberately does not agree** with
+              the other two: it is an approximation that becomes exact only at
+              the racetrack-stationary point, so a discrepancy against
+              ``"manual"`` measures how far the vacuum sits from the PFV locus
+              (this is the comparison tabulated in the coni-LCS tutorial).
         apply_correction (bool): If True, add :func:`log_coeff_K_corr` to
             ``W_log_coeff`` before exponentiating (replaces the old
             ``compute_zcf_correction`` multiplicative factor).

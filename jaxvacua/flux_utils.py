@@ -688,6 +688,19 @@ def is_physical(
         linear cone test.  Check 3 is still tried afterwards; if it raises,
         the function falls through to check 4 as a last-resort sanity check.
 
+        **Structured alternative.** This function returns a bare ``bool`` and
+        names the failing check only through ``print(verbose=True)``, so a
+        caller cannot act on *why* a point was rejected.
+        :meth:`jaxvacua.vacuum.Vacuum.diagnostics` reports the same cascade as
+        ``{check: (ok, value, reason)}``, additionally covers the residual, flux
+        integrality and the (signed) tadpole, and marks a check whose inputs are
+        unavailable as *skipped* rather than silently passed.  Two deliberate
+        differences: it resolves the hyperplanes three ways
+        (:func:`jaxvacua.vacuum.resolve_hyperplanes`) instead of only
+        ``lcs_tree.hyperplanes``, and it omits check 4 — ``Im(z) > 0`` is not a
+        physicality requirement, the moduli constraint being Kähler-cone
+        membership plus metric positivity.
+
     Args:
         model (FluxEFT): Finder instance providing
             :func:`_convert_real_to_complex`, :attr:`lcs_tree` and (for
@@ -706,6 +719,9 @@ def is_physical(
     Returns:
         bool: ``True`` if ``x`` is in the physical region by all applicable
         checks, ``False`` otherwise.
+
+    See also: :meth:`jaxvacua.vacuum.Vacuum.diagnostics` and
+    :meth:`jaxvacua.vacuum.Vacuum.is_consistent` for the structured form.
 
     """
     x_jax = jnp.array(x)

@@ -682,8 +682,9 @@ class Vacuum:
     r"""
     **Description:**
     Solver-state flux vacuum: real coordinates ``x``, the full flux vector and
-    the solved diagnostics.  Base class of :class:`PFV` (and the private
-    ``afvs.AFV`` proxy-seed type).
+    the solved diagnostics.  Base class of :class:`PFV`, and of the
+    promotion-layer types ``afvs.AFV`` (an ISD-proxy seed) and
+    ``afvs.PromotedPFV``.
 
     .. admonition:: Details
         :class: dropdown

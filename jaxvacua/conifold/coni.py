@@ -155,7 +155,7 @@ class Conifold:
             str: String representation.
         """
 
-        return f"A conifold limit in complex structure moduli space dual to a flop transition with GV = {self.ncf}"
+        return f"A conifold limit dual to flop with GV = {self.ncf}"
 
     # ------------------------------------------------------------------ #
     # Lazy / on-demand getter methods

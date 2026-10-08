@@ -796,6 +796,17 @@ def save_model_data(
 
     if os.path.isfile(filename):
         print(f"Model ID already exists! File `{fname}` might be overwritten!")
+        # Only prompt when there is a human to answer.  Under a notebook runner,
+        # CI, or any piped stdin, `input()` raises (nbclient:
+        # StdinNotImplementedError) and takes the whole run down -- which is how
+        # `03_cytools_interface` failed to execute.  Non-interactive callers get
+        # the safe choice: keep the existing file rather than silently
+        # overwriting data nobody confirmed.
+        if not (sys.stdin is not None and sys.stdin.isatty()):
+            print(f"Non-interactive session: keeping the existing `{fname}` "
+                  "(delete it first, or save under a different `model_ID`, to "
+                  "replace it).")
+            return
         asking_input = input("Do You Want To Continue? [y/n]")
         if asking_input == "y":
             save_zipped_pickle(data, filename, protocol=-1)

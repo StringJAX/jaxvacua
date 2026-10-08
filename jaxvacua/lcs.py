@@ -986,17 +986,32 @@ class lcs_tree(object):
             pfvs.CYData: The wrapped geometry.
 
         Raises:
-            ImportError: With a friendly install hint if ``pfvs`` is unavailable.
+            NotImplementedError: If this tree is in the general basis
+                (``conifold_basis=False``), which the bridge does not support.
+                Checked **first**, deliberately: that restriction is a property
+                of the geometry, whereas the ``pfvs`` requirement below is a
+                property of the environment — so the intrinsic, deterministic
+                error is reported regardless of what happens to be installed.
+                (Previously the import guard ran first, which made this method
+                raise ``ImportError`` on a general-basis tree wherever ``pfvs``
+                was absent — e.g. in CI, where the optional extra is not
+                installed.)
+            ImportError: With an install hint if ``pfvs`` is unavailable.
         """
+        # Intrinsic validation first (raises NotImplementedError in the general
+        # basis); only then the optional-dependency gate.
+        kwargs = self.to_cydata_kwargs()
+
         from .flux_utils import _import_pfvs
         pfvs = _import_pfvs()
         if pfvs is None:
             raise ImportError(
-                "lcs_tree.to_cydata() requires the optional `pfvs` package "
-                "(github.com/natemacfadden/pfvs). Install it, e.g. "
-                "`pip install jaxvacua[pfvs]`."
+                "lcs_tree.to_cydata() requires the optional `pfvs` package, "
+                "which is not on PyPI: install it from source with "
+                "`pip install git+https://github.com/natemacfadden/pfvs` "
+                "(its dependencies come with `pip install jaxvacua[pfvs]`)."
             )
-        return pfvs.CYData(**self.to_cydata_kwargs())
+        return pfvs.CYData(**kwargs)
 
 
 # Register the lcs_tree class as a pytree node for JAX transformations

@@ -56,9 +56,23 @@ setup(
     extras_require={
         'notebooks': ['jupyterlab', 'ipywidgets', 'anywidget'],
         'viz': ['matplotlib', 'seaborn', 'plotly'],
-        # External PFV enumerator (github.com/natemacfadden/pfvs) + its deps,
-        # for the jaxvacua.flux_utils <-> pfvs interop bridge (optional).
-        'pfvs': ['pfvs', 'latticepts', 'ortools', 'python-flint', 'matplotlib'],
+        # Dependencies of the external PFV enumerator
+        # (github.com/natemacfadden/pfvs), for the optional
+        # jaxvacua.flux_utils <-> pfvs interop bridge.
+        #
+        # `pfvs` itself is deliberately NOT listed: it is not published on PyPI
+        # (github-only, and it builds a Cython extension), so a bare 'pfvs'
+        # requirement makes `pip install jaxvacua[pfvs]` fail to resolve.  A PEP
+        # 508 direct reference (`pfvs @ git+https://...`) is not an option
+        # either -- PyPI rejects direct URLs in uploaded metadata.  So this
+        # extra installs everything pfvs needs, and pfvs is installed alongside:
+        #
+        #     pip install "jaxvacua[pfvs]"
+        #     pip install "git+https://github.com/natemacfadden/pfvs"
+        #
+        # The bridge is guarded at runtime by `flux_utils.has_pfvs()`, so
+        # jaxvacua is fully functional without it.
+        'pfvs': ['latticepts', 'ortools', 'python-flint', 'matplotlib'],
     },
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',

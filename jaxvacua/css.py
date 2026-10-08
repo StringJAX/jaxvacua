@@ -2317,7 +2317,31 @@ class css:
         """
 
         if self.periods.limit in ["LCS", "coniLCS", "coniLCS_bulk", "coniLCS_series"]:
-            return self._monodromy_matrix_LCS(b)
+            T_f = self._monodromy_matrix_LCS(b)
+            T_int = jnp.round(T_f).astype(jnp.int32)
+            # The entries are individually RATIONAL -- alpha_a = kappa_aaa/6 + 2 b_a,
+            # beta_ab = kappa_aab/2 + a_ab, gamma_b = -kappa_baa/2 + a_ba -- so
+            # integrality is a property of the topological data, not of the
+            # formula.  It needs BOTH conventions to hold:
+            #   b_a = (c_2 . D_a)/24     =>  alpha_a = chi(O(D_a))   in Z   (Riemann-Roch)
+            #   a_ab = kappa_aab/2 (mod Z) =>  beta, gamma           in Z
+            # the latter using (kappa_aab + kappa_abb)/2 in Z, itself
+            # chi(O(D_a+D_b)) - chi(O(D_a)) - chi(O(D_b)).  A user-supplied
+            # ``lcs_tree(a_matrix=...)`` that breaks the congruence yields a
+            # half-integral T, which rounding would silently turn into a matrix
+            # OUTSIDE Sp(2h12+2, Z) -- so refuse rather than round.
+            int_err = float(jnp.max(jnp.abs(T_f - T_int.astype(T_f.dtype))))
+            if int_err > 1e-8:
+                raise ValueError(
+                    f"monodromy_matrix_single: the analytic T_{b} deviates from "
+                    f"integer by {int_err:.3e}, so it is not in "
+                    f"Sp({2 * self.h12 + 2}, Z).  This means `lcs_tree.a_matrix` "
+                    f"violates a[a,b] = kappa[a,a,b]/2 (mod 1), and/or "
+                    f"`lcs_tree.b_vector` is not (c_2 . D_a)/24.  Use the "
+                    f"HKTY-canonical convention "
+                    f"a[I,J] = kappa[max(I,J), max(I,J), min(I,J)]/2."
+                )
+            return T_int
         else:
             return self._monodromy_matrix_numerical(b)
 
@@ -2391,10 +2415,11 @@ class css:
             Array: Integer (``jnp.int32``) monodromy matrix of shape
                 ``(2*h12+2, 2*h12+2)``.
 
-        Raises:
-            ValueError: at construction time if the raw float ``T`` differs
-                from its integer round by more than :math:`10^{-8}` — flags
-                a non-HKTY-canonical ``a_matrix`` that breaks integrality.
+        Returns the **raw float** matrix; :func:`monodromy_matrix_single` rounds
+        it and raises if the deviation from an integer exceeds
+        :math:`10^{-8}`.  (This function is jitted, so it cannot raise on a
+        traced value itself — the check has to live in the un-jitted caller,
+        exactly as for :func:`_monodromy_matrix_numerical`.)
 
         See also: :func:`_monodromy_matrix_numerical`
         """
@@ -2424,7 +2449,9 @@ class css:
         T = T.at[0, h + 2:n].add(0.5 * kappa[b, b, :] + a_sym[b, :])
         T = T.at[0, h + 1].add(kappa[b, b, b] / 6.0 + 2.0 * b_vec[b])
 
-        return jnp.round(T).astype(jnp.int32)
+        # RAW float: rounding and the integrality check happen in the un-jitted
+        # caller (a jitted function cannot raise on a traced value).
+        return T
 
     @partial(jit, static_argnums=(1, 2))
     def _monodromy_matrix_numerical_kernel(
