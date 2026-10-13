@@ -4,6 +4,19 @@ All notable changes to JAXVacua will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- `tests/test_css.py::TestMonodromyAsymmetric::test_monodromy_single_LCS_equals_numerical` compared the
+  raw float matrix of `_monodromy_matrix_LCS` with the integer matrix of `_monodromy_matrix_numerical`
+  by exact equality (2026-10-12). Under jax 0.11.2 one entry is 1.9999999999999998, so the scheduled
+  CI run of 2026-10-11 failed (job "Full (geometry-medium)"; reproduced in a replica of the CI
+  environment). The test now applies `monodromy_matrix_single`'s own rule: integral to 1e-8, then
+  rounded. No package code changed.
+- The docstring of `css._monodromy_matrix_LCS` described its result both as an integer (`jnp.int32`)
+  matrix and as the raw float matrix; it returns the raw float matrix, which
+  `monodromy_matrix_single` rounds (2026-10-13; docstring only).
+
 ## [0.1.0] - 2026-04-30
 
 First public release.

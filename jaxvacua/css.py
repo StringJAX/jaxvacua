@@ -2412,12 +2412,11 @@ class css:
             b (int): Direction index (0-based, static under JIT).
 
         Returns:
-            Array: Integer (``jnp.int32``) monodromy matrix of shape
-                ``(2*h12+2, 2*h12+2)``.
+            Array: The monodromy matrix of shape ``(2*h12+2, 2*h12+2)`` as a **raw
+                float** array (integer-valued up to rounding).
 
-        Returns the **raw float** matrix; :func:`monodromy_matrix_single` rounds
-        it and raises if the deviation from an integer exceeds
-        :math:`10^{-8}`.  (This function is jitted, so it cannot raise on a
+        :func:`monodromy_matrix_single` rounds it to ``jnp.int32`` and raises if
+        the deviation from an integer exceeds :math:`10^{-8}`.  (This function is jitted, so it cannot raise on a
         traced value itself — the check has to live in the un-jitted caller,
         exactly as for :func:`_monodromy_matrix_numerical`.)
 

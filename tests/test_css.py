@@ -1981,11 +1981,18 @@ class TestMonodromyAsymmetric(TestCase):
         **Description:**
         The analytical LCS formula and the numerical lstsq solver must
         produce the same integer matrix on this geometry.
+
+        ``_monodromy_matrix_LCS`` returns the raw float matrix; as in
+        :func:`monodromy_matrix_single`, it is checked to be integral to 1e-8
+        and then rounded. (An exact comparison of the raw floats failed under
+        jax 0.11.2 by one ulp: 1.9999999999999998 for 2.)
         """
         for b in range(self.h):
-            T_lcs = self.model._monodromy_matrix_LCS(b)
-            T_num = self.model._monodromy_matrix_numerical(b)
-            np.testing.assert_array_equal(np.asarray(T_lcs), np.asarray(T_num),
+            T_lcs = np.asarray(self.model._monodromy_matrix_LCS(b))
+            T_num = np.asarray(self.model._monodromy_matrix_numerical(b))
+            self.assertLess(np.max(np.abs(T_lcs - np.rint(T_lcs))), 1e-8,
+                            msg=f"LCS monodromy for b={b} is not integral.")
+            np.testing.assert_array_equal(np.rint(T_lcs).astype(int), T_num,
                 err_msg=f"LCS and numerical monodromy disagree for b={b}.")
 
     def test_monodromy_single_preserves_periods(self):
