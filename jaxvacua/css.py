@@ -2413,7 +2413,9 @@ class css:
 
         Returns:
             Array: The monodromy matrix of shape ``(2*h12+2, 2*h12+2)`` as a **raw
-                float** array (integer-valued up to rounding).
+                float** array: integer-valued up to rounding for the canonical (HKTY)
+                ``a_matrix``; a user-supplied ``a_matrix`` that breaks the integrality
+                congruence gives half-integral entries.
 
         :func:`monodromy_matrix_single` rounds it to ``jnp.int32`` and raises if
         the deviation from an integer exceeds :math:`10^{-8}`.  (This function is jitted, so it cannot raise on a

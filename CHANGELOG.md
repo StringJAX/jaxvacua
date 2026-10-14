@@ -15,7 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   rounded. No package code changed.
 - The docstring of `css._monodromy_matrix_LCS` described its result both as an integer (`jnp.int32`)
   matrix and as the raw float matrix; it returns the raw float matrix, which
-  `monodromy_matrix_single` rounds (2026-10-13; docstring only).
+  `monodromy_matrix_single` rounds, and which is integral only for the canonical (HKTY) `a_matrix`
+  (2026-10-13; docstring only).
 
 ## [0.1.0] - 2026-04-30
 
