@@ -132,7 +132,7 @@ jobs:
         include:
           - suite: light-core
             python-version: "3.13"
-            paths: "tests/test_flux_utils.py tests/test_flux_utils_helpers.py tests/test_hypergeometric_models.py tests/test_lattice_utils.py tests/test_lcs.py tests/test_pytree_stability.py tests/test_sampling.py tests/test_sampling_backend_helpers.py tests/test_util_core.py"
+            paths: "tests/test_flux_utils.py tests/test_flux_utils_helpers.py tests/test_hypergeometric_models.py tests/test_lattice_utils.py tests/test_lcs.py tests/test_pytree_stability.py tests/test_sampling.py tests/test_sampling_backend_helpers.py tests/test_util_core.py tests/test_vacuum.py"
             split_args: ""
           - suite: geometry-medium
             python-version: "3.13"

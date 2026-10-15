@@ -695,6 +695,10 @@ class TestConifoldFreezerMassSpectrum(TestCase):
         self.assertAllClose(a.masses, b.masses, atol=0.0)
 
 
+# Slow as a whole class (2026-10-15): setUpClass runs a Newton solve (~50 s
+# locally) and three tests take 27-68 s each, ~30% of the fast job on its own.
+# The class still runs on every push in the CI "Full (freezer)" job.
+@pytest.mark.slow
 class TestPFVEFTLCS(TestCase):
     r"""
     :class:`PFVEFT` on the CP[1,1,1,6,9] LCS reference PFV (``M=[-16,50]``,
@@ -916,6 +920,10 @@ class TestPFVEFTLCS(TestCase):
             eom.ddV_x_light(xl, self.flux, reduction="autodiff")))))
 
 
+# Slow as a whole class (2026-10-15): five tests take 26-121 s each locally,
+# ~43% of the fast job on its own.  The class still runs on every push in the
+# CI "Full (freezer)" job.
+@pytest.mark.slow
 class TestPFVEFTConiLCS(TestCase):
     r"""
     coniLCS :class:`PFVEFT` on the built-in 'aule' fixture: bulk slaved

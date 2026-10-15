@@ -17,6 +17,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   matrix and as the raw float matrix; it returns the raw float matrix, which
   `monodromy_matrix_single` rounds, and which is integral only for the canonical (HKTY) `a_matrix`
   (2026-10-13; docstring only).
+- `tests/test_lcs.py::TestLcsTree::test_from_file_*` looked for `jaxvacua/models/KS/h12_2/model_1.p`, a
+  path that never existed: it mixes the old layout `models/KS/h12_2/Model_1/`, removed in `1abf5bfb`
+  (2026-04-21), with the new flat `models/h12_2/model_1.p` (2026-10-15). Both tests were skipped ("Model
+  file not found") everywhere, CI included, since they were written (`ed7c2d56`, 2026-04-22); with the
+  current path both pass.
+
+### Changed
+- CI: the fast job (`pytest -m "not slow"`) exceeded its 30-minute limit on Python 3.12 and took 20.6–27.8
+  min on 3.13, against ~8 min before 2026-07-30 (2026-10-15). Two classes added then,
+  `tests/test_freezer.py::TestPFVEFTLCS` and `TestPFVEFTConiLCS`, took 500 of the 688 s of the fast
+  selection locally. Both are now `@pytest.mark.slow` as whole classes (the LCS class's `setUpClass` alone
+  takes ~50 s); they still run on every push in the "Full (freezer)" job. Locally the fast selection now
+  takes 170 s (433 passed, 7 skipped, 1 xfailed, with the `test_lcs.py` fix above).
+- CI: `tests/test_vacuum.py` runs in the "Full (light-core)" job; it was the only test file in no
+  full-suite job (2026-10-15).
 
 ## [0.1.0] - 2026-04-30
 

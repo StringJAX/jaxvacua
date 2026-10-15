@@ -104,7 +104,7 @@ class TestLcsTree(TestCase):
 
         # Path to the shipped model file for from_file tests
         cls.model_file = os.path.join(
-            os.path.dirname(__file__), "..", "jaxvacua", "models", "KS", "h12_2", "model_1.p"
+            os.path.dirname(__file__), "..", "jaxvacua", "models", "h12_2", "model_1.p"
         )
 
     # ------------------------------------------------------------------
