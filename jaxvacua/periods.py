@@ -235,7 +235,7 @@ class periods:
                     if mirror_cy is None:
                         raise ValueError(f"Need to provide `mirror_cy` if `use_cytools=True`!")
                     
-                    time_out = kwargs.get('time_out', 120)
+                    time_out = kwargs.get('time_out', None)  # no limit unless given
                     compute_gws = kwargs.get('compute_gws', False)
                     
                     if self.maximum_degree>0:

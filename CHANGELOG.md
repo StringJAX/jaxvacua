@@ -4,9 +4,45 @@ All notable changes to JAXVacua will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [Unreleased] - 0.1.4 (prepared 2026-10-28; not yet tagged)
+
+### Fixed
+- **The time limits of the CYTools steps were unreliable.** `cytools_model_data_init`, `cytools_instanton_data_init`
+  and `eft_to_cone` guarded their CYTools calls (the Mori cone cap and the Kähler cone, its rays, extremal rays and
+  hyperplanes, the conifold search, the GV/GW invariants) with `util.exit_after`, which interrupts the main thread
+  through a simulated SIGINT. That acts only under Python's default SIGINT handler, which CYTools replaces with its
+  own. Measured: in a script, or a notebook cell that imports CYTools itself, `exit_after(1)` let a 6 s loop finish;
+  in a later notebook cell (the kernel restores the default handler before each cell) it fired after about 1 s.
+  A number for `time_out` now runs the steps in child processes (`stringjax_tools.run_in_subprocess`) that are
+  killed at the limit, in scripts and notebooks alike: the Mori cone cap with the Kähler cone, the cone's three
+  properties, the conifold search and each invariant table get one child and one limit each (the child's start-up,
+  importing CYTools and JAXVacua, about 2 s, counts towards it); the grading vector is computed within the limit.
+  The Mori cone cap is computed once in the cone step (it was computed twice). Children run on the CPU.
+- The cone fallbacks caught every exception with a bare `except:`, so a Ctrl-C (`KeyboardInterrupt`) was turned
+  into the toric-Kähler-cone fallback, and a real error was reported as "took too long". Interrupts now propagate;
+  the warning names the timeout or the error.
+- `eft_to_poly` and `eft_to_cy` (and so `eft_to_cone` without generators) raised `NameError`: `Polytope` was not
+  imported.
+- `cytools_model_data_init` raised `UnboundLocalError` for h12 ≥ 100 (the large-h12 branch never set the Mori cone
+  generators); with `basis_change`, missing generators made `np.matmul` fail.
+
+### Changed
+- `time_out` defaults to `None` (no limit) in `cytools_model_data_init`, `cytools_instanton_data_init`,
+  `lcs_tree.from_cytools` and `periods` (was 10 s, 10 s, 10 s and 120 s; `eft_to_cone`'s `timeout`: 60 s). In
+  scripts this changes nothing, since those limits never acted there. **In notebooks it does:** where the old limits
+  acted, a slow Kähler cone fell back to the toric cone after 10 s and a slow GV table aborted the cell
+  (`KeyboardInterrupt`); now both run to completion unless `time_out` is given. With a number, the cone steps fall
+  back (the toric Kähler cone; no rays and all hyperplanes; no conifolds), the GV/GW computation and `eft_to_cone`
+  raise `TimeoutError`, and a failure in the child raises `stringjax_tools.ChildProcessFailed` (a `RuntimeError`)
+  where CYTools' own exception was raised before. A `time_out` that is neither `None` nor positive raises
+  `ValueError`.
+- Requires `stringjax-tools>=0.2.0`.
+- `util.exit_after` is no longer used by JAXVacua; its docstring states when it cannot act.
 
 ### Added
+- `tests/test_cytools_interface.py`: the default starts no child; in-process and child results agree (an h11 = 3
+  geometry with two conifolds); an expired limit falls back or raises; an error falls back with its reason; a
+  `KeyboardInterrupt` inside CYTools propagates; the h12 ≥ 100 branch; the child's CPU platform.
 - Release workflow `.github/workflows/release.yml`: pushing a tag `vX.Y.Z` builds the sdist and wheel,
   runs `twine check --strict`, refuses a tag that differs from the built version, and publishes to PyPI
   through Trusted Publishing (no API token). Run by hand, it builds and checks without publishing.

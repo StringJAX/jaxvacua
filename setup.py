@@ -20,7 +20,7 @@ from pathlib import Path
 
 setup(
     name='jaxvacua',
-    version='0.1.3',
+    version='0.1.4',
     description='A JAX-based framework for sampling and analysing flux vacua in string theory.',
     long_description=Path('README.md').read_text(encoding='utf-8'),
     long_description_content_type='text/markdown',
@@ -51,7 +51,7 @@ setup(
         'gurobipy',
         'cytools',
         'jaxpolylog>=0.4.0',
-        'stringjax-tools>=0.1.0',
+        'stringjax-tools>=0.2.0',
     ],
     extras_require={
         'notebooks': ['jupyterlab', 'ipywidgets', 'anywidget'],

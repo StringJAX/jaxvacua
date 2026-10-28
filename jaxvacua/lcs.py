@@ -797,7 +797,7 @@ class lcs_tree(object):
                      conifold_basis: bool | None = True,
                      model_ID: int | None = None,
                      save_file: bool = False,
-                     time_out: int = 10,
+                     time_out: float | None = None,
                      compute_gws: bool = False,
                      remove_axis: int | None = None):
         r"""
@@ -814,7 +814,7 @@ class lcs_tree(object):
             conifold_curve (Array | None): Conifold curve charges for the coniLCS limit. Defaults to ``None``.
             model_ID (int | None): An integer ID for the model, used for saving data. If None, data is not saved.
             save_file (bool): Whether to save the model data to a file. Default is False.
-            time_out (int): Time limit in seconds for computing Gopakumar-Vafa and Gromov-Witten invariants. Default is 10 seconds.
+            time_out (float | None): Time limit in seconds for each CYTools step of the model data (cones, conifolds, Gopakumar-Vafa and Gromov-Witten invariants), enforced in a child process; see :func:`jaxvacua.cytools_interface.cytools_model_data_init`. Default is ``None`` (no limit).
             compute_gws (bool): Whether to compute Gromov-Witten invariants in addition to Gopakumar-Vafa invariants. Default is False.
             remove_axis (int | None): If not ``None``, the specified axis is removed from the GV/GW charge data. Default is ``None``, which means that no axis is removed.
             

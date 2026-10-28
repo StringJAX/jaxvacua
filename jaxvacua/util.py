@@ -717,6 +717,17 @@ def exit_after(s: int) -> Callable:
     ``s`` seconds.  Internally arms a ``threading.Timer`` that calls
     :func:`quit_function` to interrupt the main thread on expiry.
 
+    .. warning::
+        The interrupt is simulated (``_thread.interrupt_main``): it acts only
+        under Python's default SIGINT handler and only between bytecodes.
+        CYTools installs its own handler, so in a script that has imported
+        CYTools (as JAXVacua does) the timeout does not fire; in a Jupyter
+        kernel it fires in cells after the one that imported CYTools (the
+        kernel restores the default handler per cell). It never stops compiled
+        code.
+        JAXVacua itself no longer uses this decorator; for an enforced limit use
+        :func:`stringjax_tools.run_in_subprocess`.
+
     Args:
         s (int): Timeout in seconds.
 
