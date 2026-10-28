@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Release workflow `.github/workflows/release.yml`: pushing a tag `vX.Y.Z` builds the sdist and wheel,
+  runs `twine check --strict`, refuses a tag that differs from the built version, and publishes to PyPI
+  through Trusted Publishing (no API token). Run by hand, it builds and checks without publishing.
+
 ## [0.1.3] - 2026-10-28
 
 Tagged `v0.1.3` at `161f47bf`; on PyPI (wheel and sdist).
