@@ -37,6 +37,8 @@ Next, choose the installation method that best fits your use case:
   `pip install -e .`  
   The `-e` (editable) option ensures that any local code changes take effect immediately without requiring reinstallation.
 
+- **Optional extras:** `viz`, `notebooks` and `pfvs` add plotting, Jupyter and the dependencies of the pfvs bridge; `all` installs every extra. `bounding` names Gurobi (`gurobipy`), which is already a core dependency: the default moduli sampling uses it. Its pip wheel carries a size-limited licence; large models need a full (free academic) Gurobi licence.
+
 
 ## Requirements
 

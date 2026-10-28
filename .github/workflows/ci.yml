@@ -32,7 +32,7 @@ on:
 
 # Single source of truth for the jaxpolylog spec.
 env:
-  JAXPOLYLOG_PIN: "jaxpolylog>=0.1.0,!=0.2.0"
+  JAXPOLYLOG_PIN: "jaxpolylog>=0.4.0"
 
 # Cancel any in-flight runs on the same ref when a new commit lands.
 # Without this, every push spawns many jobs (fast + docs + full test matrix)
@@ -110,9 +110,10 @@ jobs:
           pip install platformdirs
           pip install -e .
 
-      - name: Build HTML (warnings allowed)
+      - name: Build HTML (warnings fail the job)
         run: |
-          sphinx-build -b html -E -q -j 1 --keep-going \
+          # -W (since 0.1.3): a warning fails the job; --keep-going reports all of them
+          sphinx-build -b html -E -q -j 1 -W --keep-going \
             -d /tmp/sphinx-doctree \
             documentation/source /tmp/sphinx-out
 

@@ -1,16 +1,19 @@
 # Copyright 2024 Andreas Schachner
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This file is part of JAXVacua.
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
 """Tests for flux-vector utility functions.
 
@@ -247,6 +250,32 @@ class TestPFVAlgebra(TestCase):
                     "a.T@M in Z", "24*b@M in 24Z", "tadpole 0<=Qflux<=Q"):
             self.assertIn(key, c)
             self.assertTrue(bool(c[key][0]), msg=f"condition {key!r} must hold")
+
+    def test_pfv_tadpole_is_minus_M_dot_K(self):
+        r"""**Description:** the tadpole value is :math:`Q_{\rm flux} = -M\cdot K = f\cdot\Sigma\cdot h`
+        (248 here; arXiv:2512.17095's :math:`-\tfrac12 M\cdot K = 124 \le Q_{D3} = 138` in the
+        half-normalised form) against :math:`Q_O + 2\,n_{\overline{D3}}`; the earlier
+        :math:`-\tfrac12 M\cdot K \le Q_O` admitted fluxes up to :math:`2Q_O`."""
+        key = "tadpole 0<=Qflux<=Q"
+        q = -float(self.M @ self.K)
+        self.assertEqual(q, 248.0)
+        c = self.model.pfv_conditions(self.M, self.K)
+        self.assertAlmostEqual(float(np.asarray(c[key][1])), q, places=9)
+        f = self.model.pfv_to_flux(self.M, self.K)
+        self.assertAlmostEqual(float(np.real(self.model.tadpole(f))), q, places=9)
+        self.assertEqual(self.model.tadpole_cap(1), float(self.model.Q()) + 2.0)
+        with self.assertRaises(ValueError):
+            self.model.tadpole_cap(-1)
+        old = self.model._Q
+        try:
+            self.model._Q = q - 1          # one below the flux charge: fails
+            self.assertFalse(bool(self.model.pfv_conditions(self.M, self.K)[key][0]))
+            self.model._Q = q - 2          # one anti-D3 raises the cap to q: passes
+            self.assertTrue(bool(self.model.pfv_conditions(self.M, self.K, n_antiD3=1)[key][0]))
+            self.model._Q = (q + 1) / 2    # -M.K/2 <= Q (the old rule) would have passed
+            self.assertFalse(bool(self.model.pfv_conditions(self.M, self.K)[key][0]))
+        finally:
+            self.model._Q = old
 
     def test_pfv_conditions_singular_N_is_safe(self):
         r"""**Description:** a non-PFV flux with singular ``N`` reports

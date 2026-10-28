@@ -1,10 +1,19 @@
 # Copyright 2024-2026 Andreas Schachner
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This file is part of JAXVacua.
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+# JAXVacua is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# JAXVacua is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with JAXVacua. If not, see <https://www.gnu.org/licenses/>.
 
 r"""Tests for the vacuum data containers (:mod:`jaxvacua.vacuum`).
 
@@ -547,6 +556,66 @@ class TestVacuumDiagnostics(TestCase):
         self.assertIn("kahler_metric_pd", graded)     # the 2026-06-02 check ran
         self.assertIn("tadpole", graded)
         self.assertTrue(v.is_consistent(self.model))
+
+    def test_tadpole_window_allows_anti_D3_branes(self):
+        r"""**Description:** the window is :math:`0 < Q_{\rm flux} \le Q_O + 2\,n_{\overline{D3}}`
+        and :attr:`VacuumAnalysis.brane_balance` reports :math:`(Q_O - Q_{\rm flux})/2`: a flux of
+        charge :math:`Q_O + 2` (one anti-D3, arXiv:2406.13751 eq. (2.30)) fails with
+        ``n_antiD3 = 0`` and passes with 1."""
+        q = float(np.real(self.model.tadpole(self.flux)))
+        old = self.model._Q
+        try:
+            self.model._Q = q - 2
+            v = self._vac()
+            self.assertFalse(v.diagnostics(self.model)["tadpole"][0])
+            self.assertEqual(v.analysis.brane_balance, -1.0)
+            ok = v.diagnostics(self.model, n_antiD3=1, refresh=True)["tadpole"]
+            self.assertTrue(ok[0], ok[2])
+            self.assertEqual(v.analysis.args["n_antiD3"], 1)
+        finally:
+            self.model._Q = old
+
+    def test_n_antiD3_is_validated(self):
+        r"""**Description:** a negative or non-integer anti-D3 count raises instead of skipping
+        the tadpole checks silently."""
+        v = self._vac()
+        for bad in (-1, 1.5):
+            with self.assertRaises(ValueError):
+                v.diagnostics(self.model, n_antiD3=bad, refresh=True)
+            with self.assertRaises(ValueError):
+                self.model.tadpole_cap(bad)
+
+    def test_a_pfv_carries_its_anti_D3_count_and_is_rechecked(self):
+        r"""**Description:** ``PFVData.n_antiD3`` is stored, serialised and used by default;
+        stored conditions (e.g. a 0.1.2 record's lax -M.K/2 verdict) are recomputed."""
+        q = -float(self.M @ self.K)
+        old = self.model._Q
+        try:
+            self.model._Q = q - 2      # one anti-D3 needed
+            pfv = PFV.from_quantum_numbers(self.model, self.M, self.K, self.tau, n_antiD3=1)
+            self.assertEqual(pfv.data.n_antiD3, 1)
+            self.assertTrue(pfv.diagnostics(self.model)["pfv:tadpole 0<=Qflux<=Q"][0])
+            self.assertEqual(pfv.analysis.args["n_antiD3"], 1)        # its own count by default
+            self.assertFalse(pfv.diagnostics(self.model, n_antiD3=0, refresh=True)
+                             ["pfv:tadpole 0<=Qflux<=Q"][0])
+            back = PFVData.from_dict(pfv.data.to_dict())
+            self.assertEqual(back.n_antiD3, 1)
+            self.assertEqual(PFVData.from_dict({k: v for k, v in pfv.data.to_dict().items()
+                                                if k != "n_antiD3"}).n_antiD3, 0)
+            stale = PFV.from_quantum_numbers(self.model, self.M, self.K, self.tau)
+            stale.data.conditions["tadpole 0<=Qflux<=Q"] = (True, q / 2)  # as 0.1.2 stored it
+            entry = stale.diagnostics(self.model, n_antiD3=1, refresh=True)["pfv:tadpole 0<=Qflux<=Q"]
+            self.assertEqual(entry[1], q)                             # recomputed: -M.K
+        finally:
+            self.model._Q = old
+
+    def test_a_hook_without_n_antiD3_still_runs(self):
+        r"""**Description:** a subclass ``_extra_checks(model)`` written for 0.1.2 keeps working."""
+        class Old(Vacuum):
+            def _extra_checks(self, model):
+                return {"old": (True, 1, "")}
+        v = Old(x=self.x, flux=self.flux)
+        self.assertIn("old", v.diagnostics(self.model))
 
     def test_skipped_checks_are_excluded_from_the_verdict(self):
         r"""**Description:** a check whose inputs are unavailable reports

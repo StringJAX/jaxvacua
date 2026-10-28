@@ -165,7 +165,8 @@ class FluxEFT(css):
     def Q(self) -> int | None:
         r"""
         **Description:**
-        Returns the D3-tadpole for the flux sector.
+        Returns the D3-tadpole for the flux sector: the orientifold charge :math:`Q_O`, the bound on
+        :math:`Q_{\rm flux}` = :func:`tadpole` without anti-D3-branes (:func:`tadpole_cap`).
         
         Returns:
             int: D3-tadpole for the flux sector.
@@ -183,6 +184,38 @@ class FluxEFT(css):
             return self.lcs_tree.h11+self.lcs_tree.h12+2
 
         return None
+
+    def tadpole_cap(self, n_antiD3: int = 0) -> float | None:
+        r"""
+        **Description:**
+        The largest flux D3 charge allowed with ``n_antiD3`` anti-D3-branes:
+        :math:`Q_{\rm flux} \le Q_O + 2\,n_{\overline{D3}}`, with :math:`Q_O` = :func:`Q`.
+
+        .. admonition:: Details
+            :class: dropdown
+
+            Gauss's law in the normalisation of :func:`tadpole` (arXiv:2406.13751, eqs. (2.27)–(2.29)):
+            :math:`2(N_{D3} - N_{\overline{D3}}) + Q_{\rm flux} - Q_O = 0`, with
+            :math:`Q_{\rm flux} = f\cdot\Sigma\cdot h` and :math:`Q_O` the charge of the
+            O-planes (:math:`2 + h^{1,1} + h^{2,1}` for the orientifolds of :func:`Q`'s default). So
+            :math:`Q_{\rm flux} \le Q_O` without anti-D3-branes, and one anti-D3-brane allows
+            :math:`Q_O + 2` (the configuration of arXiv:2406.13751, eq. (2.30)). In the other
+            normalisation of the literature, :math:`-\tfrac12 M\cdot K \le Q_{D3} = Q_O/2`
+            (arXiv:1912.10047, 2009.03312), the same bound is halved.
+
+        Args:
+            n_antiD3 (int, optional): The number of anti-D3-branes. Defaults to ``0``.
+
+        Returns:
+            float | None: :math:`Q_O + 2\,n_{\overline{D3}}`, or ``None`` if :func:`Q` is unknown.
+
+        Raises:
+            ValueError: If ``n_antiD3`` is negative or not an integer.
+        """
+        if float(n_antiD3) < 0 or not float(n_antiD3).is_integer():
+            raise ValueError(f"tadpole_cap: n_antiD3 must be a non-negative integer, got {n_antiD3!r}")
+        Q = self.Q()
+        return None if Q is None else float(Q) + 2.0 * int(n_antiD3)
 
     def __repr__(self) -> str:
         r"""
@@ -719,7 +752,8 @@ class FluxEFT(css):
         .. admonition:: Details
             :class: dropdown
         
-            The D3-charge induced by fluxes is defined as
+            The D3-charge induced by fluxes (the normalisation of arXiv:2406.13751, eq. (2.27);
+            for PFV fluxes :math:`(M, K)` it is :math:`-M\cdot K`) is defined as
 
             .. math::
                     N_{\mathrm{flux}} = \vec{f}\Sigma \vec{h}\, ,
@@ -731,7 +765,8 @@ class FluxEFT(css):
             fluxes (Array): Array of fluxes. The ordering starts with RR-fluxes, then the NSNS-fluxes.
         
         Returns:
-            int: D3-charge induced by 3-form fluxes.
+            float: The D3 charge :math:`Q_{\rm flux}` induced by 3-form fluxes (integer-valued for
+            integer fluxes).
         
         """
         
@@ -4257,11 +4292,11 @@ FluxEFT.pfv_conditions = _pfv_conditions_func
 FluxEFT.pfv_racetrack = _pfv_racetrack_func
 
 
-def _pfv_data(self, M, K):
+def _pfv_data(self, M, K, n_antiD3=0):
     r"""Return a :class:`~jaxvacua.vacuum.PFVData` for this model and the flux
-    quanta ``(M, K)``."""
+    quanta ``(M, K)``, its tadpole allowing for ``n_antiD3`` anti-D3-branes."""
     from .vacuum import PFVData  # function-local: avoid the flux_eft<->vacuum import cycle
-    return PFVData.from_fluxes(self, M, K)
+    return PFVData.from_fluxes(self, M, K, n_antiD3=n_antiD3)
 
 
 FluxEFT.pfv_data = _pfv_data

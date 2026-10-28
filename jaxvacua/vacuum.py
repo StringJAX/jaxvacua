@@ -73,6 +73,7 @@ Persistence is dict-first — never pickle an instance.  :func:`save_vacua` gzip
 a remote-code-execution vector.
 """
 
+import inspect
 import json
 import math
 import warnings
@@ -413,6 +414,46 @@ def register_vacuum_kind(cls: type) -> type:
     return cls
 
 
+def _check_n_antiD3(n_antiD3) -> int:
+    r"""
+    **Description:**
+    The number of anti-D3-branes as a non-negative integer.
+
+    Args:
+        n_antiD3: The number.
+
+    Returns:
+        int: It.
+
+    Raises:
+        ValueError: If it is negative or not an integer.
+    """
+    n = float(n_antiD3)
+    if n < 0 or not n.is_integer():
+        raise ValueError(f"n_antiD3 must be a non-negative integer, got {n_antiD3!r}")
+    return int(n)
+
+
+def _tadpole_cap(model, n_antiD3: int):
+    r"""
+    **Description:**
+    :math:`Q_O + 2\,n_{\overline{D3}}` (:func:`~jaxvacua.flux_eft.FluxEFT.tadpole_cap`), also for
+    a model that has ``Q()`` but no ``tadpole_cap``.
+
+    Args:
+        model: A ``FluxEFT`` or ``FluxVacuaFinder``.
+        n_antiD3 (int): The number of anti-D3-branes.
+
+    Returns:
+        float | None: The cap, or ``None`` if ``Q()`` is unknown.
+    """
+    cap = getattr(model, "tadpole_cap", None)
+    if cap is not None:
+        return cap(n_antiD3)
+    Q = model.Q()
+    return None if Q is None else float(Q) + 2.0 * n_antiD3
+
+
 def _warn_if_pfv_conditions_fail(data: Any) -> None:
     r"""
     **Description:**
@@ -483,6 +524,12 @@ class VacuumAnalysis:
         alignment (float, optional): Conifold alignment scalar :math:`\Xi`.
             Requires a model **and** PFV quantum numbers, hence derived here rather
             than stored as a core field.
+        brane_balance (float, optional): :math:`N_{D3} - N_{\overline{D3}} =
+            (Q_O - Q_{\rm flux})/2`, implied by Gauss's law
+            (:func:`~jaxvacua.flux_eft.FluxEFT.tadpole_cap`). A payload, not a check: a
+            half-integral value (odd :math:`Q_O - Q_{\rm flux}`) is no configuration of
+            mobile branes alone (it needs a brane stuck on an O-plane) and is
+            reported, not graded.
         args (dict, optional): The tolerances actually used, so a cached report can
             be invalidated when they change.
     """
@@ -492,6 +539,7 @@ class VacuumAnalysis:
     hessian_eigenvalues: Optional[Array] = None
     mass_eigenvalues: Optional[Array] = None
     alignment: Optional[float] = None
+    brane_balance: Optional[float] = None
     args: Optional[Dict[str, Any]] = None
 
     def summary(self) -> str:
@@ -550,7 +598,8 @@ class PFVData:
     **Description:**
     Light, pure-data container for a perturbatively flat vacuum (PFV): the flux
     quanta ``(M, K)`` and the derived algebra (N-matrix, p-vector, full flux
-    vector, PFV-condition results).  No solver state.
+    vector, PFV-condition results).  No solver state.  ``n_antiD3`` is the number of
+    anti-D3-branes its tadpole condition allows for (0: :math:`Q_{\rm flux} \le Q_O`; since 0.1.3).
 
     Construct with :meth:`from_fluxes` (or ``model.pfv_data(M, K)``).
     """
@@ -561,10 +610,11 @@ class PFVData:
     p: Any = None
     flux: Any = None
     conditions: Optional[dict] = None
+    n_antiD3: int = 0
     _model: Any = field(default=None, repr=False)
 
     @classmethod
-    def from_fluxes(cls, model, M, K):
+    def from_fluxes(cls, model, M, K, n_antiD3: int = 0):
         r"""
         **Description:**
         Build a :class:`PFVData` from a model and integer flux quanta ``(M, K)``.
@@ -574,6 +624,8 @@ class PFVData:
                 ``pfv_p_vector``, ``pfv_to_flux``.
             M (Array): M-vector.
             K (Array): K-vector.
+            n_antiD3 (int, optional): The anti-D3-branes the stored tadpole condition allows
+                for (:func:`~jaxvacua.flux_utils.pfv_conditions`). Defaults to ``0``.
 
         Returns:
             PFVData: The populated container.  ``p`` is ``None`` when ``N`` is
@@ -582,11 +634,13 @@ class PFVData:
         M = jnp.asarray(M, dtype=float)
         K = jnp.asarray(K, dtype=float)
         N = model.N_matrix(M)
-        conditions = model.pfv_conditions(M, K)
+        n_antiD3 = _check_n_antiD3(n_antiD3)
+        conditions = model.pfv_conditions(M, K, n_antiD3=n_antiD3)
         det_ok = bool(conditions["det N!=0"][0])  # concrete jnp bool -> Python bool
         p = model.pfv_p_vector(M, K) if det_ok else None
         flux = model.pfv_to_flux(M, K)
-        return cls(M=M, K=K, N=N, p=p, flux=flux, conditions=conditions, _model=model)
+        return cls(M=M, K=K, N=N, p=p, flux=flux, conditions=conditions,
+                   n_antiD3=n_antiD3, _model=model)
 
     # --- accessors (model-independent after construction, except moduli) ------
     def to_flux(self):
@@ -626,6 +680,7 @@ class PFVData:
         return {
             "M": _np(self.M), "K": _np(self.K), "N": _np(self.N),
             "p": _np(self.p), "flux": _np(self.flux), "conditions": conditions,
+            "n_antiD3": int(self.n_antiD3),
         }
 
     @classmethod
@@ -637,7 +692,8 @@ class PFVData:
         return cls(
             M=jnp.asarray(d["M"], dtype=float), K=jnp.asarray(d["K"], dtype=float),
             N=_jx(d.get("N")), p=_jx(d.get("p")), flux=_jx(d.get("flux")),
-            conditions=d.get("conditions"), _model=None,
+            conditions=d.get("conditions"), n_antiD3=int(d.get("n_antiD3", 0)),
+            _model=None,
         )
 
     # --- array-aware equality (the auto __eq__ would raise on array fields) ---
@@ -1086,7 +1142,8 @@ class Vacuum:
     def diagnostics(self, model, *, moduli_max: Optional[float] = None,
                     s_min: Optional[float] = None, residual_tol: float = 1e-8,
                     stability: bool = False,
-                    refresh: bool = False) -> Dict[str, tuple]:
+                    refresh: bool = False,
+                    n_antiD3: Optional[int] = None) -> Dict[str, tuple]:
         r"""
         **Description:**
         Run the consistency checks and return a **named, explained** report:
@@ -1130,13 +1187,20 @@ class Vacuum:
             stability (bool, optional): Also check Hessian positivity (expensive).
                 Defaults to ``False``.
             refresh (bool, optional): Recompute even if a cached report matches.
+            n_antiD3 (int, optional): The number of anti-D3-branes the tadpole
+                allows for: the window is :math:`0 < Q_{\rm flux} \le Q_O + 2\,n_{\overline{D3}}`
+                (:func:`~jaxvacua.flux_eft.FluxEFT.tadpole_cap`); also passed to the PFV
+                conditions. ``None`` takes the vacuum's own: a PFV's ``data.n_antiD3``, else 0.
+                Defaults to ``None``.
 
         Returns:
             Dict[str, tuple]: ``{name: (ok, value, reason)}``, also stored in
             ``self.analysis.checks``.
         """
+        n_antiD3 = _check_n_antiD3(self._own_n_antiD3() if n_antiD3 is None else n_antiD3)
         args = {"moduli_max": moduli_max, "s_min": s_min,
-                "residual_tol": residual_tol, "stability": bool(stability)}
+                "residual_tol": residual_tol, "stability": bool(stability),
+                "n_antiD3": n_antiD3}
         cached = self.analysis
         if (not refresh and cached is not None and cached.checks is not None
                 and cached.args == args):
@@ -1217,11 +1281,15 @@ class Vacuum:
         except Exception as exc:                       # no model / no tadpole
             checks["tadpole"] = (True, None,
                                  f"skipped: tadpole unavailable ({type(exc).__name__})")
+        brane_balance = None
         if tad is not None:
             try:
-                cap = model.Q()
+                cap = _tadpole_cap(model, n_antiD3)
+                Q_O = model.Q()
             except Exception:
-                cap = None
+                cap = Q_O = None
+            if Q_O is not None:
+                brane_balance = (float(Q_O) - tad) / 2.0
             if cap is None:
                 checks["tadpole"] = (
                     True, tad, "skipped: model exposes no D3 cap Q")
@@ -1231,7 +1299,7 @@ class Vacuum:
                 checks["tadpole"] = (
                     ok, tad, "" if ok else
                     (f"N_flux = {tad:.6g} is not in the signed window "
-                     f"0 < N_flux <= Q = {cap:.6g}"
+                     f"0 < N_flux <= Q + 2 n_antiD3 = {cap:.6g} (n_antiD3 = {int(n_antiD3)})"
                      + (" (negative D3 charge)" if tad <= 0 else "")))
 
         # --- Kaehler-metric positive definiteness -----------------------------
@@ -1281,7 +1349,10 @@ class Vacuum:
                     "(tachyonic or flat direction)")
 
         # --- subclass extensions (the PFV algebra conditions, e.g.) -----------
-        checks.update(self._extra_checks(model))
+        # a subclass hook written before 0.1.3 takes only the model
+        hook = self._extra_checks
+        takes_n = "n_antiD3" in inspect.signature(hook).parameters
+        checks.update(hook(model, n_antiD3=n_antiD3) if takes_n else hook(model))
 
         # --- conifold alignment scalar (derived payload, not a check) ---------
         # Needs a model *and* M0 from the flux quanta, so it cannot be a stored
@@ -1294,10 +1365,15 @@ class Vacuum:
         self._store_analysis(checks, args,
                              kahler_metric_eigenvalues=km_eigs,
                              hessian_eigenvalues=hess_eigs,
-                             alignment=alignment)
+                             alignment=alignment,
+                             brane_balance=brane_balance)
         return checks
 
-    def _extra_checks(self, model) -> Dict[str, tuple]:
+    def _own_n_antiD3(self) -> int:
+        r"""Description: The anti-D3 count of the configuration (0 for a core vacuum)."""
+        return 0
+
+    def _extra_checks(self, model, n_antiD3: int = 0) -> Dict[str, tuple]:
         r"""
         **Description:**
         Subclass hook: extra ``{name: (ok, value, reason)}`` entries merged into
@@ -1309,6 +1385,7 @@ class Vacuum:
 
         Args:
             model: The model passed to :meth:`diagnostics`.
+            n_antiD3 (int, optional): As :meth:`diagnostics`. Defaults to ``0``.
 
         Returns:
             Dict[str, tuple]: Empty for a core vacuum.
@@ -1482,7 +1559,7 @@ class PFV(Vacuum):
 
     @classmethod
     def from_quantum_numbers(cls, finder: "FluxVacuaFinder", M: Array, K: Array,
-                             tau: complex) -> "PFV":
+                             tau: complex, n_antiD3: int = 0) -> "PFV":
         r"""
         **Description:**
         Build a :class:`PFV` seed from the PFV quantum numbers
@@ -1509,6 +1586,8 @@ class PFV(Vacuum):
             M (Array): M-vector.
             K (Array): K-vector.
             tau (complex): Seed axio-dilaton.
+            n_antiD3 (int, optional): The anti-D3-branes its tadpole allows for
+                (:meth:`PFVData.from_fluxes`; pfvs' conifold PFVs carry one). Defaults to ``0``.
 
         Returns:
             PFV: Seed instance with ``data``, ``flux`` and ``x`` set.
@@ -1516,7 +1595,7 @@ class PFV(Vacuum):
         Raises:
             ValueError: If ``N`` is singular, i.e. ``(M, K)`` is not a PFV.
         """
-        data = PFVData.from_fluxes(finder, M, K)
+        data = PFVData.from_fluxes(finder, M, K, n_antiD3=n_antiD3)
         if data.p is None:
             det = None
             if data.conditions is not None and "det N!=0" in data.conditions:
@@ -1549,7 +1628,11 @@ class PFV(Vacuum):
             )
         return self.data._model.pfv_racetrack(self.data.M, self.data.K)
 
-    def _extra_checks(self, model) -> Dict[str, tuple]:
+    def _own_n_antiD3(self) -> int:
+        r"""Description: The anti-D3 count the PFV was built with (``data.n_antiD3``; 0 without data)."""
+        return 0 if self.data is None else int(getattr(self.data, "n_antiD3", 0))
+
+    def _extra_checks(self, model, n_antiD3: int = 0) -> Dict[str, tuple]:
         r"""
         **Description:**
         Extend the diagnostics report with the **PFV algebra conditions**, so a
@@ -1565,8 +1648,9 @@ class PFV(Vacuum):
             :math:`M_{\rm cf} \neq 0` in a conifold limit), the two integrality
             conditions, and the PFV tadpole window.  Keys are prefixed ``pfv:``
             both to mark their origin and to avoid colliding with the base
-            ``tadpole`` check, which tests a different quantity
-            (:math:`f\cdot\Sigma\cdot h` against ``Q``, not :math:`-M\cdot K/2`).
+            ``tadpole`` check. Since 0.1.3 both test the same quantity,
+            :math:`Q_{\rm flux} = f\cdot\Sigma\cdot h = -M\cdot K`, against
+            :math:`Q_O + 2\,n_{\overline{D3}}` (before, the PFV check used :math:`-M\cdot K/2`).
 
             The stored :attr:`PFVData.conditions` are reused when present
             (``PFVData.from_fluxes`` computes them at construction); otherwise
@@ -1577,6 +1661,8 @@ class PFV(Vacuum):
 
         Args:
             model: Model providing ``pfv_conditions`` if they are not stored.
+            n_antiD3 (int, optional): As :meth:`diagnostics`; with a non-zero value the
+                conditions are recomputed (the stored ones allow for none). Defaults to ``0``.
 
         Returns:
             Dict[str, tuple]: ``{"pfv:<condition>": (ok, value, reason)}``, empty
@@ -1584,11 +1670,13 @@ class PFV(Vacuum):
         """
         if self.data is None:
             return {}
+        # recomputed, not reused: stored conditions may predate 0.1.3 (whose tadpole was -M.K/2)
+        # or allow for another number of anti-D3-branes; the stored ones only if that fails
         cond = self.data.conditions
-        if cond is None:
-            try:
-                cond = model.pfv_conditions(self.data.M, self.data.K)
-            except Exception as exc:
+        try:
+            cond = model.pfv_conditions(self.data.M, self.data.K, n_antiD3=int(n_antiD3))
+        except Exception as exc:
+            if cond is None:
                 return {"pfv:conditions": (
                     True, None,
                     f"skipped: PFV conditions unavailable ({type(exc).__name__})")}

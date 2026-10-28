@@ -20,7 +20,7 @@ from pathlib import Path
 
 setup(
     name='jaxvacua',
-    version='0.1.2',
+    version='0.1.3',
     description='A JAX-based framework for sampling and analysing flux vacua in string theory.',
     long_description=Path('README.md').read_text(encoding='utf-8'),
     long_description_content_type='text/markdown',
@@ -50,7 +50,7 @@ setup(
         'python-flint',
         'gurobipy',
         'cytools',
-        'jaxpolylog>=0.3.0',
+        'jaxpolylog>=0.4.0',
         'stringjax-tools>=0.1.0',
     ],
     extras_require={
@@ -73,6 +73,15 @@ setup(
         # The bridge is guarded at runtime by `flux_utils.has_pfvs()`, so
         # jaxvacua is fully functional without it.
         'pfvs': ['latticepts', 'ortools', 'python-flint', 'matplotlib'],
+        # Gurobi stays a core dependency: the default moduli sampling
+        # (`data_sampler`'s interior points of the Kahler cone) needs it. The pip
+        # wheel carries a size-limited licence; large models need a full (free
+        # academic) one. `bounding` names it for the flux-bounding workflow and
+        # keeps `pip install "jaxvacua[bounding]"` valid.
+        'bounding': ['gurobipy'],
+        # Everything optional (pfvs itself still from GitHub, see above).
+        'all': ['jupyterlab', 'ipywidgets', 'anywidget', 'matplotlib', 'seaborn', 'plotly',
+                'latticepts', 'ortools', 'python-flint', 'gurobipy'],
     },
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',

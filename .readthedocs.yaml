@@ -12,7 +12,7 @@ build:
 
 sphinx:
   configuration: documentation/source/conf.py
-  fail_on_warning: false
+  fail_on_warning: true
 
 formats:
   - htmlzip
@@ -20,8 +20,8 @@ formats:
 
 # Install the doc toolchain (documentation/requirements.txt -- which pins
 # `platformdirs` ahead of the cytools install) and then jaxvacua itself, so
-# autodoc can import the package and its runtime deps (cytools, gurobipy,
-# python-flint, jaxpolylog) -- all available on PyPI.
+# autodoc can import the package and its runtime deps (cytools, python-flint,
+# jaxpolylog, gurobipy) -- all available on PyPI.
 python:
   install:
     - requirements: documentation/requirements.txt

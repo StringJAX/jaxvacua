@@ -76,18 +76,22 @@ N_{\rm flux} = \frac{1}{(2\pi\alpha')^2} \int_{X_3} H_3 \wedge F_3 = h \cdot f\;
 
 
 Tadpole cancellation — required by the Gauss law constraint in the compact space —
-constrains the total D3-brane charge:
+constrains the total D3-brane charge (arXiv:2406.13751, eqs. (2.27)–(2.29)):
 
 
 ```{math}
 :label: eq:tadpole
 
-N_{\rm flux} + N_{\rm D3} = Q_O = \frac{\chi(X_3/\mathcal{O})}{24}\;,
+2\,(N_{\rm D3} - N_{\overline{\rm D3}}) + N_{\rm flux} = Q_O\;,
+\qquad N_{\rm flux} = \vec f\cdot\Sigma\cdot\vec h\;,
 ```
 
 
-where $N_{\rm D3} \geq 0$ counts mobile D3-branes and $Q_O$ is the **orientifold charge**,
-fixed by the geometry.
+where $N_{\rm D3} \geq 0$ counts mobile D3-branes, $N_{\overline{\rm D3}} \geq 0$ anti-D3-branes,
+$N_{\rm flux}$ is the flux charge of `FluxEFT.tadpole` ($-M\cdot K$ for PFV fluxes), and $Q_O$ is
+the **orientifold charge**, fixed by the geometry. (In the half-normalised form of arXiv:1912.10047,
+$-\tfrac12 M\cdot K \le Q_O/2$, the same bound.) Without anti-D3-branes,
+$N_{\rm flux} \le Q_O$; `FluxEFT.tadpole_cap(n)` gives $Q_O + 2n$.
 For the trilayer orientifold geometries considered in JAXVacua, one has
 $Q_O = 2 + h^{1,1} + h^{2,1}$ (see {eq}`eq:qdef`).
 A larger $Q_O$ admits more flux configurations and thus a richer landscape of vacua.

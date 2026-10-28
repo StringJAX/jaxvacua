@@ -317,7 +317,7 @@ def _pfv_p_vector(self, M: Array, K: Array) -> Array:
     return jnp.linalg.inv(_N_matrix(self, M)) @ jnp.asarray(K, dtype=float)
 
 
-def _pfv_conditions(self, M: Array, K: Array) -> dict:
+def _pfv_conditions(self, M: Array, K: Array, n_antiD3: int = 0) -> dict:
     r"""
     **Description:**
     Evaluate the perturbatively-flat-vacuum conditions of arXiv:2512.17095 for
@@ -337,8 +337,16 @@ def _pfv_conditions(self, M: Array, K: Array) -> dict:
           curve collapses); :math:`K\cdot p=K_{\rm bulk}\cdot\hat{p}=0`;
           :math:`M_{\rm cf}\neq 0`; the same integrality conditions (with the
           conifold ``b'`` shift).
-        - **Both** — tadpole (``pfvs`` condition #5):
-          :math:`0\le -\tfrac12 M\cdot K\le Q_{D3}`.
+        - **Both** — the D3 tadpole with ``n_antiD3`` anti-D3-branes:
+          :math:`0\le Q_{\rm flux} = -M\cdot K \le Q_O + 2\,n_{\overline{D3}}`
+          (:func:`~jaxvacua.flux_eft.FluxEFT.tadpole_cap`; Gauss's law in the
+          normalisation of arXiv:2406.13751, eqs. (2.27)–(2.29), where
+          :math:`Q_{\rm flux} = f\cdot\Sigma\cdot h`, which is :math:`-M\cdot K` for the
+          fluxes of :func:`pfv_to_flux`; ``pfvs`` condition #5 with
+          ``n_antiD3 = 0``). The equivalent half-normalised form of arXiv:1912.10047
+          and 2009.03312 is :math:`-\tfrac12 M\cdot K \le Q_O/2`. Until 0.1.3 this
+          check compared :math:`-\tfrac12 M\cdot K` with :math:`Q_O`, admitting
+          :math:`-M\cdot K` up to :math:`2Q_O`.
 
         A flux that does not define a PFV (singular ``N``) is reported with
         ``det N != 0`` false and ``p`` set to ``NaN``.
@@ -346,10 +354,13 @@ def _pfv_conditions(self, M: Array, K: Array) -> dict:
     Args:
         M (Array): M-vector.
         K (Array): K-vector.
+        n_antiD3 (int, optional): The number of anti-D3-branes the tadpole
+            allows for. Defaults to ``0``.
 
     Returns:
         dict: Mapping ``name -> (ok, value)`` where ``ok`` is a boolean array and
-        ``value`` the underlying quantity; ``'p'`` carries the p-vector.
+        ``value`` the underlying quantity; ``'p'`` carries the p-vector; the
+        tadpole's value is :math:`Q_{\rm flux} = -M\cdot K`.
     """
     _pfv_guard(self)
     lt = self.lcs_tree
@@ -406,10 +417,11 @@ def _pfv_conditions(self, M: Array, K: Array) -> dict:
     out["a.T@M in Z"] = (jnp.all(jnp.abs(aTM - jnp.round(aTM)) < 1e-9), aTM)
     out["24*b@M in 24Z"] = (jnp.abs(bM - jnp.round(bM)) < 1e-9, 24.0 * bM)
 
-    # Tadpole (pfvs README condition #5): 0 <= Qflux <= Q_D3, jaxvacua Qflux = -M.K/2.
-    Qflux = -0.5 * (Mf @ Kf)
-    Q_D3 = float(self.Q())
-    out["tadpole 0<=Qflux<=Q"] = ((Qflux >= -1e-9) & (Qflux <= Q_D3 + 1e-9), Qflux)
+    # Tadpole: 0 <= Qflux = -M.K = f.Sigma.h <= Q_O + 2 n_antiD3 (tadpole_cap). Until 0.1.3 this
+    # compared -M.K/2 with Q_O, a factor 2 too lax (CHANGELOG).
+    Qflux = -(Mf @ Kf)
+    cap = float(self.tadpole_cap(n_antiD3))
+    out["tadpole 0<=Qflux<=Q"] = ((Qflux >= -1e-9) & (Qflux <= cap + 1e-9), Qflux)
     return out
 
 

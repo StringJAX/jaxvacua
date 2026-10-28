@@ -55,12 +55,10 @@ import itertools
 from functools import partial
 from typing import Any, Callable, Iterable, List, Mapping, Optional, Tuple, Union
 
-# Standard library `_thread` is exposed under the legacy name `thread` on
-# Python < 3 — keep both branches in case of a stripped environment.
-try:
-    import thread
-except ImportError:
-    import _thread as thread
+# The standard library's `_thread` (Python >= 3.12 is required). Not `import thread`: on
+# Python 3 that name is not the standard library, and an unrelated package called `thread`
+# would be imported instead.
+import _thread as thread
 
 # --- Third-party --------------------------------------------------------------
 import numpy as np
