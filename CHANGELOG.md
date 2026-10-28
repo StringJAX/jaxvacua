@@ -4,7 +4,11 @@ All notable changes to JAXVacua will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] — 0.1.3 (prepared 2026-10-28; not yet tagged)
+## [Unreleased]
+
+## [0.1.3] - 2026-10-28
+
+Tagged `v0.1.3` at `161f47bf`; on PyPI (wheel and sdist).
 
 ### Fixed
 - **The PFV tadpole check was a factor 2 too lax.** `pfv_conditions` compared −½ M·K with `Q()` = Q_O =
