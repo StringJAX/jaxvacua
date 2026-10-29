@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   imported.
 - `cytools_model_data_init` raised `UnboundLocalError` for h12 ≥ 100 (the large-h12 branch never set the Mori cone
   generators); with `basis_change`, missing generators made `np.matmul` fail.
+- `lcs_tree`'s basis change (`from_cytools(basis_change=...)`) failed in `jnp.matmul` on the values a cone fallback
+  leaves: no Mori rays and empty Kähler rays and generators. It now skips them, and the model data's `mori_rays` is
+  `None` when the cap was not computed (was `np.array(None)`).
 
 ### Changed
 - `time_out` defaults to `None` (no limit) in `cytools_model_data_init`, `cytools_instanton_data_init`,
@@ -32,12 +35,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   scripts this changes nothing, since those limits never acted there. **In notebooks it does:** where the old limits
   acted, a slow Kähler cone fell back to the toric cone after 10 s and a slow GV table aborted the cell
   (`KeyboardInterrupt`); now both run to completion unless `time_out` is given. With a number, the cone steps fall
-  back (the toric Kähler cone; no rays and all hyperplanes; no conifolds), the GV/GW computation and `eft_to_cone`
-  raise `TimeoutError`, and a failure in the child raises `stringjax_tools.ChildProcessFailed` (a `RuntimeError`)
-  where CYTools' own exception was raised before. A `time_out` that is neither `None` nor positive raises
+  back (the toric Kähler cone; no rays and all hyperplanes; no conifolds), also when the child fails; the GV/GW
+  computation and `eft_to_cone` raise `TimeoutError`, and a failure in their child raises
+  `stringjax_tools.ChildProcessFailed` (a `RuntimeError`) where CYTools' own exception was raised before. A `time_out` that is neither `None` nor positive raises
   `ValueError`.
 - Requires `stringjax-tools>=0.2.0`.
 - `util.exit_after` is no longer used by JAXVacua; its docstring states when it cannot act.
+- `sampling.py`'s comment called gurobipy optional; it is a core dependency (as `setup.py` says). The README's
+  licence badge says GPLv3+ (the licence is GPL-3.0-or-later).
 
 ### Added
 - `tests/test_cytools_interface.py`: the default starts no child; in-process and child results agree (an h11 = 3

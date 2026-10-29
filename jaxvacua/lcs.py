@@ -494,11 +494,15 @@ class lcs_tree(object):
         
         self.intnums_coo = np.rint(compute_intersection_numbers_coo(self.intnums)).astype(int)
         
-        # Transform cone generators and rays to new basis
-        if self.generators_kahler_cone is not None:
+        # Transform cone generators and rays to new basis (absent or empty after a CYTools fallback:
+        # nothing to transform)
+        def _has_rows(a):
+            return a is not None and np.ndim(a) == 2 and np.shape(a)[0] > 0
+
+        if _has_rows(self.generators_kahler_cone):
             self.generators_kahler_cone = jnp.matmul(self.generators_kahler_cone, Linv)
 
-        if self.rays_kahler_cone is not None:
+        if _has_rows(self.rays_kahler_cone):
             self.rays_kahler_cone = jnp.matmul(self.rays_kahler_cone, Linv)
 
         # Transform stretched cone point
@@ -510,7 +514,7 @@ class lcs_tree(object):
             self.hyperplanes = jnp.matmul(self.hyperplanes, L.T)
         
         # Transform mori cone rays
-        if self.rays_mori_cone is not None:
+        if _has_rows(self.rays_mori_cone):
             self.rays_mori_cone = jnp.matmul(self.rays_mori_cone, L.T)
         
         # Transform Gopakumar-Vafa charges

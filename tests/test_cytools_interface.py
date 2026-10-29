@@ -106,11 +106,16 @@ def test_expired_limit_falls_back_to_the_toric_cone(cy):
 
 
 def test_invalid_limits_are_rejected(cy, quintic):
-    for bad in (0, -1, "10"):
+    for bad in (0, -1, "10", True):
         with pytest.raises(ValueError, match="time_out"):
             ci.cytools_model_data_init(cy, time_out=bad)
         with pytest.raises(ValueError, match="time_out"):
             ci.cytools_instanton_data_init(quintic, 1, time_out=bad)
+
+
+def test_numpy_limits_are_accepted(quintic):
+    data = ci.cytools_instanton_data_init(quintic, 1, time_out=np.float64(120))
+    assert len(data["gvs"]) > 0
 
 
 def test_error_falls_back_with_its_reason(cy, monkeypatch):
@@ -169,9 +174,24 @@ def test_large_h12_branch_has_no_mori_generators(cy, monkeypatch):
     # h12 >= 100 skips the cone computations; it used to leave M_cap_generators unassigned
     monkeypatch.setattr(type(cy), "h11", lambda self: 100)
     data, _ = _model(cy)
-    assert data["mori_rays"].item() is None
+    assert data["mori_rays"] is None
     np.testing.assert_array_equal(np.asarray(data["hyperplanes"]),
                                   np.asarray(cy.toric_kahler_cone().hyperplanes()))
+
+
+def test_lcs_tree_with_basis_change_after_a_fallback(cy):
+    # an expired limit leaves no Mori rays and empty Kähler rays/generators (as the h12 >= 100 branch
+    # does); lcs_tree's basis change must skip them rather than fail in jnp.matmul
+    from jaxvacua.lcs import lcs_tree
+
+    kwargs = {"time_out": TINY}
+    L = np.array([[0, 1, 1], [1, 1, 0], [0, 0, 1]])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        tree = lcs_tree.from_cytools(cy, basis_change=L, conifold_basis=False, **kwargs)
+    assert tree.rays_mori_cone is None
+    assert np.size(tree.rays_kahler_cone) == 0 and np.size(tree.generators_kahler_cone) == 0
+    assert np.asarray(tree.hyperplanes).shape[1] == 3
 
 
 def test_child_runs_on_the_cpu():

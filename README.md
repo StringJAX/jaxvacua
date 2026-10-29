@@ -5,7 +5,7 @@
     <a href="https://pypi.org/project/jaxvacua/"><img src="https://img.shields.io/pypi/v/jaxvacua.svg" alt="JAXVacua"/></a>
     <a href="https://www.python.org"><img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python"/></a>
     <a href="https://github.com/StringJAX/jaxvacua/actions/workflows/ci.yml"><img src="https://github.com/StringJAX/jaxvacua/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-    <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"/></a>
+    <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3%2B-blue.svg" alt="License: GPL v3 or later"/></a>
 </p>
 
 

@@ -56,6 +56,7 @@ from jax.numpy import pi as Pi
 
 # Enable 64 bit precision
 import itertools
+import numbers
 from functools import partial
 from typing import Callable
 
@@ -116,7 +117,8 @@ def _run_timed(task: Callable, args: tuple, time_out: float | None):
 
 def _check_time_out(time_out) -> None:
     """Raise ``ValueError`` unless ``time_out`` is ``None`` or a positive number."""
-    if time_out is not None and not (isinstance(time_out, (int, float)) and time_out > 0):
+    if time_out is not None and (isinstance(time_out, bool) or not isinstance(time_out, numbers.Real)
+                                 or not time_out > 0):
         raise ValueError(f"time_out must be a positive number of seconds or None, got {time_out!r}")
 
 
@@ -287,7 +289,11 @@ def cytools_model_data_init(
         
     Returns:
         dict: Dictionary containing geometric and topological data of the mirror CY manifold.
-    
+
+    Raises:
+        ValueError: If ``time_out`` is neither ``None`` nor a positive number, or the input type
+            is not recognised.
+        TimeoutError: If ``maximum_degree > 0`` and a GV/GW table exceeds ``time_out``.
     """
     
     _check_time_out(time_out)
@@ -436,7 +442,7 @@ def cytools_model_data_init(
     model_data["tip_skc"] = np.array(points_for_model)
     model_data["kahler_generators"] = np.array(generators_KC)
     model_data["kahler_rays"] = np.array(rays_KC)
-    model_data["mori_rays"] = np.array(M_cap_generators) 
+    model_data["mori_rays"] = None if M_cap_generators is None else np.array(M_cap_generators)
 
 
     if maximum_degree>0:

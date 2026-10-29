@@ -45,9 +45,10 @@ import os, sys, warnings, time, getopt, itertools
 import numpy as np
 from functools import partial
 
-# gurobipy is an optional dependency (requires a Gurobi licence) used only by
-# `find_interior_points`.  Guard the import so `import jaxvacua` still works
-# without it; the clear error is deferred to the point of use.
+# gurobipy is a core dependency (setup.py), used by `find_interior_points` (the default
+# moduli sampling inside the Kahler cone); its pip wheel carries a size-limited licence.
+# The import is still guarded, so that `import jaxvacua` works where it is missing; the
+# error is then raised at the point of use.
 try:
     import gurobipy as gp
 except ImportError:
